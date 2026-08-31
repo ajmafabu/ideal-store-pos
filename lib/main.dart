@@ -153,17 +153,10 @@ class MyApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeProvider);
 
-    return MaterialApp.router(
-      title: 'Ideal Store POS',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
-      routerConfig: router,
-      builder: (context, child) {
-        // Check for pending update on every build
-        if (_updateNotifier.value != null) {
-          final update = _updateNotifier.value!;
+    return ValueListenableBuilder<UpdateInfo?>(
+      valueListenable: _updateNotifier,
+      builder: (context, update, _) {
+        if (update != null) {
           _updateNotifier.value = null;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) {
@@ -175,7 +168,14 @@ class MyApp extends ConsumerWidget {
             }
           });
         }
-        return child ?? const SizedBox.shrink();
+        return MaterialApp.router(
+          title: 'Ideal Store POS',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeMode,
+          routerConfig: router,
+        );
       },
     );
   }
