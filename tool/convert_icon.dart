@@ -1,73 +1,83 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:convert';
+import 'package:image/image.dart' as img;
 
 void main() async {
-  final pngFile = File('assets/app_icon.png');
-  if (!await pngFile.exists()) {
+  final file = File('assets/app_icon.png');
+  if (!await file.exists()) {
     print('ERROR: assets/app_icon.png not found');
     exit(1);
   }
 
-  final pngBytes = await pngFile.readAsBytes();
-  print('Read PNG: ${pngBytes.length} bytes');
+  final bytes = await file.readAsBytes();
+  print('File: ${bytes.length} bytes, header: ${bytes.sublist(0, 4)}');
 
-  // ICO format: we embed the PNG directly (Windows supports PNG-in-ICO)
-  // ICO header: 6 bytes
-  // ICO directory entry: 16 bytes per image
-  // We'll create 4 sizes: 16, 32, 48, 256
-
-  final images = [16, 32, 48, 256];
-  final headerSize = 6;
-  final entrySize = 16;
-  final directorySize = entrySize * images.length;
-
-  // Calculate offsets
-  final offsets = <int>[];
-  var offset = headerSize + directorySize;
-  for (final size in images) {
-    offsets.add(offset);
-    offset += pngBytes.length;
+  // Decode as JPEG (the file is actually JPEG despite .png extension)
+  final image = img.decodeJpg(bytes) ?? img.decodePng(bytes);
+  if (image == null) {
+    print('ERROR: Failed to decode image');
+    exit(1);
   }
 
-  // Write ICO
-  final ico = BytesBuilder();
+  print('Decoded: ${image.width}x${image.height}');
 
-  // ICO header
-  ico.addByte(0); // reserved
+  // Build ICO with multiple sizes
+  final sizes = [16, 32, 48, 64, 128, 256];
+  final pngDataList = <Uint8List>[];
+
+  for (final size in sizes) {
+    final resized = img.copyResize(image, width: size, height: size, interpolation: img.Interpolation.linear);
+    final pngData = img.encodePng(resized);
+    pngDataList.add(pngData);
+    print('  ${size}x${size}: ${pngData.length} bytes');
+  }
+
+  // Build ICO file
+  final ico = BytesBuilder();
+  final numImages = sizes.length;
+
+  // ICO header (6 bytes)
+  ico.add([0, 0]); // reserved
+  ico.add([1, 0]); // type: 1 = icon
+  ico.addByte(numImages & 0xFF);
   ico.addByte(0);
-  ico.addByte(1); ico.addByte(0); // type: 1 = icon
-  ico.addByte(images.length); ico.addByte(0); // image count
+
+  // Calculate data offset
+  var dataOffset = 6 + (numImages * 16);
 
   // Directory entries
-  for (var i = 0; i < images.length; i++) {
-    final size = images[i];
+  for (var i = 0; i < numImages; i++) {
+    final size = sizes[i];
+    final pngData = pngDataList[i];
+
     ico.addByte(size > 255 ? 0 : size); // width
     ico.addByte(size > 255 ? 0 : size); // height
-    ico.addByte(0);  // color palette
-    ico.addByte(0);  // reserved
+    ico.addByte(0); // color palette
+    ico.addByte(0); // reserved
     ico.addByte(1); ico.addByte(0); // color planes
     ico.addByte(32); ico.addByte(0); // bits per pixel
-    // size of image data
-    final dataSize = pngBytes.length;
-    ico.addByte(dataSize & 0xFF);
-    ico.addByte((dataSize >> 8) & 0xFF);
-    ico.addByte((dataSize >> 16) & 0xFF);
-    ico.addByte((dataSize >> 24) & 0xFF);
-    // offset
-    final off = offsets[i];
-    ico.addByte(off & 0xFF);
-    ico.addByte((off >> 8) & 0xFF);
-    ico.addByte((off >> 16) & 0xFF);
-    ico.addByte((off >> 24) & 0xFF);
+
+    // image data size (little-endian)
+    ico.addByte(pngData.length & 0xFF);
+    ico.addByte((pngData.length >> 8) & 0xFF);
+    ico.addByte((pngData.length >> 16) & 0xFF);
+    ico.addByte((pngData.length >> 24) & 0xFF);
+
+    // offset (little-endian)
+    ico.addByte(dataOffset & 0xFF);
+    ico.addByte((dataOffset >> 8) & 0xFF);
+    ico.addByte((dataOffset >> 16) & 0xFF);
+    ico.addByte((dataOffset >> 24) & 0xFF);
+
+    dataOffset += pngData.length;
   }
 
-  // Image data (same PNG for all sizes - Windows will scale)
-  for (final _ in images) {
-    ico.add(pngBytes);
+  // Image data
+  for (final pngData in pngDataList) {
+    ico.add(pngData);
   }
 
   final icoFile = File('windows/runner/resources/app_icon.ico');
   await icoFile.writeAsBytes(ico.toBytes());
-  print('Created: ${icoFile.path} (${ico.toBytes().length} bytes)');
+  print('Saved: ${icoFile.path} (${ico.toBytes().length} bytes)');
 }
