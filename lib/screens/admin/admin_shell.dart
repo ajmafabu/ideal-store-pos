@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:auto_updater/auto_updater.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../config/theme_provider.dart';
@@ -763,10 +766,41 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
-                    await autoUpdater.checkForUpdates(const UpdateCycle(
-                      frequency: Duration(seconds: 1),
-                      duration: Duration(seconds: 3),
-                    ));
+                    final info = await PackageInfo.fromPlatform();
+                    final currentVersion = info.version;
+                    final response = await http.get(
+                      Uri.parse('https://api.github.com/repos/ajmafabu/ideal-store-pos/releases/latest'),
+                    ).timeout(const Duration(seconds: 10));
+                    if (response.statusCode == 200) {
+                      final release = json.decode(response.body);
+                      final latestVersion = (release['tag_name'] ?? '').toString().replaceFirst('v', '');
+                      if (latestVersion != currentVersion) {
+                        final assets = (release['assets'] as List?) ?? [];
+                        final zip = assets.where((a) => (a['name'] ?? '').toString().endsWith('.zip')).toList();
+                        final url = zip.isNotEmpty ? zip.first['browser_download_url'] : null;
+                        if (context.mounted) {
+                          showDialog(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Update Available'),
+                              content: Text('Version $latestVersion is available.\n\nYou are on version $currentVersion.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
+                                if (url != null)
+                                  FilledButton(
+                                    onPressed: () { launchUrl(Uri.parse(url)); Navigator.pop(ctx); },
+                                    child: const Text('Download'),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }
+                      } else if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('You are on the latest version')),
+                        );
+                      }
+                    }
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
