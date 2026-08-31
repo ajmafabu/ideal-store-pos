@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "wholesale_market" "\0"
+            VALUE "CompanyName", "Ideal Store" "\0"
+            VALUE "FileDescription", "Ideal Store POS - Smart Store Smart Business" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "wholesale_market" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "wholesale_market.exe" "\0"
-            VALUE "ProductName", "wholesale_market" "\0"
+            VALUE "InternalName", "ideal_store_pos" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Ideal Store. All rights reserved." "\0"
+            VALUE "OriginalFilename", "ideal_store_pos.exe" "\0"
+            VALUE "ProductName", "Ideal Store POS" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
