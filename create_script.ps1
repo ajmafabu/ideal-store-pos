@@ -1,0 +1,238 @@
+# Helper: creates the update_tamil.ps1 script with proper UTF-8 encoding
+$scriptPath = "C:\Users\abuthahir\Documents\ideal_store\wholesale_market\update_tamil.ps1"
+
+# Tamil word map using Unicode codepoints
+$tamilWords = @{
+    "soap"       = [char]0x0B9A + [char]0x0BCB + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "oil"        = [char]0x0B8E + [char]0x0BA3 + [char]0x0BCD + [char]0x0BA3 + [char]0x0BC6 + [char]0x0BAF + [char]0x0BCD
+    "powder"     = [char]0x0BAA + [char]0x0BCA + [char]0x0B9F + [char]0x0BBF
+    "shampoo"    = [char]0x0B9A + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "biscuit"    = [char]0x0BAA + [char]0x0BBF + [char]0x0BB8 + [char]0x0BCD + [char]0x0B95 + [char]0x0B9F + [char]0x0BCD
+    "biscuits"   = [char]0x0BAA + [char]0x0BBF + [char]0x0BB8 + [char]0x0BCD + [char]0x0B95 + [char]0x0B9F + [char]0x0BCD
+    "rusk"       = [char]0x0BB0 + [char]0x0BB8 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD
+    "cake"       = [char]0x0B95 + [char]0x0BC7 + [char]0x0B95 + [char]0x0BCD
+    "candle"     = [char]0x0BAE + [char]0x0BC6 + [char]0x0BB4 + [char]0x0BC1 + [char]0x0B95 + [char]0x0BC1 + [char]0x0BB5 + [char]0x0BB0 + [char]0x0BCD + [char]0x0BA4 + [char]0x0BCD + [char]0x0BA4 + [char]0x0BBF
+    "cream"      = [char]0x0B95 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BC0 + [char]0x0BAE + [char]0x0BCD
+    "paste"      = [char]0x0BAA + [char]0x0BC7 + [char]0x0BB8 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "liquid"     = [char]0x0BA4 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BB5 + [char]0x0BAE + [char]0x0BCD
+    "salt"       = [char]0x0B89 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "sugar"      = [char]0x0B9A + [char]0x0BB0 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD + [char]0x0BB0 + [char]0x0BA9 + [char]0x0BC8
+    "ghee"       = [char]0x0BA9 + [char]0x0BC6 + [char]0x0BAF + [char]0x0BCD
+    "milk"       = [char]0x0BAA + [char]0x0BBE + [char]0x0BB2 + [char]0x0BCD
+    "tea"        = [char]0x0BA4 + [char]0x0BC7 + [char]0x0B9E + [char]0x0BC0 + [char]0x0BB0 + [char]0x0BCD
+    "coffee"     = [char]0x0B95 + [char]0x0BBE + [char]0x0BAA + [char]0x0BBF
+    "rice"       = [char]0x0B85 + [char]0x0BB0 + [char]0x0BBF + [char]0x0B9A + [char]0x0BBF
+    "noodles"    = [char]0x0BA8 + [char]0x0BC2 + [char]0x0B9F + [char]0x0BC1 + [char]0x0BB2 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "pickle"     = [char]0x0B89 + [char]0x0BB1 + [char]0x0BC1 + [char]0x0B95 + [char]0x0BBE + [char]0x0BAF + [char]0x0BCD
+    "chilli"     = [char]0x0BAE + [char]0x0BBF + [char]0x0B95 + [char]0x0BBE + [char]0x0BAF + [char]0x0BCD
+    "pepper"     = [char]0x0BAE + [char]0x0BBF + [char]0x0B95 + [char]0x0BC1
+    "turmeric"   = [char]0x0BAE + [char]0x0B9E + [char]0x0B9A + [char]0x0BB3 + [char]0x0BCD
+    "masala"     = [char]0x0BAE + [char]0x0B9A + [char]0x0BBE + [char]0x0BB2 + [char]0x0BBE
+    "sambar"     = [char]0x0B9A + [char]0x0BBE + [char]0x0BAE + [char]0x0BAA + [char]0x0BBE + [char]0x0BB0 + [char]0x0BCD
+    "curry"      = [char]0x0B95 + [char]0x0BC1 + [char]0x0BB4 + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "chicken"    = [char]0x0B95 + [char]0x0BCB + [char]0x0B9A + [char]0x0BBF
+    "fish"       = [char]0x0BAE + [char]0x0BC0 + [char]0x0BA9 + [char]0x0BCD
+    "egg"        = [char]0x0BAE + [char]0x0BC1 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BC8
+    "honey"      = [char]0x0BA4 + [char]0x0BC7 + [char]0x0BA9 + [char]0x0BCD
+    "jam"        = [char]0x0B9C + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD
+    "blade"      = [char]0x0BAA + [char]0x0BBF + [char]0x0BB3 + [char]0x0BC7 + [char]0x0B9F + [char]0x0BC1
+    "brush"      = [char]0x0BA4 + [char]0x0BC1 + [char]0x0BB2 + [char]0x0B95 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC1 + [char]0x0BA4 + [char]0x0BB2 + [char]0x0BCD
+    "cover"      = [char]0x0BAE + [char]0x0BC2 + [char]0x0B9F + [char]0x0BBF
+    "pen"        = [char]0x0BAA + [char]0x0BC6 + [char]0x0BA9 + [char]0x0BBE
+    "pencil"     = [char]0x0BAA + [char]0x0BC6 + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD
+    "rubber"     = [char]0x0BB0 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BB0 + [char]0x0BCD
+    "candy"      = [char]0x0B95 + [char]0x0BC7 + [char]0x0BA3 + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF
+    "mint"       = [char]0x0BAE + [char]0x0BBF + [char]0x0BA9 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "toy"        = [char]0x0BAA + [char]0x0BCC + [char]0x0BAE + [char]0x0BAE + [char]0x0BC8
+    "balloon"    = [char]0x0BAA + [char]0x0BB2 + [char]0x0BC2 + [char]0x0BA9 + [char]0x0BCD
+    "gift"       = [char]0x0BAA + [char]0x0BB0 + [char]0x0BBF + [char]0x0B9A + [char]0x0BC1
+    "star"       = [char]0x0BA8 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9A + [char]0x0BCD + [char]0x0BA4 + [char]0x0BCD + [char]0x0BA4 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BAE + [char]0x0BCD
+    "white"      = [char]0x0BB5 + [char]0x0BC6 + [char]0x0BB4 + [char]0x0BCD + [char]0x0BB5 + [char]0x0BC8
+    "black"      = [char]0x0B95 + [char]0x0BB0 + [char]0x0BC1 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "red"        = [char]0x0B9A + [char]0x0BBF + [char]0x0BB5 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "blue"       = [char]0x0BA8 + [char]0x0BC0 + [char]0x0BB2 + [char]0x0BAE + [char]0x0BCD
+    "green"      = [char]0x0BAA + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BC8
+    "yellow"     = [char]0x0BAE + [char]0x0B9E + [char]0x0B9A + [char]0x0BB3 + [char]0x0BCD
+    "orange"     = [char]0x0B86 + [char]0x0BB0 + [char]0x0B9E + [char]0x0BCD + [char]0x0B9A + [char]0x0BC1
+    "rose"       = [char]0x0BB0 + [char]0x0BCB + [char]0x0B9A + [char]0x0BCD
+    "sandal"     = [char]0x0B9A + [char]0x0BA9 + [char]0x0BCD + [char]0x0BA9 + [char]0x0BA9 + [char]0x0BCD
+    "lemon"      = [char]0x0B8E + [char]0x0BB4 + [char]0x0BC1 + [char]0x0BAE + [char]0x0BBF + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BC8
+    "neem"       = [char]0x0BB5 + [char]0x0BC7 + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "fresh"      = [char]0x0BAA + [char]0x0BC1 + [char]0x0B9F + [char]0x0BCD + [char]0x0BAA + [char]0x0BBF
+    "comfort"    = [char]0x0B95 + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BCB + [char]0x0BB0 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "lux"        = [char]0x0BB2 + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "dettol"     = [char]0x0B9F + [char]0x0BC6 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BCB + [char]0x0BB2 + [char]0x0BCD
+    "cinthol"    = [char]0x0B9A + [char]0x0BBF + [char]0x0BA9 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCB + [char]0x0BB2 + [char]0x0BCD
+    "colgate"    = [char]0x0B95 + [char]0x0BB2 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC7 + [char]0x0BB0 + [char]0x0BCD
+    "colcate"    = [char]0x0B95 + [char]0x0BB2 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC7 + [char]0x0BB0 + [char]0x0BCD
+    "dove"       = [char]0x0B9F + [char]0x0BAA + [char]0x0BCD
+    "horlicks"   = [char]0x0BB9 + [char]0x0BBE + [char]0x0BB0 + [char]0x0BCD + [char]0x0BB2 + [char]0x0BBF + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "boost"      = [char]0x0BAA + [char]0x0BC2 + [char]0x0BB8 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "cadbury"    = [char]0x0B95 + [char]0x0BC7 + [char]0x0B9F + [char]0x0BCD + [char]0x0BAA + [char]0x0BBE + [char]0x0BB0 + [char]0x0BBF
+    "munch"      = [char]0x0BAE + [char]0x0B9E + [char]0x0BCD + [char]0x0B9A + [char]0x0BCD
+    "perk"       = [char]0x0BAA + [char]0x0BC6 + [char]0x0BB0 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD
+    "lays"       = [char]0x0BB2 + [char]0x0BC7 + [char]0x0B9A + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "bingo"      = [char]0x0BAA + [char]0x0BBF + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCB
+    "aachi"      = [char]0x0B85 + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF
+    "achi"       = [char]0x0B85 + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF
+    "sakthi"     = [char]0x0B9A + [char]0x0B95 + [char]0x0BCD + [char]0x0BA4 + [char]0x0BBF
+    "nirma"      = [char]0x0BA8 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BCD + [char]0x0BAE + [char]0x0BBE
+    "rin"        = [char]0x0BB0 + [char]0x0BBF + [char]0x0BA9 + [char]0x0BCD
+    "vim"        = [char]0x0BB5 + [char]0x0BBF + [char]0x0BAE + [char]0x0BCD
+    "cycle"      = [char]0x0B9A + [char]0x0BC8 + [char]0x0B95 + [char]0x0BCD + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD
+    "match"      = [char]0x0BA4 + [char]0x0BC0 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC6 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF
+    "matches"    = [char]0x0BA4 + [char]0x0BC0 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC6 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF
+    "dabur"      = [char]0x0B9F + [char]0x0BAA + [char]0x0BCD + [char]0x0BB0 + [char]0x0BC1
+    "vicks"      = [char]0x0BB5 + [char]0x0BBF + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "moov"       = [char]0x0BAE + [char]0x0BC2 + [char]0x0BB5 + [char]0x0BCD
+    "saridon"    = [char]0x0B9A + [char]0x0BBE + [char]0x0BB0 + [char]0x0BBF + [char]0x0B9F + [char]0x0BAA + [char]0x0BCB + [char]0x0BA9 + [char]0x0BCD
+    "lizol"      = [char]0x0BB2 + [char]0x0BBF + [char]0x0B9A + [char]0x0BCB + [char]0x0BB2 + [char]0x0BCD
+    "whisper"    = [char]0x0BB5 + [char]0x0BBF + [char]0x0B9A + [char]0x0BCD + [char]0x0BAA + [char]0x0BB0 + [char]0x0BCD
+    "pampers"    = [char]0x0BAA + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BB0 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "himalaya"   = [char]0x0BB9 + [char]0x0BBF + [char]0x0BAE + [char]0x0BBE + [char]0x0BB2 + [char]0x0BC8 + [char]0x0BAF + [char]0x0BBE
+    "amul"       = [char]0x0B85 + [char]0x0BAE + [char]0x0BC2 + [char]0x0BB2 + [char]0x0BCD
+    "poha"       = [char]0x0B85 + [char]0x0BB5 + [char]0x0BB2 + [char]0x0BCD
+    "oats"       = [char]0x0B93 + [char]0x0B9F + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "ragi"       = [char]0x0BB0 + [char]0x0BBE + [char]0x0B95 + [char]0x0BBF
+    "semiya"     = [char]0x0B9A + [char]0x0BC6 + [char]0x0BAE + [char]0x0BBF + [char]0x0BAF + [char]0x0BBE
+    "murukku"    = [char]0x0BAE + [char]0x0BC1 + [char]0x0BB0 + [char]0x0BC1 + [char]0x0B95 + [char]0x0BC1
+    "laddu"      = [char]0x0BB2 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BC1
+    "halwa"      = [char]0x0B85 + [char]0x0BB2 + [char]0x0BCD + [char]0x0BB5 + [char]0x0BBE
+    "bajji"      = [char]0x0BAA + [char]0x0B9C + [char]0x0BCD + [char]0x0B9C + [char]0x0BBF
+    "bonda"      = [char]0x0BAA + [char]0x0BCB + [char]0x0BA3 + [char]0x0B9F + [char]0x0BBE
+    "vadai"      = [char]0x0BB5 + [char]0x0B9F + [char]0x0BC8
+    "pakoda"     = [char]0x0BAA + [char]0x0B95 + [char]0x0BCB + [char]0x0B9F + [char]0x0BBE
+    "chips"      = [char]0x0B9A + [char]0x0BBF + [char]0x0BAA + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "snack"      = [char]0x0BA4 + [char]0x0BBF + [char]0x0BA9 + [char]0x0BCD + [char]0x0BAA + [char]0x0B9A + [char]0x0BCD + [char]0x0B9F + [char]0x0BAE + [char]0x0BCD
+    "butter"     = [char]0x0BB5 + [char]0x0BC6 + [char]0x0BA3 + [char]0x0BCD + [char]0x0BA3 + [char]0x0BC6 + [char]0x0BAF + [char]0x0BCD
+    "cashew"     = [char]0x0BAE + [char]0x0BC1 + [char]0x0BA4 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BBF
+    "peanut"     = [char]0x0BA8 + [char]0x0BBF + [char]0x0BB2 + [char]0x0B95 + [char]0x0BCD + [char]0x0B95 + [char]0x0B9F + [char]0x0BBE + [char]0x0BB2 + [char]0x0BC8
+    "gram"       = [char]0x0B95 + [char]0x0B9F + [char]0x0BB2 + [char]0x0BC8
+    "dal"        = [char]0x0BAA + [char]0x0BB0 + [char]0x0BC1 + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "wheat"      = [char]0x0B95 + [char]0x0BCB + [char]0x0BA4 + [char]0x0BC1 + [char]0x0BAE + [char]0x0BC8
+    "maida"      = [char]0x0BAE + [char]0x0BC8 + [char]0x0BA4 + [char]0x0BBE
+    "flour"      = [char]0x0BAE + [char]0x0BBE + [char]0x0BB5 + [char]0x0BC1
+    "corn"       = [char]0x0B9A + [char]0x0BCB + [char]0x0BB3 + [char]0x0BAE + [char]0x0BCD
+    "atta"       = [char]0x0B85 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BBE
+    "jelly"      = [char]0x0B9C + [char]0x0BC6 + [char]0x0BB2 + [char]0x0BCD + [char]0x0BB2 + [char]0x0BBF
+    "toast"      = [char]0x0B9F + [char]0x0BCB + [char]0x0BB8 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "spray"      = [char]0x0BB8 + [char]0x0BCD + [char]0x0BAA + [char]0x0BB0 + [char]0x0BC7
+    "gel"        = [char]0x0B9C + [char]0x0BC6 + [char]0x0BB2 + [char]0x0BCD
+    "bar"        = [char]0x0BAA + [char]0x0BBE + [char]0x0BB0 + [char]0x0BCD
+    "stick"      = [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BC1 + [char]0x0B95 + [char]0x0BCD
+    "roll"       = [char]0x0BB0 + [char]0x0BCB + [char]0x0BB2 + [char]0x0BCD
+    "pack"       = [char]0x0BAA + [char]0x0BC7 + [char]0x0B95 + [char]0x0BCD
+    "box"        = [char]0x0BAA + [char]0x0BBE + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "jar"        = [char]0x0B95 + [char]0x0BC1 + [char]0x0B9F + [char]0x0BC1 + [char]0x0BB5 + [char]0x0BC8
+    "bottle"     = [char]0x0BAA + [char]0x0BBE + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD
+    "cup"        = [char]0x0B95 + [char]0x0BCB + [char]0x0BAA + [char]0x0BCD + [char]0x0BAA + [char]0x0BBE
+    "detergent"  = [char]0x0B9F + [char]0x0BBF + [char]0x0B9F + [char]0x0BC6 + [char]0x0BB0 + [char]0x0BCD + [char]0x0B9C + [char]0x0BC6 + [char]0x0BA9 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "clean"      = [char]0x0B9A + [char]0x0BC1 + [char]0x0B9F + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "wash"       = [char]0x0B95 + [char]0x0BB4 + [char]0x0BC1 + [char]0x0BB5 + [char]0x0BC1 + [char]0x0B9F + [char]0x0BB2 + [char]0x0BCD
+    "mango"      = [char]0x0BAE + [char]0x0BBE + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCB
+    "apple"      = [char]0x0B85 + [char]0x0BAA + [char]0x0BCD + [char]0x0BB2 + [char]0x0BCD
+    "coconut"    = [char]0x0B9F + [char]0x0BC7 + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BBE + [char]0x0BAF + [char]0x0BCD
+    "power"      = [char]0x0BAA + [char]0x0BBE + [char]0x0BB5 + [char]0x0BB0 + [char]0x0BCD
+    "natural"    = [char]0x0B87 + [char]0x0BAF + [char]0x0BB0 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC8
+    "original"   = [char]0x0B85 + [char]0x0B9A + [char]0x0BB2 + [char]0x0BCD
+    "premium"    = [char]0x0BAA + [char]0x0BBF + [char]0x0BB0 + [char]0x0BC0 + [char]0x0BAE + [char]0x0BBF + [char]0x0BAE + [char]0x0BCD
+    "classic"    = [char]0x0B95 + [char]0x0BCD + [char]0x0BB2 + [char]0x0BBE + [char]0x0BB8 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD
+    "super"      = [char]0x0B9A + [char]0x0BC2 + [char]0x0BAA + [char]0x0BCD + [char]0x0BB0 + [char]0x0BCD
+    "max"        = [char]0x0BAE + [char]0x0BC7 + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "royal"      = [char]0x0BB0 + [char]0x0BCB + [char]0x0BAF + [char]0x0BBE + [char]0x0BB2 + [char]0x0BCD
+    "morning"    = [char]0x0B95 + [char]0x0BBE + [char]0x0BB2 + [char]0x0BC8
+    "cool"       = [char]0x0B95 + [char]0x0BC1 + [char]0x0BB2 + [char]0x0BBF + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BCF
+    "soft"       = [char]0x0BAE + [char]0x0BC6 + [char]0x0BA9 + [char]0x0BCD + [char]0x0BAE + [char]0x0BC8
+    "smooth"     = [char]0x0BAE + [char]0x0BC6 + [char]0x0BA9 + [char]0x0BCD + [char]0x0BAE + [char]0x0BC8
+    "double"     = [char]0x0B87 + [char]0x0BB0 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BC8
+    "nice"       = [char]0x0BA8 + [char]0x0BC8 + [char]0x0BB8 + [char]0x0BCD
+    "silk"       = [char]0x0B9A + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD
+    "baby"       = [char]0x0BAA + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF
+    "dairy"      = [char]0x0B9F + [char]0x0BC8 + [char]0x0BB0 + [char]0x0BC0
+    "frooti"     = [char]0x0BB5 + [char]0x0BC1 + [char]0x0BB0 + [char]0x0BC2 + [char]0x0B9F + [char]0x0BBF
+    "slice"      = [char]0x0BB8 + [char]0x0BCD + [char]0x0BB2 + [char]0x0BC8 + [char]0x0BB8 + [char]0x0BCD
+    "tomato"     = [char]0x0BA4 + [char]0x0B95 + [char]0x0BCD + [char]0x0B95 + [char]0x0BBE + [char]0x0BB3 + [char]0x0BBF
+    "onion"      = [char]0x0BB5 + [char]0x0BC6 + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BBE + [char]0x0BAF + [char]0x0BCD
+    "garlic"     = [char]0x0BAA + [char]0x0BC2 + [char]0x0BA3 + [char]0x0BCD + [char]0x0B9F + [char]0x0BC1
+    "ginger"     = [char]0x0B87 + [char]0x0B9E + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF
+    "potato"     = [char]0x0B89 + [char]0x0BB0 + [char]0x0BC1 + [char]0x0BB2 + [char]0x0BC8 + [char]0x0B95 + [char]0x0BCD + [char]0x0BBF + [char]0x0BB4 + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC1
+    "carrot"     = [char]0x0B95 + [char]0x0BC7 + [char]0x0BB0 + [char]0x0BCD + [char]0x0B9F + [char]0x0BCD
+    "beetroot"   = [char]0x0BAA + [char]0x0BC0 + [char]0x0B9F + [char]0x0BCD + [char]0x0BB0 + [char]0x0BC2 + [char]0x0B9F + [char]0x0BCD
+    "mutton"     = [char]0x0B86 + [char]0x0B9F + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF + [char]0x0BB1 + [char]0x0BC8 + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BBF
+    "sev"        = [char]0x0B9A + [char]0x0BC6 + [char]0x0BB5 + [char]0x0BCD
+    "mixture"    = [char]0x0BAE + [char]0x0BBF + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD + [char]0x0BB0 + [char]0x0BCD
+    "juice"      = [char]0x0B9A + [char]0x0BBE + [char]0x0BB1 + [char]0x0BC1
+    "water"      = [char]0x0BA4 + [char]0x0BA3 + [char]0x0BCD + [char]0x0BA3 + [char]0x0BC0 + [char]0x0BB0 + [char]0x0BCD
+    "cold"       = [char]0x0B95 + [char]0x0BC1 + [char]0x0BB2 + [char]0x0BBF + [char]0x0BB0 + [char]0x0BCD + [char]0x0BA9 + [char]0x0BCD + [char]0x0BA4 + [char]0x0BCD
+    "drink"      = [char]0x0BAA + [char]0x0BBE + [char]0x0BA9 + [char]0x0BAE + [char]0x0BCD
+    "combo"      = [char]0x0B95 + [char]0x0B9E + [char]0x0BCD + [char]0x0BAA + [char]0x0BCB
+    "hunter"     = [char]0x0BB9 + [char]0x0B99 + [char]0x0BCD + [char]0x0B9F + [char]0x0BB0 + [char]0x0BCD
+    "soodam"     = [char]0x0B9A + [char]0x0BCB + [char]0x0B9F + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD
+    "deepam"     = [char]0x0B9F + [char]0x0BC0 + [char]0x0BAA + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD
+    "agarbathi"  = [char]0x0B85 + [char]0x0B95 + [char]0x0BB0 + [char]0x0BCD + [char]0x0BAA + [char]0x0B9F + [char]0x0BBF
+    "sambrani"   = [char]0x0B9A + [char]0x0BBE + [char]0x0BAE + [char]0x0BAA + [char]0x0BBF + [char]0x0BB0 + [char]0x0BBE + [char]0x0BA9 + [char]0x0BBF
+    "cone"       = [char]0x0B95 + [char]0x0BCB + [char]0x0BAE + [char]0x0BCD + [char]0x0BAA + [char]0x0BC1
+    "pop"        = [char]0x0BAA + [char]0x0BBE + [char]0x0BAA + [char]0x0BCD
+    "lite"       = [char]0x0BB2 + [char]0x0BC8 + [char]0x0B9F + [char]0x0BCD
+    "light"      = [char]0x0BB2 + [char]0x0BC8 + [char]0x0B9F + [char]0x0BCD
+    "happy"      = [char]0x0BAE + [char]0x0B95 + [char]0x0BBF + [char]0x0BB4 + [char]0x0BCD + [char]0x0B9A + [char]0x0BCD + [char]0x0B9A + [char]0x0BCF
+    "golden"     = [char]0x0B95 + [char]0x0BBF + [char]0x0BAA + [char]0x0BCB
+    "silver"     = [char]0x0B9A + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD + [char]0x0BAA + [char]0x0BB0 + [char]0x0BCD
+    "diamond"    = [char]0x0BB5 + [char]0x0BC8 + [char]0x0BB0 + [char]0x0BAE + [char]0x0BCD
+    "kings"      = [char]0x0BB0 + [char]0x0BBE + [char]0x0B9C + [char]0x0BBE + [char]0x0B95 + [char]0x0BCD + [char]0x0BB8 + [char]0x0BCD
+    "normal"     = [char]0x0B9A + [char]0x0BBE + [char]0x0B9F + [char]0x0BBE + [char]0x0BB0 + [char]0x0BA9 + [char]0x0BCD
+    "sheep"      = [char]0x0B86 + [char]0x0B9F + [char]0x0B9F + [char]0x0BBE
+    "round"      = [char]0x0BB1 + [char]0x0BBF + [char]0x0BB2 + [char]0x0BCD
+    "soda"       = [char]0x0B9A + [char]0x0BCB + [char]0x0B9F + [char]0x0BBE
+    "payasam"    = [char]0x0BAA + [char]0x0BBE + [char]0x0BAF + [char]0x0BBE + [char]0x0B9A + [char]0x0BBE + [char]0x0BAE + [char]0x0BCD
+    "palkova"    = [char]0x0BAA + [char]0x0BBE + [char]0x0BB2 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCB + [char]0x0BB5 + [char]0x0BBE
+    "big"        = [char]0x0BAA + [char]0x0BC6 + [char]0x0BB0 + [char]0x0BBF + [char]0x0BAF + [char]0x0BCD
+    "small"      = [char]0x0B9A + [char]0x0BBF + [char]0x0BB0 + [char]0x0BBF + [char]0x0BAF + [char]0x0BCD
+    "mini"       = [char]0x0BAE + [char]0x0BBF + [char]0x0BA9 + [char]0x0BBF
+    "no"         = [char]0x0BA8 + [char]0x0BCC
+    "all"        = [char]0x0B85 + [char]0x0BA9 + [char]0x0BC8 + [char]0x0BAF + [char]0x0BC1
+    "nool"       = [char]0x0BA8 + [char]0x0BC2 + [char]0x0BB2 + [char]0x0BCD
+    "brinjal"    = [char]0x0B95 + [char]0x0BA4 + [char]0x0BCD + [char]0x0B9F + [char]0x0BBF + [char]0x0BB0 + [char]0x0BCD + [char]0x0B95 + [char]0x0BCD + [char]0x0BBE] + [char]0x0BAF + [char]0x0BCD
+    "drumstick"  = [char]0x0BAE + [char]0x0BC1 + [char]0x0BB0 + [char]0x0BC1 + [char]0x0B99 + [char]0x0BCD + [char]0x0B95 + [char]0x0BC8 + [char]0x0B95 + [char]0x0BCD + [char]0x0BBE] + [char]0x0BAF + [char]0x0BCD
+}
+
+# Build the script content as a string
+$sb = New-Object System.Text.StringBuilder
+[void]$sb.AppendLine('$ErrorActionPreference = "Continue"')
+[void]$sb.AppendLine('$SUPABASE_URL = "https://hrlciruepdstrvtsuoyr.supabase.co"')
+[void]$sb.AppendLine('$API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhybGNpcnVlcGRzdHJ2dHN1b3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxMDA4MjgsImV4cCI6MjA5ODY3NjgyOH0.-FqYflyY-0333oNlC5clOpcOm_E60R6e9WULp_xZHEo"')
+[void]$sb.AppendLine('$headers = @{ "apikey" = $API_KEY; "Authorization" = "Bearer $API_KEY"; "Content-Type" = "application/json" }')
+[void]$sb.AppendLine('$filePath = "C:\Users\abuthahir\Documents\ideal_store\wholesale_market\products_list.json"')
+[void]$sb.AppendLine('$allProducts = Get-Content $filePath -Raw -Encoding UTF8 | ConvertFrom-Json')
+[void]$sb.AppendLine('$productsToUpdate = $allProducts | Where-Object { -not $_.tamil_name -or $_.tamil_name -eq "" }')
+[void]$sb.AppendLine('Write-Host "Total: $($allProducts.Count) | To update: $($productsToUpdate.Count)" -ForegroundColor Cyan')
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('# Word translation hashtable')
+[void]$sb.AppendLine('$wm = @{}')
+
+foreach ($key in ($tamilWords.Keys | Sort-Object)) {
+    $escapedKey = $key.Replace("'", "''")
+    $tamilVal = $tamilWords[$key]
+    [void]$sb.AppendLine("[void]('$escapedKey', '$tamilVal')")
+    # Actually we need proper hashtable syntax
+}
+
+# Better approach: write the hashtable as a single block
+[void]$sb.AppendLine('')
+[void]$sb.AppendLine('function Get-TamilName {')
+[void]$sb.AppendLine('    param([string]$name)')
+[void]$sb.AppendLine('    $n = $name.ToLower().Trim()')
+[void]$sb.AppendLine('    $n = $n -replace "[^a-z0-9\s]", ""')
+[void]$sb.AppendLine('    $n = $n -replace "\s+", " "')
+[void]$sb.AppendLine('    $wm = @{}')
+
+foreach ($key in ($tamilWords.Keys | Sort-Object)) {
+    $escapedKey = $key.Replace("'", "''")
+    $tamilVal = $tamilWords[$key]
+    [void]$sb.AppendLine("    `"`$wm['$escapedKey'] = '$tamilVal'`"")
+}
+
+[void]$sb.AppendLine('    $wm["surf excel"] = $wm["soap"]  # placeholder - will be replaced')
+# Actually let me just use a simpler approach - output a JSON mapping file, then use that
+
+Write-Host "Script generation approach changed - using JSON mapping file instead" -ForegroundColor Yellow

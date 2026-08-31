@@ -1,0 +1,258 @@
+﻿[
+    {
+        "id":  "535ea3b0-ebe4-4413-aeac-5120bdf038cd",
+        "name":  "YASAR",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T18:43:12.591589+00:00"
+    },
+    {
+        "id":  "ce4a7c7c-38ef-4353-8790-8cd95372af8d",
+        "name":  "SARBUNISHA",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T19:01:48.283416+00:00"
+    },
+    {
+        "id":  "8a3589cd-c68b-49ab-90dc-a3268e7c5e3d",
+        "name":  "PAPPATHI",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T19:04:21.033102+00:00"
+    },
+    {
+        "id":  "b803e9dc-d58a-457d-acc6-542fddcb9b9c",
+        "name":  "satpath ",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-18T02:58:20.005903+00:00"
+    },
+    {
+        "id":  "d07e27cd-8eb0-4255-ad95-b25dc04f7c94",
+        "name":  "satpath ",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-18T02:58:20.005906+00:00"
+    },
+    {
+        "id":  "1b60a56e-b9a3-4442-9a6d-dd1bb1cde5a8",
+        "name":  "PETER",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-14T01:14:26.325194+00:00"
+    },
+    {
+        "id":  "975cecc5-7ae9-4294-97d9-753c499dfd6d",
+        "name":  "Shajahan",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T06:16:46.263339+00:00"
+    },
+    {
+        "id":  "983609be-17f0-492b-a8e2-a43b7b1ab671",
+        "name":  "Bismillah stote",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T06:24:29.319916+00:00"
+    },
+    {
+        "id":  "0a5dea68-5a07-444b-b0a1-1d9548566cf0",
+        "name":  "sargunam",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T06:30:11.971873+00:00"
+    },
+    {
+        "id":  "be38e717-cc08-45dd-ace0-8b81d3b71d74",
+        "name":  "sathi malligai",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T07:16:27.414392+00:00"
+    },
+    {
+        "id":  "03d6efa2-82c9-425d-9507-0d22dbdc106c",
+        "name":  "Arafa store",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T07:45:15.870121+00:00"
+    },
+    {
+        "id":  "4cbc89a4-47f9-4c54-b723-c5a2c15f0d0a",
+        "name":  "jahir hussain",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T07:50:03.386528+00:00"
+    },
+    {
+        "id":  "ded55b7d-6b86-4bd5-9ca2-ba8d0ca3daab",
+        "name":  "rajesh",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T09:29:01.121646+00:00"
+    },
+    {
+        "id":  "92cbf83c-9c04-4afb-818d-e9f0015fcaa6",
+        "name":  "Sangam doss",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  1040.00,
+        "created_at":  "2026-08-15T09:32:54.708478+00:00"
+    },
+    {
+        "id":  "e13915dc-5b67-476b-bdbb-8b770940d4f9",
+        "name":  "15-08-2026 sales",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T18:56:10.129058+00:00"
+    },
+    {
+        "id":  "e5fafe55-16bf-4bd8-883a-9cab7382447f",
+        "name":  "GANESAN ILUPPAKORAI",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T10:29:07.981461+00:00"
+    },
+    {
+        "id":  "1cd4be4c-6b0f-498c-b720-06a7000c4e0a",
+        "name":  "isak ",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-14T18:58:45.901023+00:00"
+    },
+    {
+        "id":  "8265d867-6c7f-4e79-8dc0-55ea79ea5ce3",
+        "name":  "VENGATESH ULLIKADAI",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T10:34:18.04857+00:00"
+    },
+    {
+        "id":  "2d8f4d00-10a1-4cb1-9c9b-1871d081afb4",
+        "name":  "PAALKAR VALTHOOR",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T10:37:33.423034+00:00"
+    },
+    {
+        "id":  "dc0c4e83-f946-474d-b5a5-f7ac085ae647",
+        "name":  "RABORT",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T10:45:02.158399+00:00"
+    },
+    {
+        "id":  "e590a7c6-7b93-497d-8ea0-0db474b2a7e8",
+        "name":  "IYYANAAR",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T10:54:40.753375+00:00"
+    },
+    {
+        "id":  "38536eac-2ed7-4f18-9d92-f3b510e34393",
+        "name":  "kannan valathoor",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T11:08:29.938465+00:00"
+    },
+    {
+        "id":  "236f896a-ed25-4726-b164-b4f9f31b8016",
+        "name":  "Ravi ullikkottai",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T18:16:20.097391+00:00"
+    },
+    {
+        "id":  "c97b29c1-18f9-4c94-a556-ea9f3e9a2fc8",
+        "name":  "raja anjan",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T18:37:03.644409+00:00"
+    },
+    {
+        "id":  "c6553e08-2fe2-4e40-8662-8d003b2b05c5",
+        "name":  "suresh gopi",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T18:40:30.801957+00:00"
+    },
+    {
+        "id":  "30055453-66e0-4a4a-8f4d-6ddadf866e56",
+        "name":  "hussain sakrapalli",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T19:21:58.904538+00:00"
+    },
+    {
+        "id":  "172c9345-fe63-455c-b6f2-ae855345eb6c",
+        "name":  "HARIS MALLIGAI",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T10:43:12.105167+00:00"
+    },
+    {
+        "id":  "09be65a2-5a4e-4ca0-b4ce-9c4df86de1b4",
+        "name":  "siva parasakudi",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-16T17:44:05.8978+00:00"
+    },
+    {
+        "id":  "3fce91dd-ccf9-42c6-9d04-d41e9ae3e243",
+        "name":  "siddiq",
+        "phone":  null,
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-15T07:02:19.225158+00:00"
+    },
+    {
+        "id":  "7ce1128d-bcfe-4c8a-b243-fcf2070ebd6f",
+        "name":  "ajai store",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T17:48:31.134169+00:00"
+    },
+    {
+        "id":  "56dc06c7-f99b-47e1-8adb-f27bd46d314a",
+        "name":  "ayyanar anna salai",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T18:08:45.758425+00:00"
+    },
+    {
+        "id":  "e498f41a-23a1-48e0-ad1b-a19e6b14fb3c",
+        "name":  "PETER",
+        "phone":  "",
+        "address":  null,
+        "total_credit":  0.00,
+        "created_at":  "2026-08-17T18:34:16.220643+00:00"
+    }
+]

@@ -1,0 +1,6 @@
+{
+  "appName": "Ideal Store POS",
+  "appBundleId": "com.idealstore.pos",
+  "updateUrl": "https://api.github.com/repos/ajmafabu/ideal-store-pos/releases/latest",
+  "allowDowngrade": false
+}

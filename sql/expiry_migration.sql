@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN IF NOT EXISTS expiry_date DATE;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS batch_number TEXT;

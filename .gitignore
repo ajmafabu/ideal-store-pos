@@ -1,0 +1,104 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Release keystore
+android/app/release-key.jks
+android/app/keystore.properties
+*.jks
+*.keystore
+
+# Supabase keys (should be passed via --dart-define)
+.env
+.env.*
+
+# Local properties
+android/local.properties
+
+# Debug/temp files
+*.ps1
+*.txt
+!README.md
+!SETUP_GUIDE.md
+!PRIVACY_POLICY.md
+!PLAN.md
+app_error.txt
+app_output.txt
+
+# Data analysis (local only)
+data_analysis/
+
+# Tamil scripts (local only)
+tamil_dict.json
+tamil_dictionary.json
+tamil_map.json
+tamil_names_update.json
+products_for_tamil.json
+products_list.json
+clear_tamil.dart
+create_tamil_map.ps1
+generate_tamil_names.ps1
+translate_tamil.dart
+translate_tamil_v2.dart
+update_tamil_names.dart
+update_tamil_names.ps1
+update_tamil_names.sql
+update_tamil.ps1
+update_tamil_final.ps1
+update_tamil_patch.ps1
+update_tamil_v2.ps1
+update_utf8.ps1
+update_remaining.ps1
+verify_detail.ps1
+debug2.ps1
+debug3.ps1
+debug_failures.ps1
+debug_patch.ps1
+create_script.ps1
+create_function.sql
+check_remaining.ps1
+test_tamil.txt
+test_utf8.ps1
+
+# Screenshots
+screenshot.png
+
+# Hive encryption key (per-installation)
+.hive_key
