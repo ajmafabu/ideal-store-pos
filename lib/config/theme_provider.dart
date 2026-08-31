@@ -9,17 +9,17 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
   @override
   ThemeMode build() {
     _loadTheme();
-    return ThemeMode.system;
+    return ThemeMode.light; // default to light while loading
   }
 
   void _loadTheme() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final themeIndex = prefs.getInt(_themeKey) ?? 2;
+      final themeIndex = prefs.getInt(_themeKey) ?? 0; // default to light mode
       state = ThemeMode.values[themeIndex.clamp(0, 2)];
     } catch (e) {
       Logger.warning('Failed to load theme preference: $e');
-      state = ThemeMode.system;
+      state = ThemeMode.light;
     }
   }
 
