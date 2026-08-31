@@ -78,13 +78,17 @@ void main() async {
       // Auto-update check (Windows only, silent, after 5s)
       Future.delayed(const Duration(seconds: 5), () async {
         try {
+          print('[UPDATE] Checking for updates...');
           final updateService = UpdateService();
           final update = await updateService.checkForUpdate();
           if (update != null) {
-            _pendingUpdate = update;
+            print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
+            _updateNotifier.value = update;
+          } else {
+            print('[UPDATE] App is up to date');
           }
         } catch (e) {
-          Logger.warning('Auto-update check failed: $e');
+          print('[UPDATE] Auto-update check failed: $e');
         }
       });
 
@@ -137,7 +141,7 @@ void main() async {
   );
 }
 
-UpdateInfo? _pendingUpdate;
+final ValueNotifier<UpdateInfo?> _updateNotifier = ValueNotifier(null);
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
@@ -149,19 +153,6 @@ class MyApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeProvider);
 
-    // Show update dialog if pending
-    if (_pendingUpdate != null) {
-      final update = _pendingUpdate!;
-      _pendingUpdate = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => _UpdateDialog(update: update),
-        );
-      });
-    }
-
     return MaterialApp.router(
       title: 'Ideal Store POS',
       debugShowCheckedModeBanner: false,
@@ -169,6 +160,23 @@ class MyApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        // Check for pending update on every build
+        if (_updateNotifier.value != null) {
+          final update = _updateNotifier.value!;
+          _updateNotifier.value = null;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (ctx) => _UpdateDialog(update: update),
+              );
+            }
+          });
+        }
+        return child ?? const SizedBox.shrink();
+      },
     );
   }
 }

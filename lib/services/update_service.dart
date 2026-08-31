@@ -15,20 +15,35 @@ class UpdateService {
     try {
       final info = await PackageInfo.fromPlatform();
       final currentVersion = info.version;
+      print('[UPDATE] Current version: $currentVersion');
 
       final response = await http.get(Uri.parse(_apiUrl)).timeout(const Duration(seconds: 10));
+      print('[UPDATE] API response status: ${response.statusCode}');
       if (response.statusCode != 200) return null;
 
       final release = json.decode(response.body);
       final tagName = release['tag_name'] ?? '';
       final latestVersion = tagName.replaceFirst('v', '');
+      print('[UPDATE] Latest version from GitHub: $latestVersion');
 
-      if (latestVersion.isEmpty || latestVersion == currentVersion) return null;
+      if (latestVersion.isEmpty) return null;
+      if (latestVersion == currentVersion) {
+        print('[UPDATE] Versions match - no update needed');
+        return null;
+      }
 
       final assets = (release['assets'] as List?) ?? [];
+      print('[UPDATE] Assets count: ${assets.length}');
+      for (final a in assets) {
+        print('[UPDATE]   - ${a["name"]} (${a["size"]} bytes)');
+      }
       final zipAsset = assets.where((a) => (a['name'] ?? '').toString().endsWith('.zip')).toList();
-      if (zipAsset.isEmpty) return null;
+      if (zipAsset.isEmpty) {
+        print('[UPDATE] No zip asset found');
+        return null;
+      }
 
+      print('[UPDATE] Update available: $currentVersion → $latestVersion');
       return UpdateInfo(
         currentVersion: currentVersion,
         latestVersion: latestVersion,
@@ -36,7 +51,7 @@ class UpdateService {
         releaseNotes: release['body'] ?? '',
       );
     } catch (e) {
-      Logger.warning('Update check failed: $e');
+      print('[UPDATE] Check failed: $e');
       return null;
     }
   }
