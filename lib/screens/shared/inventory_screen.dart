@@ -1225,10 +1225,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   static final _pdfCurrencyFormat = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 2);
   static final _pdfDateFormat = DateFormat('dd MMM yyyy, hh:mm a');
   static pw.Font? _pdfNotoSans;
+  static pw.Font? _pdfNotoSansTamil;
 
   static Future<pw.Font> _getPdfFont() async {
     _pdfNotoSans ??= pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
     return _pdfNotoSans!;
+  }
+
+  static Future<pw.Font> _getPdfTamilFont() async {
+    _pdfNotoSansTamil ??= pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSansTamil-Regular.ttf'));
+    return _pdfNotoSansTamil!;
   }
 
   Future<void> _exportPdf() async {
@@ -1254,6 +1260,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       }
 
       final f = await _getPdfFont();
+      final ft = await _getPdfTamilFont();
       final now = AppTimezone.nowIst();
       final dateStr = _pdfDateFormat.format(now);
 
@@ -1295,35 +1302,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             ),
           ),
           build: (context) => [
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(font: f, fontSize: 8, fontWeight: pw.FontWeight.bold),
-              cellStyle: pw.TextStyle(font: f, fontSize: 7),
-              headerDecoration: const pw.BoxDecoration(color: PdfColor(0.33, 0.42, 0.92)),
-              oddRowDecoration: const pw.BoxDecoration(color: PdfColor(0.97, 0.97, 0.97)),
-              cellHeight: 18,
-              cellAlignments: {
-                0: pw.Alignment.centerLeft,
-                3: pw.Alignment.centerRight,
-                4: pw.Alignment.centerRight,
-                5: pw.Alignment.centerRight,
-                6: pw.Alignment.centerRight,
-              },
-              headers: ['#', 'Product Name', 'Category', 'Qty', 'Purchase Price', 'Selling Price', 'Stock Value', 'Expiry'],
-              data: filtered.asMap().entries.map((entry) {
-                final i = entry.key + 1;
-                final p = entry.value;
-                final expiry = p.expiryDate != null ? DateFormat('dd/MM/yy').format(p.expiryDate!) : '-';
-                return [
-                  '$i',
-                  p.name,
-                  p.category ?? '-',
-                  '${p.stock} ${p.unit}',
-                  _pdfCurrencyFormat.format(p.purchasePrice),
-                  _pdfCurrencyFormat.format(p.sellingPrice),
-                  _pdfCurrencyFormat.format(p.stock * p.purchasePrice),
-                  expiry,
-                ];
-              }).toList(),
+            // Custom table with Tamil support
+            pw.Table(
               columnWidths: {
                 0: const pw.FlexColumnWidth(0.5),
                 1: const pw.FlexColumnWidth(3),
@@ -1334,6 +1314,72 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 6: const pw.FlexColumnWidth(1.3),
                 7: const pw.FlexColumnWidth(1),
               },
+              defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+              children: [
+                // Header row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColor(0.33, 0.42, 0.92)),
+                  children: ['#', 'Product Name', 'Category', 'Qty', 'Purchase Price', 'Selling Price', 'Stock Value', 'Expiry']
+                      .map((h) => pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            child: pw.Text(h, style: pw.TextStyle(font: f, fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                          ))
+                      .toList(),
+                ),
+                // Data rows
+                ...filtered.asMap().entries.map((entry) {
+                  final i = entry.key + 1;
+                  final p = entry.value;
+                  final expiry = p.expiryDate != null ? DateFormat('dd/MM/yy').format(p.expiryDate!) : '-';
+                  final isOdd = i.isOdd;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: isOdd ? const PdfColor(0.97, 0.97, 0.97) : PdfColors.white,
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text('$i', style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(p.name, style: pw.TextStyle(font: f, fontSize: 7)),
+                            if (p.tamilName != null && p.tamilName!.isNotEmpty)
+                              pw.Text(p.tamilName!, style: pw.TextStyle(font: ft, fontSize: 6, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text(p.category ?? '-', style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text('${p.stock} ${p.unit}', style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text(_pdfCurrencyFormat.format(p.purchasePrice), style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text(_pdfCurrencyFormat.format(p.sellingPrice), style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text(_pdfCurrencyFormat.format(p.stock * p.purchasePrice), style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: pw.Text(expiry, style: pw.TextStyle(font: f, fontSize: 7)),
+                      ),
+                    ],
+                  );
+                }),
+              ],
             ),
             pw.SizedBox(height: 12),
             pw.Container(
