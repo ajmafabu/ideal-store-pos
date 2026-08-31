@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'config/app_theme.dart';
 import 'config/hive_adapter.dart';
 import 'config/providers.dart';
@@ -16,6 +12,7 @@ import 'config/theme_provider.dart';
 import 'router/app_router.dart';
 import 'services/offline_service.dart';
 import 'services/connectivity_service.dart';
+import 'services/update_service.dart';
 import 'utils/logger.dart';
 
 void main() async {
@@ -78,9 +75,17 @@ void main() async {
         Logger.warning('Failed to request Bluetooth/location permissions: $e');
       }
 
-      // Initialize auto-updater (Windows only, after 5s delay)
-      Future.delayed(const Duration(seconds: 5), () {
-        _checkForUpdates();
+      // Auto-update check (Windows only, silent, after 5s)
+      Future.delayed(const Duration(seconds: 5), () async {
+        try {
+          final updateService = UpdateService();
+          final update = await updateService.checkForUpdate();
+          if (update != null) {
+            _pendingUpdate = update;
+          }
+        } catch (e) {
+          Logger.warning('Auto-update check failed: $e');
+        }
       });
 
       // Sync on startup if online
@@ -132,38 +137,7 @@ void main() async {
   );
 }
 
-Future<void> _checkForUpdates() async {
-  try {
-    final info = await PackageInfo.fromPlatform();
-    final currentVersion = info.version;
-
-    final response = await http.get(
-      Uri.parse('https://api.github.com/repos/ajmafabu/ideal-store-pos/releases/latest'),
-    ).timeout(const Duration(seconds: 10));
-
-    if (response.statusCode != 200) return;
-
-    final release = json.decode(response.body);
-    final tagName = release['tag_name'] ?? '';
-    final latestVersion = tagName.replaceFirst('v', '');
-    final downloadUrl = (release['assets'] as List?)?.where(
-      (a) => a['name']?.toString().endsWith('.zip') == true,
-    ).toList();
-
-    if (latestVersion.isNotEmpty &&
-        latestVersion != currentVersion &&
-        downloadUrl != null &&
-        downloadUrl.isNotEmpty) {
-      final url = downloadUrl.first['browser_download_url'] as String;
-      Logger.info('Update available: $latestVersion (current: $currentVersion)');
-      _pendingUpdate = (currentVersion, latestVersion, url);
-    }
-  } catch (e) {
-    Logger.warning('Update check failed: $e');
-  }
-}
-
-(String current, String latest, String url)? _pendingUpdate;
+UpdateInfo? _pendingUpdate;
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
@@ -177,28 +151,13 @@ class MyApp extends ConsumerWidget {
 
     // Show update dialog if pending
     if (_pendingUpdate != null) {
-      final (current, latest, url) = _pendingUpdate!;
+      final update = _pendingUpdate!;
       _pendingUpdate = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         showDialog(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Update Available'),
-            content: Text('Version $latest is available.\n\nYou are on version $current.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Later'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  launchUrl(Uri.parse(url));
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Download'),
-              ),
-            ],
-          ),
+          barrierDismissible: false,
+          builder: (ctx) => _UpdateDialog(update: update),
         );
       });
     }
@@ -210,6 +169,115 @@ class MyApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
+    );
+  }
+}
+
+class _UpdateDialog extends StatefulWidget {
+  final UpdateInfo update;
+  const _UpdateDialog({required this.update});
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  double _progress = 0;
+  String _status = 'Preparing...';
+  bool _downloading = false;
+
+  Future<void> _download() async {
+    setState(() {
+      _downloading = true;
+      _status = 'Downloading...';
+    });
+
+    try {
+      final service = UpdateService();
+      final extractDir = await service.downloadAndInstall(
+        widget.update,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _status = 'Installing... Restarting app...';
+          _progress = 1;
+        });
+        await Future.delayed(const Duration(seconds: 2));
+        await service.installUpdate(extractDir);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _downloading = false;
+          _status = 'Failed: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.system_update, color: Colors.blue),
+          const SizedBox(width: 8),
+          const Text('Update Available'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Version ${widget.update.latestVersion} is available.'),
+          const SizedBox(height: 4),
+          Text(
+            'You are on version ${widget.update.currentVersion}',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          ),
+          if (widget.update.releaseNotes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Release Notes:', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                widget.update.releaseNotes,
+                style: const TextStyle(fontSize: 12),
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          if (_downloading) ...[
+            const SizedBox(height: 16),
+            LinearProgressIndicator(value: _progress > 0 && _progress < 1 ? _progress : null),
+            const SizedBox(height: 8),
+            Text(_status, style: const TextStyle(fontSize: 12)),
+          ],
+        ],
+      ),
+      actions: [
+        if (!_downloading)
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Later'),
+          ),
+        if (!_downloading)
+          FilledButton.icon(
+            onPressed: _download,
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Update Now'),
+          ),
+      ],
     );
   }
 }

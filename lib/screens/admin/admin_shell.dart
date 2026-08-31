@@ -3,13 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_colors.dart';
+import '../../services/update_service.dart';
 import '../../config/providers.dart';
 import '../../config/theme_provider.dart';
 import '../shared/dashboard_screen.dart';
@@ -766,40 +763,51 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
-                    final info = await PackageInfo.fromPlatform();
-                    final currentVersion = info.version;
-                    final response = await http.get(
-                      Uri.parse('https://api.github.com/repos/ajmafabu/ideal-store-pos/releases/latest'),
-                    ).timeout(const Duration(seconds: 10));
-                    if (response.statusCode == 200) {
-                      final release = json.decode(response.body);
-                      final latestVersion = (release['tag_name'] ?? '').toString().replaceFirst('v', '');
-                      if (latestVersion != currentVersion) {
-                        final assets = (release['assets'] as List?) ?? [];
-                        final zip = assets.where((a) => (a['name'] ?? '').toString().endsWith('.zip')).toList();
-                        final url = zip.isNotEmpty ? zip.first['browser_download_url'] : null;
-                        if (context.mounted) {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Update Available'),
-                              content: Text('Version $latestVersion is available.\n\nYou are on version $currentVersion.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Later')),
-                                if (url != null)
-                                  FilledButton(
-                                    onPressed: () { launchUrl(Uri.parse(url)); Navigator.pop(ctx); },
-                                    child: const Text('Download'),
-                                  ),
-                              ],
-                            ),
-                          );
-                        }
-                      } else if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('You are on the latest version')),
-                        );
-                      }
+                    final service = UpdateService();
+                    final update = await service.checkForUpdate();
+                    if (!context.mounted) return;
+
+                    if (update == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('You are on the latest version')),
+                      );
+                      return;
+                    }
+
+                    // Show update dialog
+                    final shouldUpdate = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: Row(
+                          children: [
+                            const Icon(Icons.system_update, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            const Text('Update Available'),
+                          ],
+                        ),
+                        content: Text(
+                          'Version ${update.latestVersion} is available.\n\nYou are on version ${update.currentVersion}',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dctx, false),
+                            child: const Text('Later'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dctx, true),
+                            child: const Text('Update Now'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (shouldUpdate == true && context.mounted) {
+                      // Show progress dialog
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (dctx) => _UpdateProgressDialog(update: update),
+                      );
                     }
                   } catch (e) {
                     if (context.mounted) {
@@ -1238,6 +1246,71 @@ class _ThemeMenuItem extends ConsumerWidget {
             title: const Text('System'),
             onTap: () => ref.read(themeProvider.notifier).setThemeMode(ThemeMode.system),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpdateProgressDialog extends StatefulWidget {
+  final UpdateInfo update;
+  const _UpdateProgressDialog({required this.update});
+
+  @override
+  State<_UpdateProgressDialog> createState() => _UpdateProgressDialogState();
+}
+
+class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
+  double _progress = 0;
+  String _status = 'Downloading...';
+
+  @override
+  void initState() {
+    super.initState();
+    _startUpdate();
+  }
+
+  Future<void> _startUpdate() async {
+    try {
+      final service = UpdateService();
+      final extractDir = await service.downloadAndInstall(
+        widget.update,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _status = 'Installing... Restarting...';
+          _progress = 1;
+        });
+        await Future.delayed(const Duration(seconds: 2));
+        await service.installUpdate(extractDir);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _status = 'Failed: $e');
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update failed: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Updating...'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LinearProgressIndicator(value: _progress > 0 && _progress < 1 ? _progress : null),
+          const SizedBox(height: 12),
+          Text(_status, style: const TextStyle(fontSize: 13)),
+          if (_progress > 0 && _progress < 1)
+            Text('${(_progress * 100).toInt()}%', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
         ],
       ),
     );
