@@ -15,43 +15,92 @@ class UpdateService {
     try {
       final info = await PackageInfo.fromPlatform();
       final currentVersion = info.version;
-      print('[UPDATE] Current version: $currentVersion');
+      final buildNumber = info.buildNumber;
+      print('[UPDATE] Current version: $currentVersion (build $buildNumber)');
 
-      final response = await http.get(Uri.parse(_apiUrl)).timeout(const Duration(seconds: 10));
+      // Write debug to file so user can check
+      final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
+      await debugFile.writeAsString('=== Update Check ===\n'
+          'Time: ${DateTime.now()}\n'
+          'Current version: $currentVersion (build $buildNumber)\n');
+
+      print('[UPDATE] Calling GitHub API: $_apiUrl');
+      await debugFile.writeAsString(
+          'API URL: $_apiUrl\n',
+          mode: FileMode.append);
+
+      final response = await http.get(Uri.parse(_apiUrl)).timeout(const Duration(seconds: 15));
       print('[UPDATE] API response status: ${response.statusCode}');
-      if (response.statusCode != 200) return null;
+      await debugFile.writeAsString(
+          'Response status: ${response.statusCode}\n',
+          mode: FileMode.append);
+
+      if (response.statusCode != 200) {
+        await debugFile.writeAsString(
+            'Response body: ${response.body}\n',
+            mode: FileMode.append);
+        return null;
+      }
 
       final release = json.decode(response.body);
       final tagName = release['tag_name'] ?? '';
       final latestVersion = tagName.replaceFirst('v', '');
       print('[UPDATE] Latest version from GitHub: $latestVersion');
 
-      if (latestVersion.isEmpty) return null;
+      await debugFile.writeAsString(
+          'Tag name: $tagName\n'
+          'Latest version: $latestVersion\n'
+          'Release body: ${release['body']}\n',
+          mode: FileMode.append);
+
+      if (latestVersion.isEmpty) {
+        await debugFile.writeAsString('Result: empty latest version\n', mode: FileMode.append);
+        return null;
+      }
       if (latestVersion == currentVersion) {
         print('[UPDATE] Versions match - no update needed');
+        await debugFile.writeAsString('Result: versions match\n', mode: FileMode.append);
         return null;
       }
 
       final assets = (release['assets'] as List?) ?? [];
       print('[UPDATE] Assets count: ${assets.length}');
+      await debugFile.writeAsString('Assets: ${assets.length}\n', mode: FileMode.append);
       for (final a in assets) {
-        print('[UPDATE]   - ${a["name"]} (${a["size"]} bytes)');
+        final name = a['name'] ?? 'unknown';
+        final size = a['size'] ?? 0;
+        print('[UPDATE]   - $name ($size bytes)');
+        await debugFile.writeAsString('  - $name ($size bytes)\n', mode: FileMode.append);
       }
       final zipAsset = assets.where((a) => (a['name'] ?? '').toString().endsWith('.zip')).toList();
       if (zipAsset.isEmpty) {
         print('[UPDATE] No zip asset found');
+        await debugFile.writeAsString('Result: no zip asset\n', mode: FileMode.append);
         return null;
       }
 
-      print('[UPDATE] Update available: $currentVersion → $latestVersion');
+      final downloadUrl = zipAsset.first['browser_download_url'] ?? '';
+      print('[UPDATE] Download URL: $downloadUrl');
+      await debugFile.writeAsString(
+          'Result: UPDATE AVAILABLE\n'
+          'Download URL: $downloadUrl\n',
+          mode: FileMode.append);
+
       return UpdateInfo(
         currentVersion: currentVersion,
         latestVersion: latestVersion,
-        downloadUrl: zipAsset.first['browser_download_url'],
+        downloadUrl: downloadUrl,
         releaseNotes: release['body'] ?? '',
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('[UPDATE] Check failed: $e');
+      try {
+        final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
+        await debugFile.writeAsString(
+            'ERROR: $e\n'
+            'Stack: $stackTrace\n',
+            mode: FileMode.append);
+      } catch (_) {}
       return null;
     }
   }

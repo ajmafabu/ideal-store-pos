@@ -144,28 +144,44 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Future<void> _checkForUpdate() async {
+    if (!mounted) return;
     // Wait 5 seconds for app to fully load
     await Future.delayed(const Duration(seconds: 5));
     if (!mounted) return;
 
     try {
-      print('[UPDATE] Checking for updates...');
+      print('[UPDATE] Starting update check...');
+      final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
+      await debugFile.writeAsString('=== App Started ===\n'
+          'Time: ${DateTime.now()}\n'
+          'mounted: $mounted\n');
+
       final updateService = UpdateService();
       final update = await updateService.checkForUpdate();
+      await debugFile.writeAsString('checkForUpdate returned: ${update != null ? "UPDATE AVAILABLE" : "null"}\n', mode: FileMode.append);
+
       if (update != null && mounted) {
         print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
+        await debugFile.writeAsString('Showing dialog...\n', mode: FileMode.append);
         if (context.mounted) {
-          showDialog(
+          await showDialog(
             context: context,
             barrierDismissible: false,
             builder: (_) => _UpdateDialog(update: update),
           );
+        } else {
+          await debugFile.writeAsString('context not mounted!\n', mode: FileMode.append);
         }
       } else {
         print('[UPDATE] App is up to date');
+        await debugFile.writeAsString('No update available\n', mode: FileMode.append);
       }
-    } catch (e) {
+    } catch (e, st) {
       print('[UPDATE] Auto-update check failed: $e');
+      try {
+        final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
+        await debugFile.writeAsString('ERROR in _checkForUpdate: $e\n$st\n', mode: FileMode.append);
+      } catch (_) {}
     }
   }
 
