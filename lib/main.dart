@@ -75,23 +75,6 @@ void main() async {
         Logger.warning('Failed to request Bluetooth/location permissions: $e');
       }
 
-      // Auto-update check (Windows only, silent, after 5s)
-      Future.delayed(const Duration(seconds: 5), () async {
-        try {
-          print('[UPDATE] Checking for updates...');
-          final updateService = UpdateService();
-          final update = await updateService.checkForUpdate();
-          if (update != null) {
-            print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
-            _updateNotifier.value = update;
-          } else {
-            print('[UPDATE] App is up to date');
-          }
-        } catch (e) {
-          print('[UPDATE] Auto-update check failed: $e');
-        }
-      });
-
       // Sync on startup if online
       try {
         if (await offlineService.isOnline()) {
@@ -134,6 +117,32 @@ void main() async {
       });
 
       runApp(const ProviderScope(child: MyApp()));
+
+      // Auto-update check (Windows only, silent, after 5s)
+      Future.delayed(const Duration(seconds: 5), () async {
+        try {
+          print('[UPDATE] Checking for updates...');
+          final updateService = UpdateService();
+          final update = await updateService.checkForUpdate();
+          if (update != null) {
+            print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final navCtx = navigatorKey.currentContext;
+              if (navCtx != null && navCtx.mounted) {
+                showDialog(
+                  context: navCtx,
+                  barrierDismissible: false,
+                  builder: (_) => _UpdateDialog(update: update),
+                );
+              }
+            });
+          } else {
+            print('[UPDATE] App is up to date');
+          }
+        } catch (e) {
+          print('[UPDATE] Auto-update check failed: $e');
+        }
+      });
     },
     (error, stack) {
       Logger.error('Uncaught Error', error, stack);
@@ -141,7 +150,7 @@ void main() async {
   );
 }
 
-final ValueNotifier<UpdateInfo?> _updateNotifier = ValueNotifier(null);
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class MyApp extends ConsumerWidget {
   const MyApp({super.key});
@@ -153,30 +162,14 @@ class MyApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeProvider);
 
-    return ValueListenableBuilder<UpdateInfo?>(
-      valueListenable: _updateNotifier,
-      builder: (context, update, _) {
-        if (update != null) {
-          _updateNotifier.value = null;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted) {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (ctx) => _UpdateDialog(update: update),
-              );
-            }
-          });
-        }
-        return MaterialApp.router(
-          title: 'Ideal Store POS',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeMode,
-          routerConfig: router,
-        );
-      },
+    return MaterialApp.router(
+      key: navigatorKey,
+      title: 'Ideal Store POS',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
+      routerConfig: router,
     );
   }
 }
