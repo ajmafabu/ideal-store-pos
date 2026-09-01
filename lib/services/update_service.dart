@@ -172,19 +172,49 @@ class UpdateService {
   Future<void> installUpdate(String extractDir) async {
     final appDir = Directory(Platform.resolvedExecutable).parent.parent.path;
     final exeName = Platform.resolvedExecutable.split('\\').last;
+    final extractDirObj = Directory(extractDir);
 
     Logger.info('Installing update to: $appDir');
 
-    // Create a batch script that:
-    // 1. Waits for the app to close
-    // 2. Copies new files over old ones
-    // 3. Restarts the app
-    // 4. Cleans up
+    // Find the actual app files in extracted directory
+    String sourceDir = extractDir;
+    final exeFiles = await extractDirObj.list(recursive: true).where((f) => f.path.endsWith('.exe')).toList();
+    if (exeFiles.isNotEmpty) {
+      sourceDir = exeFiles.first.parent.path;
+    }
+
+    // Create a robust batch script — kills old process, cleans, copies, restarts
     final batScript = '''
 @echo off
-timeout /t 2 /nobreak >nul
-xcopy /E /Y /I "$extractDir" "$appDir"
+title Ideal Store POS Updater
+
+:: Wait for app to close
+timeout /t 3 /nobreak >nul
+
+:: Force kill any remaining instance
+taskkill /f /im "$exeName" >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+:: Remove old DLLs and exe (will be replaced)
+del /Q "$appDir\\*.dll" >nul 2>&1
+del /Q "$appDir\\*.exe" >nul 2>&1
+del /Q "$appDir\\*.dat" >nul 2>&1
+del /Q "$appDir\\*.json" >nul 2>&1
+
+:: Copy new files from source to app directory
+for %%F in ("$sourceDir\\*.*") do (
+    copy /Y "%%F" "$appDir\\%%~nxF" >nul 2>&1
+)
+
+:: Copy data subdirectory if it exists
+if exist "$sourceDir\\data" (
+    xcopy /E /Y /I "$sourceDir\\data" "$appDir\\data" >nul 2>&1
+)
+
+:: Restart the app
 start "" "$appDir\\$exeName"
+
+:: Self-delete
 del "%~f0"
 ''';
 
