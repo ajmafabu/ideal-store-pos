@@ -720,7 +720,14 @@ class CartNotifier extends Notifier<List<CartItem>> {
       qty: item.qty,
       unit: item.unit,
       purchasePrice: item.purchasePrice,
+      gstRate: item.gstRate,
+      hsnCode: item.hsnCode,
+      tamilName: item.tamilName,
       discount: item.discount,
+      unitType: item.unitType,
+      piecesPerUnit: item.piecesPerUnit,
+      tier: item.tier,
+      rateLabel: item.rateLabel,
     );
     state = List.from(state);
   }

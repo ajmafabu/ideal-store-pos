@@ -53,11 +53,11 @@ class DesktopPurchaseNotifier extends Notifier<List<PurchaseSession>> {
 
   void closeSession(int index) {
     if (state.length <= 1) return;
-    state.removeAt(index);
-    if (_activeSessionIndex >= state.length) {
-      _activeSessionIndex = state.length - 1;
+    final newList = List<PurchaseSession>.from(state)..removeAt(index);
+    if (_activeSessionIndex >= newList.length) {
+      _activeSessionIndex = newList.length - 1;
     }
-    state = List.from(state);
+    state = newList;
   }
 
   void addItem(PurchaseItem item) {

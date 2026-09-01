@@ -293,7 +293,10 @@ class _MonthlySummaryState extends ConsumerState<MonthlySummary> {
         for (final e in expensesRes as List) {
           expenses += (e['amount'] as num?)?.toDouble() ?? 0;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Keep expenses at 0 but log the error
+        print('[MonthlySummary] Failed to fetch expenses: $e');
+      }
 
       return {'sales': sales, 'purchases': cogs, 'expenses': expenses};
     } catch (e) {

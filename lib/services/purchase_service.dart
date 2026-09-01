@@ -240,7 +240,7 @@ class PurchaseService {
     try {
       final purchaseData = await _client
           .from('purchases')
-          .select('items, is_credit, supplier_id, total_amount')
+          .select('items, is_credit, supplier_id, total_amount, payment_method')
           .eq('id', purchaseId)
           .single();
 

@@ -66,6 +66,11 @@ class AppTimezone {
       istDate.year,
       istDate.month,
       istDate.day,
+      istDate.hour,
+      istDate.minute,
+      istDate.second,
+      istDate.millisecond,
+      istDate.microsecond,
     ).subtract(_localOffset);
   }
 

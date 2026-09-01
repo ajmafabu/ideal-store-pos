@@ -79,7 +79,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final offlineService = ref.read(offlineServiceProvider);
+    final offlineService = ref.watch(offlineServiceProvider);
     final pendingCount = offlineService.pendingCount;
 
     return Scaffold(

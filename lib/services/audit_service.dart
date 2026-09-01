@@ -51,9 +51,22 @@ class AuditService {
     int limit = 100,
   }) async {
     try {
-      final response = await Supabase.instance.client
+      var query = Supabase.instance.client
           .from('audit_log')
-          .select()
+          .select();
+      if (entityType != null) {
+        query = query.eq('entity_type', entityType);
+      }
+      if (entityId != null) {
+        query = query.eq('entity_id', entityId);
+      }
+      if (from != null) {
+        query = query.gte('created_at', from.toIso8601String());
+      }
+      if (to != null) {
+        query = query.lte('created_at', to.toIso8601String());
+      }
+      final response = await query
           .order('created_at', ascending: false)
           .limit(limit);
       return List<Map<String, dynamic>>.from(response);

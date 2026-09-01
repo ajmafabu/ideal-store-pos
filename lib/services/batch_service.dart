@@ -45,12 +45,12 @@ class BatchService {
     }
   }
 
-  /// Deduct stock from specific batch
-  Future<void> deductBatchStock(String batchId, int qty) async {
+  /// Deduct stock from specific batch using FIFO
+  Future<void> deductBatchStock(String productId, int qty) async {
     try {
       await _client.rpc(
         'deduct_stock_fifo',
-        params: {'p_product_id': batchId, 'p_qty': qty},
+        params: {'p_product_id': productId, 'p_qty': qty},
       );
     } catch (e) {
       Logger.error('deductBatchStock', e);

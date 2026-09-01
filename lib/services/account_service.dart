@@ -213,14 +213,26 @@ class AccountService {
       description: description ?? 'Transfer out',
     );
 
-    // Money in to destination
-    await addTransaction(
-      accountId: toAccountId,
-      type: 'in',
-      amount: amount,
-      category: 'transfer',
-      description: description ?? 'Transfer in',
-    );
+    // Money in to destination (with rollback on failure)
+    try {
+      await addTransaction(
+        accountId: toAccountId,
+        type: 'in',
+        amount: amount,
+        category: 'transfer',
+        description: description ?? 'Transfer in',
+      );
+    } catch (e) {
+      // Rollback: reverse the first transaction
+      await addTransaction(
+        accountId: fromAccountId,
+        type: 'in',
+        amount: amount,
+        category: 'transfer',
+        description: 'Rollback: failed transfer to account',
+      );
+      rethrow;
+    }
   }
 
   Future<Map<String, double>> getTodaySummary() async {

@@ -1141,85 +1141,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   List<Product> _getFilteredProducts(List<Product> products) {
-    final searchQ = _searchQuery.replaceAll(RegExp(r'\broses?\b'), 'rose');
-    var filtered = products.where((p) {
-      final pName = p.name.toLowerCase().replaceAll(RegExp(r'\broses?\b'), 'rose');
-      final matchesSearch = pName.contains(searchQ) ||
-          (p.barcode?.toLowerCase().contains(_searchQuery) ?? false) ||
-          (p.tamilName?.toLowerCase().contains(_searchQuery) ?? false) ||
-          (_batchSearch.isNotEmpty &&
-              (p.batchNumber?.toLowerCase().contains(_batchSearch) ?? false));
-      final matchesCategory = _selectedCategory == null || p.category == _selectedCategory;
-      bool matchesStockRange = true;
-      if (_stockMin != null && p.stock < _stockMin!) matchesStockRange = false;
-      if (_stockMax != null && p.stock > _stockMax!) matchesStockRange = false;
-      bool matchesPriceRange = true;
-      if (_priceMin != null && p.sellingPrice < _priceMin!) matchesPriceRange = false;
-      if (_priceMax != null && p.sellingPrice > _priceMax!) matchesPriceRange = false;
-      bool matchesFilters = true;
-      if (_activeFilters.isNotEmpty) {
-        for (final filter in _activeFilters) {
-          final stockVal = p.totalStock;
-          final value = stockVal * p.sellingPrice;
-          bool match = true;
-          switch (filter) {
-            case 'out_of_stock': match = stockVal == 0; break;
-            case 'low_stock': match = stockVal > 0 && p.lowStockAlert > 0 && stockVal <= p.lowStockAlert; break;
-            case 'excess': match = p.lowStockAlert > 0 && stockVal > p.lowStockAlert * 3; break;
-            case 'negative': match = stockVal < 0; break;
-            case 'fast_moving': final s = _productSalesStats[p.id]; match = s != null && (s['qty7d'] as int) >= 10; break;
-            case 'slow_moving': final s = _productSalesStats[p.id]; match = s != null && (s['qty7d'] as int) > 0 && (s['qty7d'] as int) < 3; break;
-            case 'no_sales': match = !_productSalesStats.containsKey(p.id); break;
-            case 'sold_today': final s = _productSalesStats[p.id]; match = s != null && (s['qtyToday'] as int) > 0; break;
-            case 'sold_7d': final s = _productSalesStats[p.id]; match = s != null && (s['qty7d'] as int) > 0; break;
-            case 'sold_30d': final s = _productSalesStats[p.id]; match = s != null && (s['qty30d'] as int) > 0; break;
-            case 'no_move_7d': final s = _productSalesStats[p.id]; match = s == null || (s['qty7d'] as int) == 0; break;
-            case 'no_move_30d': final s = _productSalesStats[p.id]; match = s == null || (s['qty30d'] as int) == 0; break;
-            case 'no_move_60d': final s = _productSalesStats[p.id]; match = s == null || (s['qty60d'] as int) == 0; break;
-            case 'no_move_90d': final s = _productSalesStats[p.id]; match = s == null || (s['qty90d'] as int) == 0; break;
-            case 'high_stock_value': match = value > 100000; break;
-            case 'med_stock_value': match = value >= 10000 && value <= 100000; break;
-            case 'low_stock_value': match = value > 0 && value < 10000; break;
-            case 'missing_purchase': match = p.purchasePrice == 0; break;
-            case 'missing_barcode': match = p.barcode == null || p.barcode!.isEmpty; break;
-            case 'dup_product': match = _duplicateNames.contains(p.name.toLowerCase()); break;
-            case 'dup_barcode': match = p.barcode != null && p.barcode!.isNotEmpty && _duplicateBarcodes.contains(p.barcode); break;
-            case 'wrong_purchase': match = p.purchasePrice == 0 || p.purchasePrice < 0; break;
-            case 'wrong_selling': match = p.sellingPrice == 0 || p.sellingPrice < 0; break;
-            case 'no_tamil': match = p.tamilName == null || p.tamilName!.isEmpty; break;
-            case 'no_category': match = p.category == null || p.category!.isEmpty; break;
-            case 'expiring': match = p.isExpiringSoon && !p.isExpired; break;
-            case 'expired': match = p.isExpired; break;
-            case 'below_cost': match = p.sellingPrice > 0 && p.sellingPrice <= p.purchasePrice; break;
-            case 'zero_price': match = p.sellingPrice == 0; break;
-            case 'has_variants': match = p.hasVariants; break;
-            case 'no_variants': match = !p.hasVariants; break;
-            default:
-              if (filter.startsWith('cat_')) {
-                final cat = filter.substring(4);
-                match = p.category == cat;
-              }
-              break;
-          }
-          if (!match) { matchesFilters = false; break; }
-        }
-      }
-      return matchesSearch && matchesCategory && matchesStockRange && matchesPriceRange && matchesFilters;
-    }).toList();
-
-    filtered.sort((a, b) {
-      switch (_sortBy) {
-        case 'qty_asc': return a.stock.compareTo(b.stock);
-        case 'qty_desc': return b.stock.compareTo(a.stock);
-        case 'price_asc': return a.sellingPrice.compareTo(b.sellingPrice);
-        case 'price_desc': return b.sellingPrice.compareTo(a.sellingPrice);
-        case 'value_asc': return (a.stock * a.sellingPrice).compareTo(b.stock * b.sellingPrice);
-        case 'value_desc': return (b.stock * b.sellingPrice).compareTo(a.stock * a.sellingPrice);
-        case 'name_desc': return b.name.compareTo(a.name);
-        default: return a.name.compareTo(b.name);
-      }
-    });
-    return filtered;
+    _rebuildFilteredProducts(products);
+    return _filteredProducts;
   }
 
   static final _pdfCurrencyFormat = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 2);

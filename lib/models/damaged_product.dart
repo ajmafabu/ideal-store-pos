@@ -28,7 +28,7 @@ class DamagedProduct {
       unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
       reason: json['reason'] as String?,
       createdBy: json['created_by'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
     );
   }
 

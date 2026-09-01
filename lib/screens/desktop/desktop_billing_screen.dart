@@ -487,10 +487,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     }
 
     final storedHash = profile.pin;
-    if (storedHash == null || PinAuth.verifyPin(pin, storedHash)) {
+    if (storedHash != null && PinAuth.verifyPin(pin, storedHash)) {
       _unlockErrorText = null;
       _startInactivityTimer();
       Navigator.pop(ctx);
+    } else if (storedHash == null) {
+      setDialogState(() => _unlockErrorText = 'No PIN set. Contact admin.');
     } else {
       setDialogState(() => _unlockErrorText = 'Incorrect PIN');
       controller.clear();

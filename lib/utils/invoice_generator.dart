@@ -25,7 +25,7 @@ class InvoiceGenerator {
   }
 
   static Future<pw.Font> getNotoSansBold() async {
-    _notoSansBoldFont ??= await getNotoSans();
+    _notoSansBoldFont ??= pw.Font.timesBold();
     return _notoSansBoldFont!;
   }
 

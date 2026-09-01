@@ -110,7 +110,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await Supabase.instance.client.from('expenses').delete().eq('id', expense.id);
+                await ref.read(expenseServiceProvider).deleteExpense(expense.id);
                 ref.invalidate(expensesProvider);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(

@@ -23,7 +23,7 @@ class StatementPdfGenerator {
   }
 
   static Future<pw.Font> _getNotoSansBold() async {
-    _notoSansBoldFont ??= await _getNotoSans();
+    _notoSansBoldFont ??= pw.Font.timesBold();
     return _notoSansBoldFont!;
   }
 

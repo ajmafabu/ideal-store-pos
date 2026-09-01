@@ -1407,7 +1407,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final heldBill = _heldBills[index];
     setState(() {
       ref.read(cartProvider.notifier).clear();
-      _cart.addAll(heldBill['cart'] as List<CartItem>);
+      final items = heldBill['cart'] as List<CartItem>;
+      for (final item in items) {
+        ref.read(cartProvider.notifier).addItem(item);
+      }
       _selectedCustomer = heldBill['customer'] as Customer?;
       _discountController.text = heldBill['discount'] as String;
       _paymentMethod = heldBill['paymentMethod'] as String;

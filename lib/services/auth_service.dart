@@ -59,7 +59,7 @@ class AuthService {
                 .eq('id', user.id);
             break;
           } catch (e) {
-            Logger.warning('PIN update attempt failed (signIn): $e');
+            Logger.warning('PIN update attempt failed (signUp): $e');
             await Future.delayed(const Duration(milliseconds: 300));
           }
         }
@@ -129,7 +129,9 @@ class AuthService {
     await _client.auth.signInWithPassword(
       email: email,
       password: derivedPassword,
-    );
+    ).timeout(const Duration(seconds: 20), onTimeout: () {
+      throw Exception('Connection timed out. Check your internet and try again.');
+    });
 
     AuditService().log(
       action: 'sign_in',
@@ -156,6 +158,7 @@ class AuthService {
         }
       } catch (e) {
         if (e.toString().contains('Invalid PIN')) rethrow;
+        Logger.warning('PIN verification skipped due to error: $e');
       }
     }
   }

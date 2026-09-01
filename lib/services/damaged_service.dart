@@ -33,6 +33,8 @@ class DamagedService {
           }
         } catch (e) {
           if (e.toString().contains('Insufficient stock')) rethrow;
+          // Don't proceed if we couldn't validate stock
+          rethrow;
         }
       }
 
