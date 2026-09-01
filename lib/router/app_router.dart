@@ -15,10 +15,13 @@ import '../utils/logger.dart';
 bool _needsUpdate = false;
 String? _minVersion;
 
+final routerNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authServiceProvider);
 
   return GoRouter(
+    navigatorKey: routerNavigatorKey,
     initialLocation: '/login',
     refreshListenable: GoRouterRefreshStream(auth.authStateChanges),
     redirect: (context, state) async {

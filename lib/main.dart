@@ -16,8 +16,6 @@ import 'services/connectivity_service.dart';
 import 'services/update_service.dart';
 import 'utils/logger.dart';
 
-BuildContext? _navigatorContext;
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -146,9 +144,9 @@ void _scheduleUpdateCheck() {
             'URL: ${update.downloadUrl}\n',
             mode: FileMode.append);
 
-        if (_navigatorContext != null) {
-          await logFile.writeAsString('Navigator context found, showing dialog via Overlay\n', mode: FileMode.append);
-          final overlay = Overlay.of(_navigatorContext!);
+        if (routerNavigatorKey.currentContext != null) {
+          await logFile.writeAsString('GoRouter navigator found, showing overlay\n', mode: FileMode.append);
+          final overlay = Overlay.of(routerNavigatorKey.currentContext!);
           late OverlayEntry entry;
           entry = OverlayEntry(
             builder: (_) => _UpdateDialog(
@@ -158,8 +156,8 @@ void _scheduleUpdateCheck() {
           );
           overlay.insert(entry);
         } else {
-          await logFile.writeAsString('ERROR: _navigatorContext is null\n', mode: FileMode.append);
-          print('[UPDATE] ERROR: _navigatorContext is null');
+          await logFile.writeAsString('ERROR: routerNavigatorKey.currentContext is null\n', mode: FileMode.append);
+          print('[UPDATE] ERROR: routerNavigatorKey.currentContext is null');
         }
       } else {
         await logFile.writeAsString('No update available\n', mode: FileMode.append);
@@ -196,11 +194,6 @@ class _MyAppState extends ConsumerState<MyApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
-      builder: (context, child) {
-        // Capture context from INSIDE MaterialApp (has Navigator)
-        _navigatorContext = context;
-        return child ?? const SizedBox.shrink();
-      },
     );
   }
 }
