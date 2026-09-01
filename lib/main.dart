@@ -16,6 +16,8 @@ import 'services/connectivity_service.dart';
 import 'services/update_service.dart';
 import 'utils/logger.dart';
 
+BuildContext? _navigatorContext;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -118,6 +120,9 @@ void main() async {
       });
 
       runApp(const ProviderScope(child: MyApp()));
+
+      // Auto-update check — 7s after runApp to ensure navigator is ready
+      _scheduleUpdateCheck();
     },
     (error, stack) {
       Logger.error('Uncaught Error', error, stack);
@@ -125,7 +130,45 @@ void main() async {
   );
 }
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+void _scheduleUpdateCheck() {
+  Timer(const Duration(seconds: 7), () async {
+    final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
+    try {
+      await logFile.writeAsString(
+          '=== Update Check v1.0.24 ===\nTime: ${DateTime.now()}\n');
+
+      final updateService = UpdateService();
+      final update = await updateService.checkForUpdate();
+
+      if (update != null) {
+        await logFile.writeAsString(
+            'UPDATE FOUND: ${update.currentVersion} → ${update.latestVersion}\n'
+            'URL: ${update.downloadUrl}\n',
+            mode: FileMode.append);
+
+        if (_navigatorContext != null) {
+          await logFile.writeAsString('Navigator context found, showing dialog\n', mode: FileMode.append);
+          await showDialog(
+            context: _navigatorContext!,
+            barrierDismissible: false,
+            builder: (_) => _UpdateDialog(update: update),
+          );
+        } else {
+          await logFile.writeAsString('ERROR: _navigatorContext is null\n', mode: FileMode.append);
+          print('[UPDATE] ERROR: _navigatorContext is null');
+        }
+      } else {
+        await logFile.writeAsString('No update available\n', mode: FileMode.append);
+        print('[UPDATE] App is up to date');
+      }
+    } catch (e, st) {
+      print('[UPDATE] Update check failed: $e');
+      try {
+        logFile.writeAsStringSync('ERROR: $e\n$st\n', mode: FileMode.append);
+      } catch (_) {}
+    }
+  });
+}
 
 class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
@@ -135,57 +178,6 @@ class MyApp extends ConsumerStatefulWidget {
 }
 
 class _MyAppState extends ConsumerState<MyApp> {
-  @override
-  void initState() {
-    super.initState();
-    // Schedule update check after first frame renders
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkForUpdate();
-    });
-  }
-
-  Future<void> _checkForUpdate() async {
-    if (!mounted) return;
-    // Wait 5 seconds for app to fully load
-    await Future.delayed(const Duration(seconds: 5));
-    if (!mounted) return;
-
-    try {
-      print('[UPDATE] Starting update check...');
-      final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
-      await debugFile.writeAsString('=== App Started ===\n'
-          'Time: ${DateTime.now()}\n'
-          'mounted: $mounted\n');
-
-      final updateService = UpdateService();
-      final update = await updateService.checkForUpdate();
-      await debugFile.writeAsString('checkForUpdate returned: ${update != null ? "UPDATE AVAILABLE" : "null"}\n', mode: FileMode.append);
-
-      if (update != null && mounted) {
-        print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
-        await debugFile.writeAsString('Showing dialog...\n', mode: FileMode.append);
-        if (context.mounted) {
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => _UpdateDialog(update: update),
-          );
-        } else {
-          await debugFile.writeAsString('context not mounted!\n', mode: FileMode.append);
-        }
-      } else {
-        print('[UPDATE] App is up to date');
-        await debugFile.writeAsString('No update available\n', mode: FileMode.append);
-      }
-    } catch (e, st) {
-      print('[UPDATE] Auto-update check failed: $e');
-      try {
-        final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
-        await debugFile.writeAsString('ERROR in _checkForUpdate: $e\n$st\n', mode: FileMode.append);
-      } catch (_) {}
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     ref.watch(realtimeChannelProvider);
@@ -200,6 +192,11 @@ class _MyAppState extends ConsumerState<MyApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        // Capture context from INSIDE MaterialApp (has Navigator)
+        _navigatorContext = context;
+        return child ?? const SizedBox.shrink();
+      },
     );
   }
 }
