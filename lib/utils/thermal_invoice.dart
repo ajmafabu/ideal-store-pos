@@ -96,6 +96,7 @@ class ThermalInvoice {
           ? tamilNames[item.productId]!
           : item.name;
       final tierBadge = item.tier == 'wholesale' ? ' [W]' : item.tier == 'bulk' ? ' [B]' : '';
+      final rateBadge = item.rateLabel != null && item.rateLabel!.isNotEmpty ? ' (${item.rateLabel})' : '';
       final qty = item.qty;
       final rate = item.price;
       final total = item.total;
@@ -105,7 +106,7 @@ class ThermalInvoice {
       rows.add(
         ThermalRow(
           sNo: sno,
-          productName: '$name$tierBadge',
+          productName: '$name$tierBadge$rateBadge',
           qty: qty,
           rate: rate,
           amount: total,

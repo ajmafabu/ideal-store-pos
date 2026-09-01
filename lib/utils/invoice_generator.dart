@@ -91,12 +91,13 @@ class InvoiceGenerator {
           ? tamilNames[item.productId]!
           : item.name;
       final tierBadge = item.tier == 'wholesale' ? ' [W]' : item.tier == 'bulk' ? ' [B]' : '';
+      final rateBadge = item.rateLabel != null && item.rateLabel!.isNotEmpty ? ' (${item.rateLabel})' : '';
       final qty = item.qty;
       final total = item.total;
       final hasDiscount = item.discount > 0;
 
       // Wrap long names
-      final nameLines = _wrapText('$name$tierBadge', colItem);
+      final nameLines = _wrapText('$name$tierBadge$rateBadge', colItem);
       if (nameLines.length > 1) {
         lines.add(pw.Text(_itemRow(nameLines[0], '$qty', _price(total)), style: nameStyle));
         for (int i = 1; i < nameLines.length; i++) {

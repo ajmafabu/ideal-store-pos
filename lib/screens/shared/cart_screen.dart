@@ -20,6 +20,7 @@ import '../../services/thermal_printer_service.dart';
 import '../../widgets/cart/cart_item_tile.dart';
 import '../../widgets/cart/customer_picker.dart';
 import '../../widgets/cart/payment_section.dart';
+import '../../widgets/rate_picker_dialog.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -194,20 +195,25 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  void _addToCartWithQty(Product product, int qty) {
+  Future<void> _addToCartWithQty(Product product, int qty) async {
+    final picked = await RatePickerDialog.show(context, product);
+    final price = picked?.price ?? product.sellingPrice;
+    final rateLabel = picked?.label;
+
     ref
         .read(cartProvider.notifier)
         .addItem(
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.sellingPrice,
+            price: price,
             qty: qty,
             unit: product.unit,
             purchasePrice: _effectivePurchasePrice(product),
             gstRate: product.gstRate,
             hsnCode: product.hsnCode,
             tamilName: product.tamilName,
+            rateLabel: rateLabel,
           ),
         );
     _productSearchController.clear();
@@ -236,20 +242,25 @@ class _CartScreenState extends ConsumerState<CartScreen>
     });
   }
 
-  void _addToCart(Product product) {
+  Future<void> _addToCart(Product product) async {
+    final picked = await RatePickerDialog.show(context, product);
+    final price = picked?.price ?? product.sellingPrice;
+    final rateLabel = picked?.label;
+
     ref
         .read(cartProvider.notifier)
         .addItem(
           CartItem(
             productId: product.id,
             name: product.name,
-            price: product.sellingPrice,
+            price: price,
             qty: 1,
             unit: product.unit,
             purchasePrice: _effectivePurchasePrice(product),
             gstRate: product.gstRate,
             hsnCode: product.hsnCode,
             tamilName: product.tamilName,
+            rateLabel: rateLabel,
           ),
         );
     setState(() {});

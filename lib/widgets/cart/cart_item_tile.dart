@@ -169,6 +169,11 @@ class CartItemTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                if (item.rateLabel != null && item.rateLabel!.isNotEmpty)
+                  Text(
+                    item.rateLabel!,
+                    style: TextStyle(fontSize: 10, color: Colors.orange[700], fontWeight: FontWeight.w500),
+                  ),
                 const SizedBox(height: 2),
                 GestureDetector(
                   onTap: onEditPrice,

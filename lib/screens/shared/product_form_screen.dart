@@ -34,6 +34,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   late TextEditingController _categoryController;
   late TextEditingController _purchasePriceController;
   late TextEditingController _sellingPriceController;
+  late TextEditingController _sellingPrice2Controller;
+  late TextEditingController _sellingPrice2LabelController;
   late TextEditingController _stockController;
   late TextEditingController _lowStockAlertController;
   late TextEditingController _hsnCodeController;
@@ -76,6 +78,12 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       text: widget.product != null
           ? widget.product!.sellingPrice.toString()
           : (widget.prefilledSellingPrice ?? ''),
+    );
+    _sellingPrice2Controller = TextEditingController(
+      text: widget.product?.sellingPrice2?.toString() ?? '',
+    );
+    _sellingPrice2LabelController = TextEditingController(
+      text: widget.product?.sellingPrice2Label ?? '',
     );
     _stockController = TextEditingController(
       text: widget.product != null ? widget.product!.stock.toString() : '0',
@@ -120,6 +128,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
     _categoryController.dispose();
     _purchasePriceController.dispose();
     _sellingPriceController.dispose();
+    _sellingPrice2Controller.dispose();
+    _sellingPrice2LabelController.dispose();
     _stockController.dispose();
     _lowStockAlertController.dispose();
     _hsnCodeController.dispose();
@@ -171,6 +181,10 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             : _categoryController.text.trim(),
         purchasePrice: double.tryParse(_purchasePriceController.text) ?? 0,
         sellingPrice: double.tryParse(_sellingPriceController.text) ?? 0,
+        sellingPrice2: double.tryParse(_sellingPrice2Controller.text),
+        sellingPrice2Label: _sellingPrice2LabelController.text.trim().isEmpty
+            ? null
+            : _sellingPrice2LabelController.text.trim(),
         stock: int.tryParse(_stockController.text) ?? 0,
         unit: _unit,
         unitType: _unitType,
@@ -356,6 +370,34 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         labelText: 'Selling Price',
                         border: OutlineInputBorder(),
                         prefixText: '₹ ',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _sellingPrice2LabelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Rate 2 Label (optional)',
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., Old Rate',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _sellingPrice2Controller,
+                      decoration: const InputDecoration(
+                        labelText: 'Rate 2 Price',
+                        border: OutlineInputBorder(),
+                        prefixText: '₹ ',
+                        hintText: 'Leave empty to disable',
                       ),
                       keyboardType: TextInputType.number,
                     ),

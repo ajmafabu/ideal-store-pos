@@ -33,6 +33,7 @@ import 'billing_shortcuts_mixin.dart';
 import 'widgets/billing_bottom_bar.dart';
 import 'widgets/billing_processing_overlay.dart';
 import 'widgets/billing_sale_tabs.dart';
+import '../../widgets/rate_picker_dialog.dart';
 import 'dialogs/customer_picker_dialog.dart';
 import 'dialogs/sales_history_dialog.dart';
 import 'dialogs/invoice_options_dialog.dart';
@@ -98,6 +99,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   String _searchMode = 'code'; // 'code' or 'products'
   String _selectedUnitType = 'pieces';
   int _piecesPerUnit = 1;
+  String? _selectedRateLabel;
   Sale? _editingSale; // Track sale being edited from sales history
   Timer? _searchDebounce;
 
@@ -632,7 +634,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   // ── SEARCH ──
-  void _searchProducts(String query) {
+  Future<void> _searchProducts(String query) async {
     Logger.info(
       'Search called with: "$query", products count: ${_allProducts.length}',
     );
@@ -692,7 +694,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _showResults = results.isNotEmpty;
       if (results.length == 1) {
         final p = results.first;
-        // Check stock before auto-selecting
         if (p.stock <= 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -706,27 +707,31 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             _showResults = true;
           });
         } else {
-          final price = (p.sellingPrice as num).toDouble();
           final cost = (p.purchasePrice > 0)
               ? p.purchasePrice
               : (p.variants.isNotEmpty
                   ? p.variants.first.purchasePrice
                   : 0.0);
-          setState(() {
-            _selectedProduct = p;
-            _priceController.text = price.toStringAsFixed(2);
-            _totalController.text = price.toStringAsFixed(2);
-            _qtyController.text = '1';
-            _costController.text = cost.toStringAsFixed(2);
-            _searchResults = [];
-            _showResults = false;
-          });
+          _selectedProduct = p;
+          _qtyController.text = '1';
+          _costController.text = cost.toStringAsFixed(2);
+          _searchResults = [];
+          _showResults = false;
         }
       } else {
         _selectedProduct = null;
       }
     });
     if (_selectedProduct != null) {
+      // Show rate picker if product has dual rates
+      final picked = await RatePickerDialog.show(context, _selectedProduct!);
+      final price = picked?.price ?? _selectedProduct!.sellingPrice;
+      final rateLabel = picked?.label;
+      setState(() {
+        _selectedRateLabel = rateLabel;
+        _priceController.text = price.toStringAsFixed(2);
+        _totalController.text = price.toStringAsFixed(2);
+      });
       _qtyFocusNode.requestFocus();
       _qtyController.selection = TextSelection(
         baseOffset: 0,
@@ -764,7 +769,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     });
   }
 
-  void _onSearchEnter() {
+  Future<void> _onSearchEnter() async {
     if (_searchResults.isNotEmpty) {
       _selectSearchResult();
     } else if (_searchController.text.isNotEmpty) {
@@ -802,7 +807,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     }
   }
 
-  void _selectSearchResult() {
+  Future<void> _selectSearchResult() async {
     if (_searchResults.isEmpty) return;
     final product = _searchResults[_selectedResultIndex];
 
@@ -818,24 +823,33 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
     _selectedProduct = product;
 
-    final price = (_selectedProduct!.sellingPrice as num).toDouble();
+    final cost = (product.purchasePrice > 0)
+        ? product.purchasePrice
+        : (product.variants.isNotEmpty
+            ? product.variants.first.purchasePrice
+            : 0.0);
     final qty = int.tryParse(_qtyController.text) ?? 1;
 
     setState(() {
       _selectedUnitType = product.unitType;
       _piecesPerUnit = product.piecesPerUnit;
-      _priceController.text = price.toStringAsFixed(2);
-      _totalController.text = (price * qty).toStringAsFixed(2);
+      _qtyController.text = qty.toString();
+      _costController.text = cost.toStringAsFixed(2);
       _searchController.clear();
       _searchResults = [];
       _showResults = false;
       _itemDiscountController.clear();
-      final cost = (product.purchasePrice > 0)
-          ? product.purchasePrice
-          : (product.variants.isNotEmpty
-              ? product.variants.first.purchasePrice
-              : 0.0);
-      _costController.text = cost.toStringAsFixed(2);
+    });
+
+    // Show rate picker if product has dual rates
+    final picked = await RatePickerDialog.show(context, _selectedProduct!);
+    final price = picked?.price ?? _selectedProduct!.sellingPrice;
+    final rateLabel = picked?.label;
+
+    setState(() {
+      _selectedRateLabel = rateLabel;
+      _priceController.text = price.toStringAsFixed(2);
+      _totalController.text = (price * qty).toStringAsFixed(2);
     });
 
     _qtyFocusNode.requestFocus();
@@ -923,23 +937,24 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     if (_editingCartIndex >= 0) {
       // UPDATE existing cart item
       final oldItem = session.items[_editingCartIndex];
-      ref
-          .read(desktopBillingProvider.notifier)
-          .updateItem(
-            _editingCartIndex,
-            DesktopCartItem(
-              productId: oldItem.productId,
-              name: oldItem.name,
-              price: effectivePrice,
-              qty: qty,
-              unit: oldItem.unit,
-              purchasePrice: costPrice,
-              gstRate: oldItem.gstRate,
-              hsnCode: oldItem.hsnCode,
-              tamilName: oldItem.tamilName,
-              discount: itemDiscount,
-            ),
-          );
+        ref
+            .read(desktopBillingProvider.notifier)
+            .updateItem(
+              _editingCartIndex,
+              DesktopCartItem(
+                productId: oldItem.productId,
+                name: oldItem.name,
+                price: effectivePrice,
+                qty: qty,
+                unit: oldItem.unit,
+                purchasePrice: costPrice,
+                gstRate: oldItem.gstRate,
+                hsnCode: oldItem.hsnCode,
+                tamilName: oldItem.tamilName,
+                discount: itemDiscount,
+                rateLabel: _selectedRateLabel,
+              ),
+            );
     } else {
       // ADD new item
       final existingIndex = session.items.indexWhere(
@@ -967,6 +982,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 discount: itemDiscount,
                 unitType: _selectedUnitType,
                 piecesPerUnit: _piecesPerUnit,
+                rateLabel: _selectedRateLabel,
               ),
             );
       }
@@ -978,6 +994,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _selectedCartIndex = -1;
       _selectedUnitType = 'pieces';
       _piecesPerUnit = 1;
+      _selectedRateLabel = null;
       _qtyController.text = '1';
       _priceController.clear();
       _totalController.clear();
@@ -1007,6 +1024,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _editingCartIndex = index;
       _selectedCartIndex = index;
       _selectedProduct = product;
+      _selectedRateLabel = item.rateLabel;
       _searchController.clear();
       _searchResults = [];
       _showResults = false;
@@ -2735,6 +2753,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
+                                      ),
+                                    if (item.rateLabel != null &&
+                                        item.rateLabel!.isNotEmpty)
+                                      Text(
+                                        item.rateLabel!,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.orange[700],
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                   ],
                                 ),

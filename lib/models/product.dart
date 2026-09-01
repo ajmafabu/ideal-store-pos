@@ -139,6 +139,8 @@ class Product {
   final String? sfw;
   final String unitType;
   final int piecesPerUnit;
+  final double? sellingPrice2;
+  final String? sellingPrice2Label;
 
   Product({
     required this.id,
@@ -161,9 +163,12 @@ class Product {
     this.sfw,
     this.unitType = 'pieces',
     this.piecesPerUnit = 1,
+    this.sellingPrice2,
+    this.sellingPrice2Label,
   });
 
   bool get isLowStock => stock > 0 && stock <= lowStockAlert;
+  bool get hasDualRates => sellingPrice2 != null && sellingPrice2! > 0;
 
   // Total stock across all variants (for display)
   int get totalStock {
@@ -246,6 +251,8 @@ class Product {
       sfw: json['sfw'] as String?,
       unitType: json['unit_type'] as String? ?? 'pieces',
       piecesPerUnit: (json['pieces_per_unit'] as num?)?.toInt() ?? 1,
+      sellingPrice2: (json['selling_price_2'] as num?)?.toDouble(),
+      sellingPrice2Label: json['selling_price_2_label'] as String?,
     );
   }
 
@@ -270,6 +277,8 @@ class Product {
       'sfw': sfw,
       'unit_type': unitType,
       'pieces_per_unit': piecesPerUnit,
+      'selling_price_2': sellingPrice2,
+      'selling_price_2_label': sellingPrice2Label,
     };
   }
 
@@ -293,6 +302,8 @@ class Product {
       'sfw': sfw,
       'unit_type': unitType,
       'pieces_per_unit': piecesPerUnit,
+      'selling_price_2': sellingPrice2,
+      'selling_price_2_label': sellingPrice2Label,
     };
   }
 
@@ -317,6 +328,8 @@ class Product {
     String? sfw,
     String? unitType,
     int? piecesPerUnit,
+    double? sellingPrice2,
+    String? sellingPrice2Label,
   }) {
     return Product(
       id: id ?? this.id,
@@ -339,6 +352,8 @@ class Product {
       sfw: sfw ?? this.sfw,
       unitType: unitType ?? this.unitType,
       piecesPerUnit: piecesPerUnit ?? this.piecesPerUnit,
+      sellingPrice2: sellingPrice2 ?? this.sellingPrice2,
+      sellingPrice2Label: sellingPrice2Label ?? this.sellingPrice2Label,
     );
   }
 }

@@ -45,6 +45,7 @@ class DesktopCartItem {
   final int piecesPerUnit;
   final String tier;
   final double basePrice;
+  final String? rateLabel;
 
   DesktopCartItem({
     required this.productId,
@@ -61,6 +62,7 @@ class DesktopCartItem {
     this.piecesPerUnit = 1,
     this.tier = 'normal',
     double? basePrice,
+    this.rateLabel,
   }) : basePrice = basePrice ?? price;
 
   double get discountAmount => (price * qty) * (discount / 100);

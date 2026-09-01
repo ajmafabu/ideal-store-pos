@@ -12,6 +12,7 @@ class CartItem {
   final String unitType;
   final int piecesPerUnit;
   final String tier;
+  final String? rateLabel;
 
   CartItem({
     required this.productId,
@@ -27,6 +28,7 @@ class CartItem {
     this.unitType = 'pieces',
     this.piecesPerUnit = 1,
     this.tier = 'normal',
+    this.rateLabel,
   });
 
   double get discountAmount => (price * qty) * (discount / 100);
@@ -55,6 +57,7 @@ class CartItem {
     'unit_type': unitType,
     'pieces_per_unit': piecesPerUnit,
     'tier': tier,
+    'rate_label': rateLabel,
   };
 
   factory CartItem.fromJson(Map<String, dynamic> json) => CartItem(
@@ -71,6 +74,7 @@ class CartItem {
     unitType: json['unit_type'] as String? ?? 'pieces',
     piecesPerUnit: (json['pieces_per_unit'] as num?)?.toInt() ?? 1,
     tier: json['tier'] as String? ?? 'normal',
+    rateLabel: json['rate_label'] as String?,
   );
 }
 
