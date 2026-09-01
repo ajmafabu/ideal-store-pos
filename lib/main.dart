@@ -117,32 +117,6 @@ void main() async {
       });
 
       runApp(const ProviderScope(child: MyApp()));
-
-      // Auto-update check (Windows only, silent, after 5s)
-      Future.delayed(const Duration(seconds: 5), () async {
-        try {
-          print('[UPDATE] Checking for updates...');
-          final updateService = UpdateService();
-          final update = await updateService.checkForUpdate();
-          if (update != null) {
-            print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final navCtx = navigatorKey.currentContext;
-              if (navCtx != null && navCtx.mounted) {
-                showDialog(
-                  context: navCtx,
-                  barrierDismissible: false,
-                  builder: (_) => _UpdateDialog(update: update),
-                );
-              }
-            });
-          } else {
-            print('[UPDATE] App is up to date');
-          }
-        } catch (e) {
-          print('[UPDATE] Auto-update check failed: $e');
-        }
-      });
     },
     (error, stack) {
       Logger.error('Uncaught Error', error, stack);
@@ -152,18 +126,57 @@ void main() async {
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class MyApp extends ConsumerWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Schedule update check after first frame renders
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkForUpdate();
+    });
+  }
+
+  Future<void> _checkForUpdate() async {
+    // Wait 5 seconds for app to fully load
+    await Future.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+
+    try {
+      print('[UPDATE] Checking for updates...');
+      final updateService = UpdateService();
+      final update = await updateService.checkForUpdate();
+      if (update != null && mounted) {
+        print('[UPDATE] Found update: ${update.currentVersion} → ${update.latestVersion}');
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => _UpdateDialog(update: update),
+          );
+        }
+      } else {
+        print('[UPDATE] App is up to date');
+      }
+    } catch (e) {
+      print('[UPDATE] Auto-update check failed: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.watch(realtimeChannelProvider);
 
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeProvider);
 
     return MaterialApp.router(
-      key: navigatorKey,
       title: 'Ideal Store POS',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
