@@ -147,12 +147,16 @@ void _scheduleUpdateCheck() {
             mode: FileMode.append);
 
         if (_navigatorContext != null) {
-          await logFile.writeAsString('Navigator context found, showing dialog\n', mode: FileMode.append);
-          await showDialog(
-            context: _navigatorContext!,
-            barrierDismissible: false,
-            builder: (_) => _UpdateDialog(update: update),
+          await logFile.writeAsString('Navigator context found, showing dialog via Overlay\n', mode: FileMode.append);
+          final overlay = Overlay.of(_navigatorContext!);
+          late OverlayEntry entry;
+          entry = OverlayEntry(
+            builder: (_) => _UpdateDialog(
+              update: update,
+              onDismiss: () => entry.remove(),
+            ),
           );
+          overlay.insert(entry);
         } else {
           await logFile.writeAsString('ERROR: _navigatorContext is null\n', mode: FileMode.append);
           print('[UPDATE] ERROR: _navigatorContext is null');
@@ -203,7 +207,8 @@ class _MyAppState extends ConsumerState<MyApp> {
 
 class _UpdateDialog extends StatefulWidget {
   final UpdateInfo update;
-  const _UpdateDialog({required this.update});
+  final VoidCallback? onDismiss;
+  const _UpdateDialog({required this.update, this.onDismiss});
 
   @override
   State<_UpdateDialog> createState() => _UpdateDialogState();
@@ -296,7 +301,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       actions: [
         if (!_downloading)
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              widget.onDismiss?.call();
+            },
             child: const Text('Later'),
           ),
         if (!_downloading)
