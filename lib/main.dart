@@ -144,20 +144,21 @@ void _scheduleUpdateCheck() {
             'URL: ${update.downloadUrl}\n',
             mode: FileMode.append);
 
-        if (routerNavigatorKey.currentContext != null) {
-          await logFile.writeAsString('GoRouter navigator found, showing overlay\n', mode: FileMode.append);
-          final overlay = Overlay.of(routerNavigatorKey.currentContext!);
-          late OverlayEntry entry;
-          entry = OverlayEntry(
-            builder: (_) => _UpdateDialog(
-              update: update,
-              onDismiss: () => entry.remove(),
+        if (routerNavigatorKey.currentState != null) {
+          await logFile.writeAsString('NavigatorState found, pushing dialog route\n', mode: FileMode.append);
+          routerNavigatorKey.currentState!.push(
+            DialogRoute(
+              context: routerNavigatorKey.currentContext!,
+              barrierDismissible: false,
+              builder: (_) => _UpdateDialog(
+                update: update,
+                onDismiss: () => routerNavigatorKey.currentState!.pop(),
+              ),
             ),
           );
-          overlay.insert(entry);
         } else {
-          await logFile.writeAsString('ERROR: routerNavigatorKey.currentContext is null\n', mode: FileMode.append);
-          print('[UPDATE] ERROR: routerNavigatorKey.currentContext is null');
+          await logFile.writeAsString('ERROR: NavigatorState is null\n', mode: FileMode.append);
+          print('[UPDATE] ERROR: NavigatorState is null');
         }
       } else {
         await logFile.writeAsString('No update available\n', mode: FileMode.append);
