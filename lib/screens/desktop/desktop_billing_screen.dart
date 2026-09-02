@@ -2089,7 +2089,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       focusNode: _keyboardFocusNode,
       onKeyEvent: handleKeyEvent,
       child: Material(
-        color: const Color(0xFFF5F5F5),
+        color: const Color(0xFFF8FAFC),
         child: Stack(
           children: [
             Column(
@@ -2110,48 +2110,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                         child: Column(
                           children: [
                             _buildSearchBar(),
-                            // Function buttons row
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 4,
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  _functionButton(
-                                    Icons.pause_circle,
-                                    'Hold\n(F6)',
-                                    activeSession.items.isEmpty
-                                        ? null
-                                        : _holdBill,
-                                  ),
-                                  _functionButton(
-                                    Icons.play_circle,
-                                    'Retrieve\n(F7)',
-                                    _retrieveBill,
-                                  ),
-                                  _functionButton(
-                                    Icons.person,
-                                    'Customer\n(F4)',
-                                    _showCustomerPicker,
-                                  ),
-                                  _functionButton(
-                                    Icons.calculate,
-                                    'Calc\n(F12)',
-                                    () {
-                                      if (Platform.isWindows)
-                                        Process.run('calc', []);
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Search results take full height when showing
+                            _buildActionShortcutsRow(activeSession),
                             if (_showResults && _searchResults.isNotEmpty)
                               Expanded(child: _buildSearchResults()),
-                            // Cart table + bottom bar only when not searching
                             if (!(_showResults &&
                                 _searchResults.isNotEmpty)) ...[
                               Expanded(child: _buildCartTable(activeSession)),
@@ -2165,8 +2126,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                           ],
                         ),
                       ),
+                      Container(
+                        width: 1,
+                        color: const Color(0xFFE2E8F0),
+                      ),
                       SizedBox(
-                        width: 300,
+                        width: 320,
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: _buildPaymentPanel(activeSession, total),
@@ -2184,7 +2149,77 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     );
   }
 
-  // ── SEARCH BAR (search-only first, then qty/price/total) ──
+  // ── ACTION SHORTCUTS ROW ──
+  Widget _buildActionShortcutsRow(SaleSession activeSession) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: const Color(0xFFF1F5F9),
+      child: Row(
+        children: [
+          _actionPill(Icons.pause_circle_outline, 'F6', 'Hold', activeSession.items.isEmpty ? null : _holdBill),
+          const SizedBox(width: 8),
+          _actionPill(Icons.play_circle_outline, 'F7', 'Retrieve', _retrieveBill),
+          const SizedBox(width: 8),
+          _actionPill(Icons.person_outline, 'F4', 'Customer', _showCustomerPicker),
+          const SizedBox(width: 8),
+          _actionPill(Icons.calculate_outlined, 'F12', 'Calculator', () {
+            if (Platform.isWindows) Process.run('calc', []);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionPill(IconData icon, String shortcut, String label, VoidCallback? onTap) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: enabled ? Colors.white : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: enabled ? const Color(0xFFE2E8F0) : const Color(0xFFF1F5F9),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: enabled ? const Color(0xFF2563EB) : const Color(0xFF94A3B8)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: enabled ? const Color(0xFF334155) : const Color(0xFF94A3B8),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: enabled ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Text(
+                shortcut,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                  color: enabled ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── SEARCH BAR ──
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2193,10 +2228,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_selectedProduct == null && _editingCartIndex < 0) ...[
-            // SEARCH ONLY MODE
             Row(
               children: [
-                // Code/Name toggle
                 GestureDetector(
                   onTap: () => setState(() {
                     _searchMode = _searchMode == 'code' ? 'products' : 'code';
@@ -2205,48 +2238,48 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     _showResults = false;
                   }),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: _searchMode == 'code'
-                          ? const Color(0xFF667eea)
-                          : Colors.grey.shade200,
+                      color: const Color(0xFF2563EB),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300),
                     ),
-                    child: Text(
-                      _searchMode == 'code' ? 'Code' : 'Name',
+                    child: const Text(
+                      'CODE',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: _searchMode == 'code'
-                            ? Colors.white
-                            : Colors.grey.shade700,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     decoration: InputDecoration(
                       hintText: _searchMode == 'code'
-                          ? 'Search by product code...'
-                          : 'Type product name or code...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
+                          ? 'Search product / scan barcode / enter code...'
+                          : 'Search product / scan barcode / enter code...',
+                      prefixIcon: const Icon(Icons.search, size: 22, color: Color(0xFF94A3B8)),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 14,
                       ),
                     ),
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(fontSize: 15),
                     onChanged: (value) {
                       _searchDebounce?.cancel();
                       _searchDebounce = Timer(
@@ -2256,27 +2289,28 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
+                const SizedBox(width: 10),
+                TextButton.icon(
                   onPressed: _addNewProduct,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Product'),
+                  icon: const Icon(Icons.add, size: 18, color: Color(0xFF2563EB)),
+                  label: const Text(
+                    'New Product',
+                    style: TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
           ] else ...[
-            // ENTRY MODE: Qty | Price | Total
             Row(
               children: [
-                // EDITING label + cancel
                 if (_editingCartIndex >= 0) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.orange,
+                      color: const Color(0xFFF97316),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text(
@@ -2288,20 +2322,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                 ],
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color:
-                          (_editingCartIndex >= 0
-                                  ? Colors.orange
-                                  : const Color(0xFF667eea))
-                              .withValues(alpha: 0.1),
+                      color: (_editingCartIndex >= 0
+                              ? const Color(0xFFF97316)
+                              : const Color(0xFF2563EB))
+                          .withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -2310,8 +2340,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: _editingCartIndex >= 0
-                            ? Colors.orange
-                            : const Color(0xFF667eea),
+                            ? const Color(0xFFF97316)
+                            : const Color(0xFF2563EB),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2319,12 +2349,11 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Unit Type dropdown
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: DropdownButton<String>(
                     value: _selectedUnitType,
@@ -2347,8 +2376,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     },
                   ),
                 ),
-                const SizedBox(width: 4),
-                // Qty
+                const SizedBox(width: 6),
                 SizedBox(
                   width: 70,
                   child: TextField(
@@ -2356,25 +2384,31 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     focusNode: _qtyFocusNode,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Qty',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       isDense: true,
                     ),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     onSubmitted: (_) => _confirmQty(),
                     onChanged: (_) => _syncTotalFromPrice(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Price
+                const SizedBox(width: 6),
                 SizedBox(
                   width: 110,
                   child: TextField(
@@ -2382,13 +2416,23 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     focusNode: _priceFocusNode,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.right,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Price',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       isDense: true,
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -2396,8 +2440,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     onChanged: (_) => _syncTotalFromPrice(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Total
+                const SizedBox(width: 6),
                 SizedBox(
                   width: 110,
                   child: TextField(
@@ -2405,25 +2448,31 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     focusNode: _totalFocusNode,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.right,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Total',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       isDense: true,
                     ),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     onSubmitted: (_) => _confirmTotal(),
                     onChanged: (_) => _syncPriceFromTotal(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Cost Price
+                const SizedBox(width: 6),
                 SizedBox(
                   width: 90,
                   child: TextField(
@@ -2431,13 +2480,23 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     focusNode: _costFocusNode,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.right,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Cost',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 10,
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
                       ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       isDense: true,
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -2455,24 +2514,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               ],
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _functionButton(IconData icon, String label, VoidCallback? onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 24, color: Colors.blue),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 9, color: Colors.blue),
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
     );
@@ -2609,53 +2650,52 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   // ── CART TABLE ──
   Widget _buildCartTable(SaleSession session) {
     return Container(
-      margin: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4),
-        ],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF667eea),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(12),
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F172A),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
             ),
             child: const Row(
               children: [
                 SizedBox(
-                  width: 40,
+                  width: 36,
                   child: Text(
                     '#',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                   ),
                 ),
                 Expanded(
                   flex: 4,
                   child: Text(
-                    'Product',
+                    'PRODUCT',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                   ),
                 ),
                 SizedBox(
                   width: 60,
                   child: Text(
-                    'Qty',
+                    'QTY',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -2663,10 +2703,11 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 SizedBox(
                   width: 80,
                   child: Text(
-                    'Price',
+                    'RATE',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                     textAlign: TextAlign.right,
                   ),
@@ -2674,15 +2715,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 SizedBox(
                   width: 80,
                   child: Text(
-                    'Total',
+                    'AMOUNT',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                     textAlign: TextAlign.right,
                   ),
                 ),
-                SizedBox(width: 40),
+                SizedBox(width: 56),
               ],
             ),
           ),
@@ -2694,18 +2736,35 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       children: [
                         Icon(
                           Icons.shopping_cart_outlined,
-                          size: 64,
-                          color: Colors.grey,
+                          size: 56,
+                          color: Color(0xFFCBD5E1),
                         ),
                         SizedBox(height: 16),
                         Text(
-                          'No items in cart',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                          'CART IS EMPTY',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF94A3B8),
+                            letterSpacing: 0.5,
+                          ),
                         ),
                         SizedBox(height: 8),
                         Text(
-                          'Type product name to add',
-                          style: TextStyle(color: Colors.grey),
+                          'Scan barcode or search for a product',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFFCBD5E1),
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _EmptyHint(label: 'F2', action: 'Search Product'),
+                            SizedBox(width: 24),
+                            _EmptyHint(label: 'F12', action: 'Calculator'),
+                          ],
                         ),
                       ],
                     ),
@@ -2717,20 +2776,36 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       final item = session.items[index];
                       final isSelected = index == _selectedCartIndex;
                       return Container(
+                        key: ValueKey('cart_${item.productId}_$index'),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 6,
+                          vertical: 5,
                         ),
-                        color: isSelected
-                            ? const Color(0xFF667eea).withValues(alpha: 0.1)
-                            : null,
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFFEFF6FF)
+                              : index.isOdd
+                                  ? const Color(0xFFFAFAFA)
+                                  : Colors.white,
+                          border: Border(
+                            left: BorderSide(
+                              color: isSelected
+                                  ? const Color(0xFF2563EB)
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                        ),
                         child: Row(
                           children: [
                             SizedBox(
-                              width: 40,
+                              width: 36,
                               child: Text(
                                 '${index + 1}',
-                                style: const TextStyle(fontSize: 14),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF64748B),
+                                ),
                               ),
                             ),
                             Expanded(
@@ -2743,19 +2818,47 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                   children: [
                                     Text(
                                       item.name,
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    if (item.tamilName != null &&
-                                        item.tamilName!.isNotEmpty)
-                                      Text(
-                                        item.tamilName!,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey[600],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          'Code: ${item.productId.substring(0, item.productId.length > 8 ? 8 : item.productId.length)}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          '',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                        if (item.tamilName != null &&
+                                            item.tamilName!.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              item.tamilName!,
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey[500],
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     if (item.rateLabel != null &&
                                         item.rateLabel!.isNotEmpty)
                                       Text(
@@ -2784,42 +2887,40 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             SizedBox(
                               width: 80,
                               child: Text(
-                                'Rs${item.price.toStringAsFixed(0)}',
+                                '₹${item.price.toStringAsFixed(0)}',
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(fontSize: 14),
+                                style: const TextStyle(fontSize: 13),
                               ),
                             ),
                             SizedBox(
                               width: 80,
                               child: Text(
-                                'Rs${item.total.toStringAsFixed(0)}',
+                                '₹${item.total.toStringAsFixed(0)}',
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
-                            // Edit button
                             SizedBox(
-                              width: 24,
+                              width: 28,
                               child: GestureDetector(
                                 onTap: () => _editCartItem(index),
                                 child: const Icon(
-                                  Icons.edit,
-                                  size: 16,
-                                  color: Colors.blue,
+                                  Icons.edit_outlined,
+                                  size: 15,
+                                  color: Color(0xFF94A3B8),
                                 ),
                               ),
                             ),
-                            // Delete button
                             SizedBox(
-                              width: 24,
+                              width: 28,
                               child: IconButton(
                                 icon: const Icon(
                                   Icons.close,
-                                  size: 16,
-                                  color: Colors.red,
+                                  size: 15,
+                                  color: Color(0xFFEF4444),
                                 ),
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
@@ -2847,7 +2948,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     );
   }
 
-  // ── PAYMENT PANEL (no quick cash) ──
+  // ── PAYMENT PANEL ──
   Widget _buildPaymentPanel(SaleSession session, double total) {
     final discount = _billDiscount;
     final extraCharges = double.tryParse(_extraChargesController.text) ?? 0;
@@ -2866,260 +2967,230 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // GRAND TOTAL
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF10B981), Color(0xFF059669)],
-              ),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF059669),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
               children: [
                 const Text(
                   'GRAND TOTAL',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Rs${finalTotal.toStringAsFixed(2)}',
+                  '₹${finalTotal.toStringAsFixed(2)}',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 if (discount > 0)
                   Text(
-                    'Discount: -Rs${discount.toStringAsFixed(0)}',
+                    'Discount: -₹${discount.toStringAsFixed(0)}',
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 if (extraCharges > 0)
                   Text(
-                    'Extra Charges: +Rs${extraCharges.toStringAsFixed(0)}',
+                    'Extra Charges: +₹${extraCharges.toStringAsFixed(0)}',
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                 if (roundOffAmount != 0)
                   Text(
-                    'Round Off: ${roundOffAmount > 0 ? '+' : ''}Rs${roundOffAmount.toStringAsFixed(2)}',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                    'Round Off: ${roundOffAmount > 0 ? '+' : ''}₹${roundOffAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
 
-          // Bill Discount
-          Row(
-            children: [
-              const Icon(Icons.discount, size: 16, color: Colors.grey),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _billDiscountController,
-                  focusNode: _billDiscountFocusNode,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Bill Discount (Rs)',
-                    prefixText: 'Rs ',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Extra Charges (delivery, handling, etc.)
-          Row(
-            children: [
-              const Icon(Icons.local_shipping, size: 16, color: Colors.grey),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _extraChargesController,
-                  focusNode: _extraChargesFocusNode,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Extra Charges (Rs)',
-                    prefixText: 'Rs ',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Pricing Tier: Normal / Wholesale / Bulk
+          // PRICING TIER
           const Text(
-            'Pricing Tier',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              _tierButton('Normal', 'normal', Colors.blue, session),
-              const SizedBox(width: 4),
-              _tierButton('Wholesale', 'wholesale', Colors.orange, session),
-              const SizedBox(width: 4),
-              _tierButton('Bulk', 'bulk', Colors.purple, session),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Payment: CASH / UPI / CREDIT / SPLIT
-          const Text(
-            'Payment',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+            'PRICING TIER',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
           ),
           const SizedBox(height: 6),
-          _paymentOption('CASH', Colors.green, Icons.money, 'cash', session),
-          const SizedBox(height: 4),
-          _paymentOption(
-            'UPI',
-            Colors.purple,
-            Icons.phone_android,
-            'upi',
-            session,
+          Row(
+            children: [
+              _tierButton('Normal', 'normal', const Color(0xFF2563EB), session),
+              const SizedBox(width: 4),
+              _tierButton('Wholesale', 'wholesale', const Color(0xFFF97316), session),
+              const SizedBox(width: 4),
+              _tierButton('Bulk', 'bulk', const Color(0xFF8B5CF6), session),
+            ],
           ),
-          const SizedBox(height: 4),
-          _paymentOption(
-            'CREDIT',
-            Colors.orange,
-            Icons.person,
-            'credit',
-            session,
+          const SizedBox(height: 14),
+
+          // PAYMENT METHOD
+          const Text(
+            'PAYMENT METHOD',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
           ),
+          const SizedBox(height: 6),
+          _paymentOption('CASH', const Color(0xFF059669), Icons.money, 'cash', session),
           const SizedBox(height: 4),
-          _paymentOption(
-            'SPLIT',
-            Colors.teal,
-            Icons.call_split,
-            'split',
-            session,
-          ),
+          _paymentOption('UPI', const Color(0xFF8B5CF6), Icons.phone_android, 'upi', session),
+          const SizedBox(height: 4),
+          _paymentOption('CREDIT', const Color(0xFFF97316), Icons.person, 'credit', session),
+          const SizedBox(height: 4),
+          _paymentOption('SPLIT', const Color(0xFF0891B2), Icons.call_split, 'split', session),
 
           // Credit options
           if (_selectedPayment == 'credit') ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Text('Full Credit', style: TextStyle(fontSize: 12)),
-                Radio<bool>(
-                  value: true,
-                  groupValue: _creditFull,
-                  onChanged: (v) => setState(() => _creditFull = v!),
-                ),
-                const SizedBox(width: 8),
-                const Text('Partial', style: TextStyle(fontSize: 12)),
-                Radio<bool>(
-                  value: false,
-                  groupValue: _creditFull,
-                  onChanged: (v) => setState(() => _creditFull = v!),
-                ),
-              ],
-            ),
-            if (!_creditFull) ...[
-              TextField(
-                controller: _paidController,
-                focusNode: _paidFocusNode,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Paid Amount',
-                  prefixText: 'Rs ',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (_) => setState(() {}),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFED7AA)),
               ),
-              const SizedBox(height: 6),
-              // Quick cash buttons
-              Row(
-                children: [100, 200, 500, 1000, 2000].map((amt) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: ActionChip(
-                      label: Text('₹$amt', style: const TextStyle(fontSize: 11)),
-                      onPressed: () {
-                        _paidController.text = amt.toString();
-                        setState(() {});
-                      },
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Full Credit', style: TextStyle(fontSize: 12)),
+                      Radio<bool>(
+                        value: true,
+                        groupValue: _creditFull,
+                        onChanged: (v) => setState(() => _creditFull = v!),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Partial', style: TextStyle(fontSize: 12)),
+                      Radio<bool>(
+                        value: false,
+                        groupValue: _creditFull,
+                        onChanged: (v) => setState(() => _creditFull = v!),
+                      ),
+                    ],
+                  ),
+                  if (!_creditFull) ...[
+                    TextField(
+                      controller: _paidController,
+                      focusNode: _paidFocusNode,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Paid Amount',
+                        prefixText: '₹ ',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        isDense: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
                     ),
-                  );
-                }).toList(),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [100, 200, 500, 1000, 2000].map((amt) {
+                        return ActionChip(
+                          label: Text('₹$amt', style: const TextStyle(fontSize: 11)),
+                          onPressed: () {
+                            _paidController.text = amt.toString();
+                            setState(() {});
+                          },
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Due: ₹${dueAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF97316),
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Due: ₹${finalTotal.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFF97316),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Due: Rs${dueAmount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange,
-                ),
-              ),
-            ] else ...[
-              const SizedBox(height: 4),
-              Text(
-                'Due: Rs${finalTotal.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange,
-                ),
-              ),
-            ],
+            ),
           ],
 
           // Split Payment options
           if (_selectedPayment == 'split') ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.teal.shade50,
+                color: const Color(0xFFECFEFF),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.teal.shade200),
+                border: Border.all(color: const Color(0xFFA5F3FC)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Split Payment — Total: Rs${finalTotal.toStringAsFixed(0)}',
+                    'Split Payment — Total: ₹${finalTotal.toStringAsFixed(0)}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Colors.teal,
+                      color: Color(0xFF0891B2),
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _splitCashController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Cash Amount',
-                      prefixText: 'Rs ',
-                      border: OutlineInputBorder(),
+                      prefixText: '₹ ',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
                       isDense: true,
                     ),
                     onChanged: (_) => setState(() {}),
@@ -3128,10 +3199,19 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   TextField(
                     controller: _splitUpiController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'UPI Amount',
-                      prefixText: 'Rs ',
-                      border: OutlineInputBorder(),
+                      prefixText: '₹ ',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
                       isDense: true,
                     ),
                     onChanged: (_) => setState(() {}),
@@ -3147,19 +3227,19 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       children: [
                         if (remaining > 0.5)
                           Text(
-                            'Remaining: Rs${remaining.toStringAsFixed(0)} → Credit',
+                            'Remaining: ₹${remaining.toStringAsFixed(0)} → Credit',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.orange,
+                              color: Color(0xFFF97316),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         if (remaining < -0.5)
                           Text(
-                            'Excess: Rs${(-remaining).toStringAsFixed(0)}',
-                            style: TextStyle(
+                            'Excess: ₹${(-remaining).toStringAsFixed(0)}',
+                            style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.red.shade700,
+                              color: Color(0xFFEF4444),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3168,7 +3248,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             'Full amount covered',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.green,
+                              color: Color(0xFF059669),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3179,104 +3259,184 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
           // Customer
           const Text(
-            'Customer',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
+            'CUSTOMER',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
           ),
           const SizedBox(height: 6),
           GestureDetector(
             onTap: _showCustomerPicker,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.person, size: 16, color: Colors.grey),
-                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.person,
+                    size: 16,
+                    color: session.customerName != null
+                        ? const Color(0xFF2563EB)
+                        : const Color(0xFF94A3B8),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      session.customerName ?? 'WALK-IN CUSTOMER',
+                      session.customerName ?? 'Walk-in Customer',
                       style: TextStyle(
                         fontSize: 12,
+                        fontWeight: FontWeight.w500,
                         color: session.customerName != null
-                            ? Colors.blue
-                            : Colors.grey,
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFF94A3B8),
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                  const Icon(Icons.chevron_right, size: 16, color: Color(0xFF94A3B8)),
                 ],
               ),
             ),
           ),
           TextButton.icon(
             onPressed: _addNewCustomer,
-            icon: const Icon(Icons.person_add, size: 16),
+            icon: const Icon(Icons.person_add, size: 16, color: Color(0xFF2563EB)),
             label: const Text(
-              'Add New Customer',
-              style: TextStyle(fontSize: 12),
+              '+ Add New Customer',
+              style: TextStyle(fontSize: 12, color: Color(0xFF2563EB)),
             ),
           ),
           if (session.customerId != null &&
               session.customerId!.isNotEmpty &&
               _customerCredit > 0) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: const Color(0xFFFFF7ED),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: const Color(0xFFFED7AA)),
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    size: 16,
-                    color: Colors.orange.shade700,
-                  ),
+                  const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFF97316)),
                   const SizedBox(width: 8),
                   Text(
-                    'Previous Due: Rs${_customerCredit.toStringAsFixed(2)}',
-                    style: TextStyle(
+                    'Previous Due: ₹${_customerCredit.toStringAsFixed(2)}',
+                    style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.orange.shade800,
+                      color: Color(0xFFF97316),
                     ),
                   ),
                 ],
               ),
             ),
           ],
+          const SizedBox(height: 10),
+
+          // Bill Discount & Extra Charges (compact)
+          Row(
+            children: [
+              const Icon(Icons.discount, size: 14, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: _billDiscountController,
+                  focusNode: _billDiscountFocusNode,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Bill Discount',
+                    prefixText: '₹ ',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.local_shipping, size: 14, color: Color(0xFF94A3B8)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: _extraChargesController,
+                  focusNode: _extraChargesFocusNode,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Extra Charges',
+                    prefixText: '₹ ',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: const BorderSide(color: Color(0xFF2563EB)),
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
 
           // Edit mode banner
           if (_editingSale != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              margin: const EdgeInsets.only(bottom: 8),
+              margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                border: Border.all(color: Colors.orange),
+                color: const Color(0xFFFFF7ED),
+                border: Border.all(color: const Color(0xFFF97316)),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.edit, size: 16, color: Colors.orange),
+                  const Icon(Icons.edit, size: 16, color: Color(0xFFF97316)),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Editing sale Rs${_editingSale!.finalAmount.toStringAsFixed(0)} (${_editingSale!.items.length} items)',
+                      'Editing sale ₹${_editingSale!.finalAmount.toStringAsFixed(0)} (${_editingSale!.items.length} items)',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.orange,
+                        color: Color(0xFFF97316),
                       ),
                     ),
                   ),
@@ -3303,7 +3463,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: Color(0xFFEF4444),
                       ),
                     ),
                   ),
@@ -3313,26 +3473,49 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
           // Complete Sale
           SizedBox(
-            height: 44,
+            height: 52,
             child: ElevatedButton(
               onPressed: (session.items.isEmpty || _isProcessing)
                   ? null
                   : _completeSale,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
+                backgroundColor: const Color(0xFF059669),
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFFCBD5E1),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
+                elevation: 0,
               ),
-              child: Text(
-                _editingSale != null
-                    ? 'UPDATE SALE (SHIFT+ENTER)'
-                    : 'COMPLETE SALE (SHIFT+ENTER)',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.check, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        _editingSale != null
+                            ? 'UPDATE SALE'
+                            : 'COMPLETE SALE',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'SHIFT+ENTER',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -3342,82 +3525,40 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: session.items.isEmpty ? null : _holdBill,
+                  icon: const Icon(Icons.pause, size: 14),
+                  label: const Text('F6 Hold Sale', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  child: const Text(
-                    'Hold (F6)',
-                    style: TextStyle(fontSize: 11),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    foregroundColor: const Color(0xFF64748B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: _heldBills.isEmpty ? null : _retrieveBill,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  child: Text(
-                    'Retrieve (F7) [${_heldBills.length}]',
+                  icon: const Icon(Icons.play_arrow, size: 14),
+                  label: Text(
+                    'F7 Retrieve${_heldBills.isNotEmpty ? ' (${_heldBills.length})' : ''}',
                     style: const TextStyle(fontSize: 11),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    foregroundColor: const Color(0xFF64748B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          // Keyboard shortcuts help
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Keyboard Shortcuts',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Tab/Shift+Tab: Navigate fields',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'Esc: Back / Cancel / Clear',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'F2: Edit item  F4: Customer',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'F6: Hold  F7: Retrieve',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'F8: Cash  F9: UPI  F10: Credit',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'F11: Split  F5: Tier cycle',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-                Text(
-                  'Shift+Enter: Complete Sale',
-                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -3433,10 +3574,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     final isSelected = _selectedTier == tier;
     return Expanded(
       child: SizedBox(
-        height: 32,
+        height: 34,
         child: Material(
-          color: isSelected ? color.withValues(alpha: 0.15) : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(6),
+          color: isSelected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(8),
           child: InkWell(
             onTap: session.items.isEmpty
                 ? null
@@ -3446,14 +3587,13 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                         .read(desktopBillingProvider.notifier)
                         .updateAllItemPricesFromCurrent(tier);
                   },
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: isSelected ? color : Colors.grey.shade300,
-                  width: isSelected ? 2 : 1,
+                  color: isSelected ? color : const Color(0xFFE2E8F0),
                 ),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
                 child: Text(
@@ -3461,7 +3601,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
-                    color: isSelected ? color : Colors.grey.shade600,
+                    color: isSelected ? Colors.white : const Color(0xFF64748B),
                   ),
                 ),
               ),
@@ -3483,7 +3623,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     return SizedBox(
       height: 40,
       child: Material(
-        color: isSelected ? color.withValues(alpha: 0.15) : Colors.grey.shade50,
+        color: isSelected ? color.withValues(alpha: 0.08) : const Color(0xFFF8FAFC),
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: session.items.isEmpty
@@ -3497,21 +3637,25 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               border: Border.all(
-                color: isSelected ? color : Colors.grey.shade300,
-                width: isSelected ? 2 : 1,
+                color: isSelected ? color : const Color(0xFFE2E8F0),
+                width: isSelected ? 1.5 : 1,
               ),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: isSelected ? color : Colors.grey),
-                const SizedBox(width: 8),
+                Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected ? color : const Color(0xFF94A3B8),
+                ),
+                const SizedBox(width: 10),
                 Text(
                   label,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
-                    color: isSelected ? color : Colors.grey.shade700,
+                    color: isSelected ? color : const Color(0xFF64748B),
                   ),
                 ),
                 const Spacer(),
@@ -3565,4 +3709,42 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     _inactivityTimer?.cancel();
     super.dispose();
   }
-}
+}
+
+class _EmptyHint extends StatelessWidget {
+  final String label;
+  final String action;
+
+  const _EmptyHint({required this.label, required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'monospace',
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          action,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+        ),
+      ],
+    );
+  }
+}

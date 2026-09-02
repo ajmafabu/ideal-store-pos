@@ -9,17 +9,29 @@ class BillingProcessingOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!isProcessing) return const SizedBox.shrink();
     return Container(
-      color: Colors.black.withValues(alpha: 0.3),
-      child: const Center(
+      color: Colors.black.withValues(alpha: 0.4),
+      child: Center(
         child: Card(
+          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
-                Text('Processing...', style: TextStyle(fontSize: 14)),
+                const CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Color(0xFF2563EB),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Processing Sale...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF334155),
+                  ),
+                ),
               ],
             ),
           ),

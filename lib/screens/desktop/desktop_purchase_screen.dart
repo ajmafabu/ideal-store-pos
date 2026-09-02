@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -50,8 +49,6 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   PurchaseSession get _activeSession => ref
       .read(desktopPurchaseProvider)
       .elementAt(ref.read(desktopPurchaseProvider.notifier).activeSessionIndex);
-
-  double get _total => _activeSession.subtotal;
 
   @override
   void initState() {
@@ -681,17 +678,29 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   Widget _buildProcessingOverlay() {
     if (!_isProcessing) return const SizedBox.shrink();
     return Container(
-      color: Colors.black.withValues(alpha: 0.3),
-      child: const Center(
+      color: Colors.black.withValues(alpha: 0.4),
+      child: Center(
         child: Card(
+          elevation: 8,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
-                Text('Processing...', style: TextStyle(fontSize: 14)),
+                const CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Color(0xFF059669),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Processing Purchase...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF334155),
+                  ),
+                ),
               ],
             ),
           ),
@@ -840,15 +849,14 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         }
       },
       child: Material(
-        color: const Color(0xFFF5F5F5),
+        color: const Color(0xFFF1F5F9),
         child: Stack(
           children: [
             Column(
               children: [
                 Container(
-                  height: 46,
-                  color: const Color(0xFF1E293B),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 48,
+                  color: const Color(0xFF0F172A),
                   child: Row(
                     children: [
                       GestureDetector(
@@ -856,18 +864,33 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.arrow_back, color: Colors.white70, size: 18),
-                            SizedBox(width: 6),
-                            Text('Menu', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                            SizedBox(width: 12),
+                            SizedBox(width: 14),
+                            Icon(Icons.menu, color: Colors.white, size: 18),
+                            SizedBox(width: 8),
+                            Text(
+                              'Menu',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(width: 14),
                           ],
                         ),
                       ),
+                      Container(
+                        width: 1,
+                        height: 24,
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                      const SizedBox(width: 8),
                       _purchaseTab(
                         'NEW PURCHASE',
                         !_showHistory,
                         () => setState(() => _showHistory = false),
                       ),
+                      const SizedBox(width: 4),
                       _purchaseTab(
                         'PURCHASE HISTORY',
                         _showHistory,
@@ -909,14 +932,19 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        margin: const EdgeInsets.symmetric(vertical: 8),
         alignment: Alignment.center,
-        color: selected ? const Color(0xFF11998e) : Colors.transparent,
         child: Text(
           label,
           style: TextStyle(
-            color: Colors.white,
+            color: selected ? Colors.white : Colors.white.withValues(alpha: 0.6),
             fontSize: 12,
-            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            letterSpacing: 0.3,
           ),
         ),
       ),
@@ -926,87 +954,154 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   Widget _buildPurchaseHistory() {
     final purchases = ref.watch(purchasesProvider);
     return purchases.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFF059669))),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
+            const SizedBox(height: 12),
+            Text('Error: $e', style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      ),
       data: (items) {
-        if (items.isEmpty) return const Center(child: Text('No purchases yet'));
+        if (items.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.receipt_long, size: 48, color: Colors.grey[300]),
+                const SizedBox(height: 12),
+                Text('No purchases yet', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                const SizedBox(height: 4),
+                Text(
+                  'F1 to start a new purchase',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        }
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(purchasesProvider),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 6),
-            itemBuilder: (context, index) {
-              final purchase = items[index];
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(child: Text('${index + 1}')),
-                  title: Text(
-                    'Rs${purchase.totalAmount.toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    '${purchase.items.length} products | ${purchase.supplierName ?? 'No supplier'} | ${AppTimezone.formatDateTime(purchase.createdAt)}',
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: 'details',
-                        child: Text('View Items'),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                color: const Color(0xFF0F172A),
+                child: const Row(
+                  children: [
+                    SizedBox(width: 40, child: Text('#', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600))),
+                    SizedBox(width: 12),
+                    Expanded(child: Text('SUPPLIER', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    SizedBox(width: 80, child: Text('ITEMS', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    SizedBox(width: 120, child: Text('AMOUNT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    SizedBox(width: 140, child: Text('DATE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    SizedBox(width: 48),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final purchase = items[index];
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade100),
                       ),
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Text('Edit Purchase'),
-                      ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                    onSelected: (action) async {
-                      if (action == 'details') {
-                        _showPurchaseDetails(purchase);
-                      } else if (action == 'edit') {
-                        await _editPurchase(purchase);
-                      } else if (action == 'delete') {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Delete Purchase?'),
-                            content: const Text(
-                              'This will deduct stock and reverse account entries. This action cannot be undone.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 40,
+                              child: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: const Color(0xFF059669).withValues(alpha: 0.1),
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF059669)),
                                 ),
                               ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await ref
-                              .read(purchaseServiceProvider)
-                              .deletePurchase(purchase.id);
-                          ref.invalidate(purchasesProvider);
-                          ref.invalidate(productsProvider);
-                        }
-                      }
-                    },
-                  ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                purchase.supplierName ?? 'No Supplier',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1E293B)),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 80,
+                              child: Text(
+                                '${purchase.items.length}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 120,
+                              child: Text(
+                                '₹${purchase.totalAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 140,
+                              child: Text(
+                                AppTimezone.formatDateTime(purchase.createdAt),
+                                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              padding: EdgeInsets.zero,
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'details', child: Text('View Items')),
+                                PopupMenuItem(value: 'edit', child: Text('Edit Purchase')),
+                                PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                              ],
+                              onSelected: (action) async {
+                                if (action == 'details') {
+                                  _showPurchaseDetails(purchase);
+                                } else if (action == 'edit') {
+                                  await _editPurchase(purchase);
+                                } else if (action == 'delete') {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Delete Purchase?'),
+                                      content: const Text(
+                                        'This will deduct stock and reverse account entries. This action cannot be undone.',
+                                      ),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, true),
+                                          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await ref.read(purchaseServiceProvider).deletePurchase(purchase.id);
+                                    ref.invalidate(purchasesProvider);
+                                    ref.invalidate(productsProvider);
+                                  }
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ],
           ),
         );
       },
@@ -1952,118 +2047,146 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         children: [
           Row(
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'CODE',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _searchController,
                   focusNode: _searchFocus,
-                  decoration: const InputDecoration(
-                    labelText: 'Type product name or code...',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    hintText: 'Scan barcode or type product name...',
+                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey.shade300),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF059669), width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
                   ),
                   onChanged: _search,
                   onSubmitted: (_) => _selectResult(),
                 ),
               ),
               const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _addNewProduct,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Product'),
+              _buildActionPill(
+                icon: Icons.add_circle_outline,
+                label: 'NEW PRODUCT',
+                onTap: _addNewProduct,
               ),
               if (_selectedProduct != null) ...[
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: _qtyController,
-                    focusNode: _qtyFocus,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Qty',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _confirmQty(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 110,
-                  child: TextField(
-                    controller: _priceController,
-                    focusNode: _priceFocus,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Purchase Price',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _confirmPrice(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 140,
-                  child: TextField(
-                    controller: _batchController,
-                    focusNode: _batchFocus,
-                    decoration: const InputDecoration(
-                      labelText: 'Batch (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _addItem(),
-                  ),
-                ),
+                _buildEntryField(_qtyController, _qtyFocus, 'Qty', 70),
+                const SizedBox(width: 6),
+                _buildEntryField(_priceController, _priceFocus, 'Price', 100),
+                const SizedBox(width: 6),
+                _buildEntryField(_batchController, _batchFocus, 'Batch', 130),
               ],
             ],
           ),
           if (_selectedProduct != null)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_selectedProduct!.name} — ENTER after batch to add',
-                    style: const TextStyle(
-                      color: Color(0xFF667eea),
-                      fontSize: 12,
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      _selectedProduct!.name,
+                      style: const TextStyle(
+                        color: Color(0xFF059669),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: _pickExpiry,
-                  icon: const Icon(Icons.event, size: 16),
-                  label: Text(
-                    _expiryDate == null
-                        ? 'Expiry'
-                        : '${_expiryDate!.day}/${_expiryDate!.month}/${_expiryDate!.year}',
+                  const SizedBox(width: 8),
+                  Text(
+                    '→ ENTER after batch to add',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
                   ),
-                ),
-              ],
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: _pickExpiry,
+                    icon: const Icon(Icons.event, size: 16, color: Color(0xFF64748B)),
+                    label: Text(
+                      _expiryDate == null
+                          ? 'Set Expiry'
+                          : 'Exp: ${_expiryDate!.day}/${_expiryDate!.month}/${_expiryDate!.year}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           if (_results.isNotEmpty)
             Container(
-              height: 500,
+              height: 400,
+              margin: const EdgeInsets.only(top: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(4),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: ListView.builder(
                 controller: _resultsScrollController,
+                padding: const EdgeInsets.symmetric(vertical: 4),
                 itemCount: _results.length,
                 itemBuilder: (_, index) {
                   final isSelected = index == _resultIndex;
                   return Container(
-                    color: isSelected ? const Color(0xFFCCFBF1) : null,
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFFECFDF5) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF059669).withValues(alpha: 0.3) : Colors.transparent,
+                      ),
+                    ),
                     child: ListTile(
-                      selected: isSelected,
-                      selectedTileColor: const Color(0xFFCCFBF1),
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                       title: Text(
                         _results[index].name,
                         style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          color: isSelected ? const Color(0xFF065F46) : null,
-                          fontSize: isSelected ? 15 : 14,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          color: isSelected ? const Color(0xFF065F46) : const Color(0xFF1E293B),
+                          fontSize: 13,
                         ),
                       ),
                       subtitle: Column(
@@ -2073,21 +2196,17 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               _results[index].tamilName!.isNotEmpty)
                             Text(
                               _results[index].tamilName!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[600],
-                              ),
+                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                             ),
-                          Text(
-                            'Purchase: Rs${_results[index].purchasePrice} | Sell: Rs${_results[index].sellingPrice} | Stock: ${_results[index].stock}',
-                            style: TextStyle(
-                              color: isSelected
-                                  ? const Color(0xFF065F46)
-                                  : Colors.grey[700],
-                              fontWeight: isSelected
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                            ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              _buildInfoChip('Buy', '₹${_results[index].purchasePrice}'),
+                              const SizedBox(width: 8),
+                              _buildInfoChip('Sell', '₹${_results[index].sellingPrice}'),
+                              const SizedBox(width: 8),
+                              _buildInfoChip('Stock', '${_results[index].stock}'),
+                            ],
                           ),
                         ],
                       ),
@@ -2101,6 +2220,92 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionPill({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 14),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEntryField(
+    TextEditingController controller,
+    FocusNode focus,
+    String label,
+    double width,
+  ) {
+    return SizedBox(
+      width: width,
+      child: TextField(
+        controller: controller,
+        focusNode: focus,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(fontSize: 11),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF059669), width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          isDense: true,
+        ),
+        onSubmitted: (_) {
+          if (label == 'Qty') _confirmQty();
+          if (label == 'Price') _confirmPrice();
+          if (label == 'Batch') _addItem();
+        },
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        '$label: $value',
+        style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.w500),
       ),
     );
   }
@@ -2128,60 +2333,97 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
 
   Widget _buildItemsTable() {
     return Container(
-      margin: const EdgeInsets.all(12),
-      color: Colors.white,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: Column(
         children: [
           Container(
-            color: const Color(0xFF11998e),
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F172A),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(10),
+                topRight: Radius.circular(10),
+              ),
+            ),
             child: const Row(
               children: [
                 Expanded(
+                  flex: 4,
                   child: Text(
-                    'Product',
+                    'PRODUCT',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
                 SizedBox(
                   width: 70,
                   child: Text(
-                    'Qty',
+                    'QTY',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
                 SizedBox(
-                  width: 100,
+                  width: 90,
                   child: Text(
-                    'Price',
+                    'PRICE',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
                 SizedBox(
-                  width: 100,
+                  width: 90,
                   child: Text(
-                    'Total',
+                    'TOTAL',
                     style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
+                SizedBox(width: 64),
               ],
             ),
           ),
           Expanded(
             child: _activeSession.items.isEmpty
-                ? const Center(child: Text('Type a product to start purchase'))
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.shopping_cart_outlined, size: 48, color: Colors.grey[300]),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Scan a product or type to search',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Ctrl+F to focus search',
+                          style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  )
                 : ListView.builder(
                     controller: _cartScrollController,
                     itemCount: _activeSession.items.length,
@@ -2189,53 +2431,93 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                       final item = _activeSession.items[index];
                       final isCartSelected = index == _cartIndex;
                       return Container(
-                        color: isCartSelected
-                            ? const Color(0xFFE0F2FE)
-                            : index.isEven
-                                ? Colors.grey.shade50
-                                : Colors.white,
-                        child: ListTile(
-                        dense: true,
-                        title: Text(item.name),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (item.tamilName != null &&
-                                item.tamilName!.isNotEmpty)
-                              Text(
-                                item.tamilName!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[600],
+                        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: isCartSelected ? const EdgeInsets.only(left: 3) : null,
+                        decoration: BoxDecoration(
+                          color: isCartSelected
+                              ? const Color(0xFFEFF6FF)
+                              : index.isEven
+                                  ? Colors.grey.shade50
+                                  : Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isCartSelected
+                                ? const Color(0xFF2563EB).withValues(alpha: 0.3)
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.name,
+                                      style: TextStyle(
+                                        fontWeight: isCartSelected ? FontWeight.w600 : FontWeight.w500,
+                                        fontSize: 13,
+                                        color: const Color(0xFF1E293B),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        if (item.tamilName != null && item.tamilName!.isNotEmpty)
+                                          Text(
+                                            '${item.tamilName} · ',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                          ),
+                                        Text(
+                                          item.batchNumber ?? 'No batch',
+                                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Builder(
+                                          builder: (context) {
+                                            final product = _products
+                                                .where((p) => p.id == item.productId)
+                                                .firstOrNull;
+                                            final sellPrice = product?.sellingPrice ?? 0;
+                                            return Text(
+                                              '· Sell ₹$sellPrice',
+                                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                            );
+                                          },
+                                        ),
+                                        if (item.expiryDate != null) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange.shade50,
+                                              borderRadius: BorderRadius.circular(3),
+                                            ),
+                                            child: Text(
+                                              'Exp ${item.expiryDate!.day}/${item.expiryDate!.month}/${item.expiryDate!.year}',
+                                              style: TextStyle(fontSize: 10, color: Colors.orange.shade800),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
-                            Builder(
-                              builder: (context) {
-                                final product = _products
-                                    .where((p) => p.id == item.productId)
-                                    .firstOrNull;
-                                final sellPrice = product?.sellingPrice ?? 0;
-                                return Text(
-                                  '${item.batchNumber ?? 'No batch'} | Sell: Rs${sellPrice.toStringAsFixed(0)}${item.expiryDate == null ? '' : ' | Exp ${item.expiryDate!.day}/${item.expiryDate!.month}/${item.expiryDate!.year}'}',
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GestureDetector(
+                              SizedBox(
+                                width: 70,
+                                child: GestureDetector(
                                   onTap: () {
                                     final qtyController = TextEditingController(text: item.qty.toString());
                                     showDialog(
                                       context: context,
                                       builder: (ctx) => AlertDialog(
-                                        title: Text('Edit Qty - ${item.name}'),
+                                        title: Text('Edit Qty — ${item.name}'),
                                         content: TextField(
                                           controller: qtyController,
                                           autofocus: true,
@@ -2271,63 +2553,86 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                     );
                                   },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.grey.shade400),
-                                      borderRadius: BorderRadius.circular(4),
+                                      color: const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.2)),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
                                           '${item.qty}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: Color(0xFF2563EB),
+                                          ),
                                         ),
                                         const SizedBox(width: 4),
-                                        Icon(Icons.edit, size: 12, color: Colors.grey[500]),
+                                        Icon(Icons.edit, size: 11, color: Colors.grey[500]),
                                       ],
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '× Rs${item.price.toStringAsFixed(0)}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                              ),
+                              SizedBox(
+                                width: 90,
+                                child: Text(
+                                  '₹${item.price.toStringAsFixed(2)}',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(width: 24),
-                            Text(
-                              'Rs${item.total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
                               ),
-                            ),
-                            IconButton(
-                              onPressed: () => _editPurchasePrice(index),
-                              icon: const Icon(
-                                Icons.edit,
-                                color: Colors.blue,
-                                size: 16,
+                              SizedBox(
+                                width: 90,
+                                child: Text(
+                                  '₹${item.total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                ),
                               ),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                ref
-                                    .read(desktopPurchaseProvider.notifier)
-                                    .removeItem(index);
-                                setState(() {});
-                              },
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.red,
-                                size: 16,
+                              SizedBox(
+                                width: 64,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => _editPurchasePrice(index),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.shade50,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Icon(Icons.edit, size: 14, color: Colors.blue.shade600),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    GestureDetector(
+                                      onTap: () {
+                                        ref.read(desktopPurchaseProvider.notifier).removeItem(index);
+                                        setState(() {});
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.shade50,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Icon(Icons.close, size: 14, color: Colors.red.shade400),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    );
+                      );
                     },
                   ),
           ),
@@ -2336,22 +2641,93 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     );
   }
 
-  Widget _buildFooter() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildFooter() {
+    final session = _activeSession;
+    final finalTotal = (session.subtotal - session.discount).clamp(0.0, double.infinity);
+    final roundedTotal = finalTotal.roundToDouble();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Products: ${_activeSession.items.length} | Total: Rs${_total.toStringAsFixed(2)}',
-          style: const TextStyle(fontSize: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          color: Colors.white,
+          child: Row(
+            children: [
+              _buildFooterStat('TOTAL ITEMS', '${session.itemCount}'),
+              const SizedBox(width: 32),
+              _buildFooterStat('TOTAL QTY', '${session.totalQty}'),
+              const Spacer(),
+              if (session.discount > 0) ...[
+                Text(
+                  '-₹${session.discount.toStringAsFixed(0)}  ',
+                  style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                ),
+              ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'SUBTOTAL',
+                    style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                  ),
+                  Text(
+                    '₹${roundedTotal.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF059669),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        Text(
-          'Ctrl+1 New | Ctrl+2 History | Ctrl+F Search | Ctrl+D Discount | Ctrl+Enter Complete | Esc Back',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: const Color(0xFF0F172A),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ShortcutHint(label: 'F1', action: 'New Purchase'),
+              _Separator(),
+              _ShortcutHint(label: 'F2', action: 'History'),
+              _Separator(),
+              _ShortcutHint(label: 'F5', action: 'Refresh'),
+              _Separator(),
+              _ShortcutHint(label: 'Ctrl+F', action: 'Search'),
+              _Separator(),
+              _ShortcutHint(label: 'Ctrl+Enter', action: 'Complete'),
+              _Separator(),
+              _ShortcutHint(label: 'Ctrl+D', action: 'Discount'),
+              _Separator(),
+              _ShortcutHint(label: 'Del', action: 'Remove'),
+              _Separator(),
+              _ShortcutHint(label: 'Esc', action: 'Cancel'),
+            ],
+          ),
         ),
       ],
-    ),
-  );
+    );
+  }
+
+  Widget _buildFooterStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+        ),
+      ],
+    );
+  }
 
   Widget _buildPaymentPanel() {
     final session = _activeSession;
@@ -2362,128 +2738,247 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final roundedTotal = finalTotal.roundToDouble();
     final roundOff = roundedTotal - finalTotal;
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.all(16),
+      color: const Color(0xFFF8FAFC),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'PURCHASE TOTAL\nRs${roundedTotal.toStringAsFixed(0)}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF11998e),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: Color(0xFF059669),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'PURCHASE TOTAL',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '₹${roundedTotal.toStringAsFixed(0)}',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                if (roundOff != 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    roundOff > 0
+                        ? '+₹${roundOff.toStringAsFixed(2)} round off'
+                        : '-₹${(-roundOff).toStringAsFixed(2)} round off',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            onPressed: _selectSupplier,
-            icon: const Icon(Icons.business, size: 18),
-            label: Text(session.supplier?.name ?? 'Select Supplier'),
-          ),
-          if (session.supplier != null && _supplierDues > 0) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Row(
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    size: 16,
-                    color: Colors.orange.shade700,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Previous Dues: Rs${_supplierDues.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.orange.shade800,
+                  _buildSectionLabel('SUPPLIER'),
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: _selectSupplier,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.business, size: 16, color: Color(0xFF059669)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  session.supplier?.name ?? 'Select Supplier',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: session.supplier != null
+                                        ? const Color(0xFF1E293B)
+                                        : Colors.grey[500],
+                                  ),
+                                ),
+                                if (session.supplier != null && _supplierDues > 0)
+                                  Text(
+                                    'Dues: ₹${_supplierDues.toStringAsFixed(0)}',
+                                    style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+                        ],
+                      ),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  GestureDetector(
+                    onTap: _addSupplier,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.add_circle_outline, size: 14, color: Color(0xFF64748B)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Add New Supplier',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (session.supplier != null && _supplierDues > 0) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Previous Dues: ₹${_supplierDues.toStringAsFixed(0)}',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange.shade800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  _buildSectionLabel('DISCOUNT'),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _discountController,
+                    focusNode: _discountFocus,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      hintText: '0',
+                      prefixText: '₹ ',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF059669), width: 2),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      isDense: true,
+                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    onChanged: (val) {
+                      ref.read(desktopPurchaseProvider.notifier).setDiscount(double.tryParse(val) ?? 0);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionLabel('PAYMENT METHOD'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: _buildPaymentMethodButton('CASH', 'cash', false)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildPaymentMethodButton('UPI', 'upi', false)),
+                      const SizedBox(width: 6),
+                      Expanded(child: _buildPaymentMethodButton('CREDIT', 'credit', true)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Text('Total: ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                      Text(
+                        '₹${roundedTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ],
-          TextButton.icon(
-            onPressed: _addSupplier,
-            icon: const Icon(Icons.person_add, size: 16),
-            label: const Text('Add New Supplier'),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Text('Discount: ', style: TextStyle(fontSize: 14)),
-              Expanded(
-                child: TextField(
-                  controller: _discountController,
-                  focusNode: _discountFocus,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.right,
-                  decoration: InputDecoration(
-                    hintText: '0',
-                    prefixText: 'Rs ',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    isDense: true,
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              height: 48,
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: session.items.isEmpty || _loading
+                    ? null
+                    : _completePurchase,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF059669),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  style: const TextStyle(fontSize: 14),
-                  onChanged: (val) {
-                    ref
-                        .read(desktopPurchaseProvider.notifier)
-                        .setDiscount(double.tryParse(val) ?? 0);
-                  },
+                  elevation: 0,
+                ),
+                child: Text(
+                  _loading ? 'Saving...' : 'COMPLETE PURCHASE',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-            ],
-          ),
-          if (roundOff != 0) ...[
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Round Off', style: TextStyle(fontSize: 13)),
-                Text(
-                  roundOff > 0
-                      ? '+Rs${roundOff.toStringAsFixed(2)}'
-                      : '-Rs${(-roundOff).toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: roundOff > 0 ? Colors.red : Colors.green,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          _buildPaymentMethodButton('CASH', 'cash', false),
-          const SizedBox(height: 6),
-          _buildPaymentMethodButton('UPI / DIGITAL', 'upi', false),
-          const SizedBox(height: 6),
-          _buildPaymentMethodButton('CREDIT', 'credit', true),
-          const Spacer(),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton(
-              onPressed: session.items.isEmpty || _loading
-                  ? null
-                  : _completePurchase,
-              child: Text(_loading ? 'Saving...' : 'COMPLETE PURCHASE (ENTER)'),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFF94A3B8),
+        letterSpacing: 0.5,
       ),
     );
   }
@@ -2493,36 +2988,25 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final isActive = isCredit
         ? session.isCredit
         : (session.paymentMethod == value && !session.isCredit);
-    final color = isActive ? const Color(0xFF11998e) : Colors.grey.shade200;
-    final textColor = isActive ? Colors.white : Colors.black87;
-    final borderColor = isActive
-        ? const Color(0xFF11998e)
-        : Colors.grey.shade300;
-    return Focus(
-      child: GestureDetector(
-        onTap: () =>
-            ref.read(desktopPurchaseProvider.notifier).setPaymentMethod(value),
-        child: Builder(
-          builder: (ctx) {
-            final focused = Focus.of(ctx).hasFocus;
-            return Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: focused ? const Color(0xFF667eea) : borderColor,
-                  width: focused ? 2 : 1,
-                ),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-              ),
-            );
-          },
+    return GestureDetector(
+      onTap: () => ref.read(desktopPurchaseProvider.notifier).setPaymentMethod(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isActive ? const Color(0xFF059669) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive ? const Color(0xFF059669) : Colors.grey.shade300,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.white : const Color(0xFF475569),
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -2568,5 +3052,53 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     _resultsScrollController.dispose();
     _cartScrollController.dispose();
     super.dispose();
+  }
+}
+
+class _ShortcutHint extends StatelessWidget {
+  final String label;
+  final String action;
+
+  const _ShortcutHint({required this.label, required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontFamily: 'monospace',
+            ),
+          ),
+          TextSpan(
+            text: ': $action',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Separator extends StatelessWidget {
+  const _Separator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        '|',
+        style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.3)),
+      ),
+    );
   }
 }
