@@ -170,7 +170,7 @@ class UpdateService {
 
   /// Install update by replacing current app files and restarting
   Future<void> installUpdate(String extractDir) async {
-    final appDir = Directory(Platform.resolvedExecutable).parent.parent.path;
+    final appDir = Directory(Platform.resolvedExecutable).parent.path;
     final exeName = Platform.resolvedExecutable.split('\\').last;
     final extractDirObj = Directory(extractDir);
 
@@ -212,7 +212,11 @@ if exist "$sourceDir\\data" (
 )
 
 :: Restart the app
-start "" "$appDir\\$exeName"
+if exist "$appDir\\$exeName" (
+    start "" "$appDir\\$exeName"
+) else (
+    echo Update failed: exe not found at $appDir\\$exeName >> "$appDir\\update_error.log"
+)
 
 :: Self-delete
 del "%~f0"
