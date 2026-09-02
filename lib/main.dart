@@ -129,6 +129,9 @@ void main() async {
 }
 
 void _scheduleUpdateCheck() {
+  // Auto-update is Windows-only
+  if (!Platform.isWindows) return;
+
   Timer(const Duration(seconds: 7), () async {
     final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
     try {
@@ -302,9 +305,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ),
         if (!_downloading)
           FilledButton.icon(
-            onPressed: _download,
+            onPressed: Platform.isWindows ? _download : null,
             icon: const Icon(Icons.download, size: 18),
-            label: const Text('Update Now'),
+            label: Text(Platform.isWindows ? 'Update Now' : 'Visit GitHub'),
           ),
       ],
     );
