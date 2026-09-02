@@ -748,7 +748,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_resultsScrollController.hasClients || _searchResults.isEmpty)
         return;
-      const rowHeight = 60.0;
+      const rowHeight = 80.0;
       final targetTop = _selectedResultIndex * rowHeight;
       final targetBottom = targetTop + rowHeight;
       final viewportTop = _resultsScrollController.offset;
@@ -2243,9 +2243,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       color: const Color(0xFF2563EB),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
-                      'CODE',
-                      style: TextStyle(
+                    child: Text(
+                      _searchMode == 'code' ? 'CODE' : 'NAME',
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -2261,8 +2261,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     focusNode: _searchFocusNode,
                     decoration: InputDecoration(
                       hintText: _searchMode == 'code'
-                          ? 'Search product / scan barcode / enter code...'
-                          : 'Search product / scan barcode / enter code...',
+                          ? 'Search by SFW code...'
+                          : 'Search by product name...',
                       prefixIcon: const Icon(Icons.search, size: 22, color: Color(0xFF94A3B8)),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),

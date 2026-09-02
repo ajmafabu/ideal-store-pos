@@ -82,7 +82,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   void _scrollSelectedResultIntoView() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_resultsScrollController.hasClients || _results.isEmpty) return;
-      const rowHeight = 56.0;
+      const rowHeight = 80.0;
       final top = _resultIndex * rowHeight;
       final bottom = top + rowHeight;
       final offset = _resultsScrollController.offset;
@@ -2047,23 +2047,6 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'CODE',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _searchController,
