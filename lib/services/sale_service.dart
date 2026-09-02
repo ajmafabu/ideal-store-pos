@@ -240,11 +240,21 @@ class SaleService {
 
   /// Delete sale - queues if offline
   Future<void> deleteSale(String saleId) async {
+    // First check if this is an offline-created sale (never synced to Supabase)
+    final pendingSale = _offlineService.pendingBox.get(saleId);
+    if (pendingSale != null) {
+      // Offline-created sale: remove from pending box and local cache directly
+      await _offlineService.removePendingSale(saleId);
+      _offlineService.applyDeleteToLocalCache(saleId);
+      Logger.info('Deleted offline sale $saleId from pending queue');
+      return;
+    }
+
     try {
       final saleData = await _client
           .from('sales')
           .select(
-            'items, final_amount, payment_method, is_credit, cash_amount, digital_amount',
+            'items, final_amount, payment_method, is_credit, cash_amount, digital_amount, customer_id, due_amount',
           )
           .eq('id', saleId)
           .single();
@@ -255,6 +265,8 @@ class SaleService {
       final cashAmount = (saleData['cash_amount'] as num?)?.toDouble() ?? 0;
       final digitalAmount =
           (saleData['digital_amount'] as num?)?.toDouble() ?? 0;
+      final customerId = saleData['customer_id'] as String?;
+      final dueAmount = (saleData['due_amount'] as num?)?.toDouble() ?? 0;
 
       // Restore stock per item (batched for performance)
       final stockFutures = <Future>[];
@@ -274,7 +286,7 @@ class SaleService {
         await Future.wait(stockFutures);
       }
 
-      // Reverse account entry
+      // Reverse account entry (non-credit only)
       if (!isCredit && finalAmount > 0) {
         try {
           final accounts = await _accountService.getAccounts();
@@ -324,6 +336,29 @@ class SaleService {
           }
         } catch (e) {
           Logger.error('Failed to reverse account entry for sale', e);
+        }
+      }
+
+      // Reverse customer credit if this was a credit sale
+      if (isCredit && customerId != null && dueAmount > 0) {
+        try {
+          // Recalculate customer total_credit from remaining sales
+          final remainingSales = await _client
+              .from('sales')
+              .select('due_amount')
+              .eq('customer_id', customerId)
+              .gt('due_amount', 0);
+          double totalCredit = 0;
+          for (final sale in remainingSales) {
+            totalCredit += (sale['due_amount'] as num?)?.toDouble() ?? 0;
+          }
+          await _client
+              .from('customers')
+              .update({'total_credit': totalCredit})
+              .eq('id', customerId);
+          Logger.info('Reversed credit for customer $customerId: -$dueAmount (new total: $totalCredit)');
+        } catch (e) {
+          Logger.error('Failed to reverse customer credit for sale', e);
         }
       }
 

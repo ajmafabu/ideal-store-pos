@@ -2240,7 +2240,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB),
+                      color: _searchMode == 'code'
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFF059669),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
