@@ -183,41 +183,46 @@ class UpdateService {
       sourceDir = exeFiles.first.parent.path;
     }
 
+    // Escape backslashes for batch file (C:\path → C:\\path)
+    final batAppDir = appDir.replaceAll(r'\', r'\\');
+    final batSourceDir = sourceDir.replaceAll(r'\', r'\\');
+    final batExeName = exeName;
+
     // Create a robust batch script — kills old process, cleans, copies, restarts
     final batScript = '''
 @echo off
 title Ideal Store POS Updater
 set "LOG=%TEMP%\\update_install.log"
 echo [%date% %time%] Update started > "%LOG%"
-echo [%date% %time%] Source: %sourceDir% >> "%LOG%"
-echo [%date% %time%] Dest: %appDir% >> "%LOG%"
+echo [%date% %time%] Source: $batSourceDir >> "%LOG%"
+echo [%date% %time%] Dest: $batAppDir >> "%LOG%"
 
 :: Wait for app to fully close
 echo [%date% %time%] Waiting 5s for app to close... >> "%LOG%"
 timeout /t 5 /nobreak >nul
 
 :: Force kill any remaining instance
-taskkill /f /im "%exeName%" >nul 2>&1
+taskkill /f /im "$batExeName" >nul 2>&1
 timeout /t 2 /nobreak >nul
 
 :: Remove old files (will be replaced)
 echo [%date% %time%] Deleting old files... >> "%LOG%"
-del /Q "%appDir%\\*.dll" 2>>"%LOG%"
-del /Q "%appDir%\\*.exe" 2>>"%LOG%"
-del /Q "%appDir%\\*.dat" 2>>"%LOG%"
-del /Q "%appDir%\\*.json" 2>>"%LOG%"
+del /Q "$batAppDir\\*.dll" 2>>"%LOG%"
+del /Q "$batAppDir\\*.exe" 2>>"%LOG%"
+del /Q "$batAppDir\\*.dat" 2>>"%LOG%"
+del /Q "$batAppDir\\*.json" 2>>"%LOG%"
 timeout /t 1 /nobreak >nul
 
 :: Copy new files from source to app directory
 echo [%date% %time%] Copying new files... >> "%LOG%"
-xcopy /E /Y /I "%sourceDir%" "%appDir%" >> "%LOG%" 2>&1
+xcopy /E /Y /I "$batSourceDir" "$batAppDir" >> "%LOG%" 2>&1
 
 :: Verify exe exists
-if exist "%appDir%\\%exeName%" (
+if exist "$batAppDir\\$batExeName" (
     echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
-    start "" "%appDir%\\%exeName%"
+    start "" "$batAppDir\\$batExeName"
 ) else (
-    echo [%date% %time%] FAILED: exe not found at %appDir%\\%exeName% >> "%LOG%"
+    echo [%date% %time%] FAILED: exe not found at $batAppDir\\$batExeName >> "%LOG%"
 )
 
 :: Self-delete after a delay
