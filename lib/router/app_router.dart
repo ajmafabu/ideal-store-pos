@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,8 +33,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Allow public customer portal access
       if (path.startsWith('/customer/')) return null;
 
-      // Version check (only once per app session)
-      if (!_needsUpdate && user != null && path != '/login') {
+      // Version check (only once per app session) — skip on Windows (handled by UpdateService)
+      if (!_needsUpdate && user != null && path != '/login' && !Platform.isWindows) {
         try {
           final needsUpdate = await VersionCheckService().checkForUpdate();
           if (needsUpdate) {
