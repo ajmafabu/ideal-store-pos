@@ -2271,8 +2271,6 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           isDense: true,
         ),
         onSubmitted: (_) {
-          if (label == 'Qty') _confirmQty();
-          if (label == 'Price') _confirmPrice();
           if (label == 'Batch') _addItem();
         },
       ),
