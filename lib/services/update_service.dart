@@ -187,38 +187,41 @@ class UpdateService {
     final batScript = '''
 @echo off
 title Ideal Store POS Updater
+set "LOG=%TEMP%\\update_install.log"
+echo [%date% %time%] Update started > "%LOG%"
+echo [%date% %time%] Source: %sourceDir% >> "%LOG%"
+echo [%date% %time%] Dest: %appDir% >> "%LOG%"
 
-:: Wait for app to close
-timeout /t 3 /nobreak >nul
+:: Wait for app to fully close
+echo [%date% %time%] Waiting 5s for app to close... >> "%LOG%"
+timeout /t 5 /nobreak >nul
 
 :: Force kill any remaining instance
-taskkill /f /im "$exeName" >nul 2>&1
+taskkill /f /im "%exeName%" >nul 2>&1
+timeout /t 2 /nobreak >nul
+
+:: Remove old files (will be replaced)
+echo [%date% %time%] Deleting old files... >> "%LOG%"
+del /Q "%appDir%\\*.dll" 2>>"%LOG%"
+del /Q "%appDir%\\*.exe" 2>>"%LOG%"
+del /Q "%appDir%\\*.dat" 2>>"%LOG%"
+del /Q "%appDir%\\*.json" 2>>"%LOG%"
 timeout /t 1 /nobreak >nul
 
-:: Remove old DLLs and exe (will be replaced)
-del /Q "$appDir\\*.dll" >nul 2>&1
-del /Q "$appDir\\*.exe" >nul 2>&1
-del /Q "$appDir\\*.dat" >nul 2>&1
-del /Q "$appDir\\*.json" >nul 2>&1
-
 :: Copy new files from source to app directory
-for %%F in ("$sourceDir\\*.*") do (
-    copy /Y "%%F" "$appDir\\%%~nxF" >nul 2>&1
-)
+echo [%date% %time%] Copying new files... >> "%LOG%"
+xcopy /E /Y /I "%sourceDir%" "%appDir%" >> "%LOG%" 2>&1
 
-:: Copy data subdirectory if it exists
-if exist "$sourceDir\\data" (
-    xcopy /E /Y /I "$sourceDir\\data" "$appDir\\data" >nul 2>&1
-)
-
-:: Restart the app
-if exist "$appDir\\$exeName" (
-    start "" "$appDir\\$exeName"
+:: Verify exe exists
+if exist "%appDir%\\%exeName%" (
+    echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
+    start "" "%appDir%\\%exeName%"
 ) else (
-    echo Update failed: exe not found at $appDir\\$exeName >> "$appDir\\update_error.log"
+    echo [%date% %time%] FAILED: exe not found at %appDir%\\%exeName% >> "%LOG%"
 )
 
-:: Self-delete
+:: Self-delete after a delay
+timeout /t 3 /nobreak >nul
 del "%~f0"
 ''';
 
