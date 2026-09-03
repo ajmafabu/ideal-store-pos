@@ -790,14 +790,10 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           }
         }
 
-        // Enter: context-sensitive
+        // Enter: context-sensitive — skip if entry field has focus (handled by onSubmitted)
         if (key == LogicalKeyboardKey.enter) {
           if (_selectedProduct == null && _results.isNotEmpty) {
             _selectResult();
-          } else if (_selectedProduct != null && _qtyFocus.hasFocus) {
-            _confirmQty();
-          } else if (_selectedProduct != null && _priceFocus.hasFocus) {
-            _confirmPrice();
           } else if (_selectedProduct != null && _batchFocus.hasFocus) {
             _addItem();
           } else if (_discountFocus.hasFocus) {
@@ -2271,6 +2267,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           isDense: true,
         ),
         onSubmitted: (_) {
+          if (label == 'Qty') _confirmQty();
+          if (label == 'Price') _confirmPrice();
           if (label == 'Batch') _addItem();
         },
       ),

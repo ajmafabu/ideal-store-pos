@@ -123,9 +123,11 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
       return;
     }
 
-    // ── ENTER (no shift) ──
+    // ── ENTER (no shift) — skip if an entry TextField has focus (handled by onSubmitted) ──
     if (key == LogicalKeyboardKey.enter) {
-      onEnter();
+      if (!isQtyFocused && !isPriceFocused && !isTotalFocused && !isCostFocused) {
+        onEnter();
+      }
       return;
     }
 
