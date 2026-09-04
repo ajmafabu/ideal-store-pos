@@ -19,6 +19,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   String _selectedCategory = 'Rent';
+  DateTime _selectedDate = DateTime.now();
 
   static const _categories = [
     'Rent', 'Salary', 'Electricity', 'Water', 'Internet',
@@ -43,6 +44,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Category: $_selectedCategory'),
+            Text('Date: ${DateFormat('dd MMM yyyy').format(_selectedDate)}'),
             Text('Amount: ₹${amount.toStringAsFixed(2)}'),
             if (_descriptionController.text.isNotEmpty)
               Text('Note: ${_descriptionController.text}'),
@@ -67,7 +69,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
         amount: amount,
         createdBy: user?.id ?? '',
-        createdAt: DateTime.now(),
+        createdAt: _selectedDate,
       );
 
       // Insert directly to Supabase
@@ -83,6 +85,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         );
         _amountController.clear();
         _descriptionController.clear();
+        setState(() => _selectedDate = DateTime.now());
       }
     } catch (e) {
       if (mounted) {
@@ -161,6 +164,26 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                         .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                         .toList(),
                     onChanged: (v) => setState(() => _selectedCategory = v ?? 'Rent'),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setState(() => _selectedDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date',
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today),
+                      ),
+                      child: Text(DateFormat('dd MMM yyyy').format(_selectedDate)),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(

@@ -31,6 +31,7 @@ class Expense {
     'description': description,
     'amount': amount,
     'created_by': createdBy,
+    'created_at': createdAt.toIso8601String(),
   };
 
   Map<String, dynamic> toJson() => {
