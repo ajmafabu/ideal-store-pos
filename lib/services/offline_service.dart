@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/hive_adapter.dart';
 import '../utils/logger.dart';
 import 'account_service.dart';
+import 'audit_service.dart';
 
 import 'package:hive_ce/hive.dart';
 
@@ -25,6 +26,7 @@ class OfflineService {
   late Box<Map> _damagedBox;
   late Box<Map> _accountsBox;
   late Box<Map> _pendingWritesBox;
+  late Box<Map> _heldBillsBox;
   bool _initialized = false;
 
   Future<void> init() async {
@@ -42,6 +44,7 @@ class OfflineService {
     _damagedBox = await Hive.openBox<Map>(HiveAdapter.cachedDamagedBox, encryptionCipher: cipher);
     _accountsBox = await Hive.openBox<Map>(HiveAdapter.cachedAccountsBox, encryptionCipher: cipher);
     _pendingWritesBox = await Hive.openBox<Map>(HiveAdapter.pendingWritesBox, encryptionCipher: cipher);
+    _heldBillsBox = await Hive.openBox<Map>(HiveAdapter.heldBillsBox, encryptionCipher: cipher);
     _initialized = true;
   }
 
@@ -731,6 +734,31 @@ class OfflineService {
 
   Future<bool> forceSync() async {
     print('[SYNC] Force sync requested');
-    return await syncPendingSales();
+    final result = await syncPendingSales();
+    // Also sync queued audit logs
+    try {
+      final auditService = AuditService();
+      await auditService.syncPendingAuditLogs();
+    } catch (_) {}
+    return result;
+  }
+
+  // ===== HELD BILLS =====
+  Future<void> saveHeldBills(List<Map<String, dynamic>> bills) async {
+    await _ensureInitialized();
+    await _heldBillsBox.clear();
+    for (int i = 0; i < bills.length; i++) {
+      await _heldBillsBox.put('bill_$i', Map<String, dynamic>.from(bills[i]));
+    }
+  }
+
+  List<Map<String, dynamic>> getHeldBills() {
+    if (!_initialized) return [];
+    return _heldBillsBox.values.toList().cast<Map<String, dynamic>>();
+  }
+
+  Future<void> clearHeldBills() async {
+    await _ensureInitialized();
+    await _heldBillsBox.clear();
   }
 }

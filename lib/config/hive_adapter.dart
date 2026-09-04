@@ -18,6 +18,8 @@ class HiveAdapter {
   static const String cachedDamagedBox = 'cached_damaged';
   static const String cachedAccountsBox = 'cached_accounts';
   static const String pendingWritesBox = 'pending_writes';
+  static const String heldBillsBox = 'held_bills';
+  static const String pendingAuditBox = 'pending_audit';
 
   static HiveAesCipher? _currentCipher;
 
@@ -83,6 +85,8 @@ class HiveAdapter {
     _cachedDamagedBox = await openEncryptedBox(cachedDamagedBox);
     _cachedAccountsBox = await openEncryptedBox(cachedAccountsBox);
     _pendingWritesBox = await openEncryptedBox(pendingWritesBox);
+    _heldBillsBox = await openEncryptedBox(heldBillsBox);
+    _pendingAuditBox = await openEncryptedBox(pendingAuditBox);
   }
 
   static late Box<Map> _pendingSalesBox;
@@ -97,6 +101,8 @@ class HiveAdapter {
   static late Box<Map> _cachedDamagedBox;
   static late Box<Map> _cachedAccountsBox;
   static late Box<Map> _pendingWritesBox;
+  static late Box<Map> _heldBillsBox;
+  static late Box<Map> _pendingAuditBox;
 
   static Box<Map> get pendingSalesBox_ => _pendingSalesBox;
   static Box<Map> get cachedSalesBox_ => _cachedSalesBox;
@@ -110,4 +116,6 @@ class HiveAdapter {
   static Box<Map> get cachedDamagedBox_ => _cachedDamagedBox;
   static Box<Map> get cachedAccountsBox_ => _cachedAccountsBox;
   static Box<Map> get pendingWritesBox_ => _pendingWritesBox;
+  static Box<Map> get heldBillsBox_ => _heldBillsBox;
+  static Box<Map> get pendingAuditBox_ => _pendingAuditBox;
 }

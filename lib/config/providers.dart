@@ -684,7 +684,7 @@ class CartNotifier extends Notifier<List<CartItem>> {
   void addItem(CartItem item) {
     final existing = state.indexWhere((c) => c.productId == item.productId);
     if (existing >= 0) {
-      state[existing].qty += 1;
+      state[existing].qty += item.qty;
       state = List.from(state);
     } else {
       state = [...state, item];

@@ -184,10 +184,19 @@ class TamilBitmapRenderer {
     // Data rows
     for (final row in rows) {
       final sno = _makeTp('${row.sNo}', 22, true);
+      // Truncate product name smartly — avoid cutting mid-word or mid-Tamil glyph
+      var productName = row.productName;
+      if (productName.length > 24) {
+        // Try to break at last space before 24 chars
+        final cutPoint = productName.lastIndexOf(' ', 24);
+        if (cutPoint > 16) {
+          productName = '${productName.substring(0, cutPoint)}…';
+        } else {
+          productName = '${productName.substring(0, 22)}…';
+        }
+      }
       final part = _makeTp(
-        row.productName.length > 24
-            ? row.productName.substring(0, 24)
-            : row.productName,
+        productName,
         22,
         true,
       );

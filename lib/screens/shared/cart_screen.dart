@@ -43,7 +43,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
   bool _isCredit = false;
   bool _isSplitPayment = false;
   bool _isProcessing = false;
-  bool _showPaymentOptions = false;
   List<Customer> _customers = [];
   List<Customer> _filteredCustomers = [];
   bool _showCustomerSearch = false;
@@ -56,8 +55,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
   final VoiceBilling _voiceBilling = VoiceBilling();
   String _partialText = '';
 
-  // Hold/Recall bills
-  final List<Map<String, dynamic>> _heldBills = [];
+  // Hold/Recall bills — persisted to Hive
+  List<Map<String, dynamic>> _heldBills = [];
 
   // Cart from global provider
   List<CartItem> get _cart => ref.read(cartProvider);
@@ -78,6 +77,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     _loadCustomers();
     _loadProducts();
     _loadTopSoldProducts();
+    _loadHeldBills();
   }
 
   Future<void> _loadCustomers() async {
@@ -118,6 +118,27 @@ class _CartScreenState extends ConsumerState<CartScreen>
       }
     } catch (e) {
       Logger.warning('Failed to load top sold products: $e');
+    }
+  }
+
+  Future<void> _loadHeldBills() async {
+    try {
+      final offlineService = ref.read(offlineServiceProvider);
+      final saved = offlineService.getHeldBills();
+      if (mounted && saved.isNotEmpty) {
+        setState(() => _heldBills = saved);
+      }
+    } catch (e) {
+      Logger.warning('Failed to load held bills: $e');
+    }
+  }
+
+  Future<void> _persistHeldBills() async {
+    try {
+      final offlineService = ref.read(offlineServiceProvider);
+      await offlineService.saveHeldBills(_heldBills);
+    } catch (e) {
+      Logger.warning('Failed to persist held bills: $e');
     }
   }
 
@@ -196,6 +217,21 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _addToCartWithQty(Product product, int qty) async {
+    // Stock validation
+    final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
+    final requestedTotal = inCart + qty;
+    if (requestedTotal > product.stock) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Insufficient stock! Available: ${product.stock}, In cart: $inCart'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     final picked = await RatePickerDialog.show(context, product);
     final price = picked?.price ?? product.sellingPrice;
     final rateLabel = picked?.label;
@@ -243,6 +279,20 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _addToCart(Product product) async {
+    // Stock validation
+    final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
+    if (inCart + 1 > product.stock) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Insufficient stock! Available: ${product.stock}, In cart: $inCart'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
     final picked = await RatePickerDialog.show(context, product);
     final price = picked?.price ?? product.sellingPrice;
     final rateLabel = picked?.label;
@@ -937,6 +987,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
         (sum, item) => sum + item.discountAmount,
       );
 
+      // Calculate GST totals from cart items
+      final totalGst = _cart.fold(0.0, (sum, item) => sum + item.gstAmount);
+      final totalCgst = _cart.fold(0.0, (sum, item) => sum + item.cgst);
+      final totalSgst = _cart.fold(0.0, (sum, item) => sum + item.sgst);
+
       final sale = Sale(
         id: '',
         items: _cart,
@@ -965,6 +1020,9 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       !_isCredit
                   ? _total
                   : 0),
+        cgstAmount: totalCgst,
+        sgstAmount: totalSgst,
+        igstAmount: totalGst,
       );
 
       final offlineService = ref.read(offlineServiceProvider);
@@ -1392,6 +1450,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       _isSplitPayment = false;
       _paymentMethod = 'cash';
     });
+    _persistHeldBills();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1418,6 +1477,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       _amountPaidController.text = heldBill['amountPaid'] as String;
       _heldBills.removeAt(index);
     });
+    _persistHeldBills();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1865,45 +1925,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Always-visible payment method chips
-                  Row(
-                    children: [
-                      const Text('Payment: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 4),
-                      ChoiceChip(
-                        label: const Text('Cash', style: TextStyle(fontSize: 11)),
-                        selected: !_isCredit && _paymentMethod == 'cash',
-                        onSelected: (_) => setState(() {
-                          _paymentMethod = 'cash';
-                          _isCredit = false;
-                          _isSplitPayment = false;
-                        }),
-                      ),
-                      const SizedBox(width: 6),
-                      ChoiceChip(
-                        label: const Text('Digital', style: TextStyle(fontSize: 11)),
-                        selected: !_isCredit && _paymentMethod == 'digital',
-                        onSelected: (_) => setState(() {
-                          _paymentMethod = 'digital';
-                          _isCredit = false;
-                          _isSplitPayment = false;
-                        }),
-                      ),
-                      const SizedBox(width: 6),
-                      ChoiceChip(
-                        label: const Text('Credit', style: TextStyle(fontSize: 11)),
-                        selected: _isCredit,
-                        onSelected: (_) => setState(() {
-                          _isCredit = !_isCredit;
-                          if (_isCredit) _amountPaidController.clear();
-                          _isSplitPayment = false;
-                        }),
-                        backgroundColor: Colors.orange.shade100,
-                        selectedColor: Colors.orange,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
                   // Complete button
                   SizedBox(
                     width: double.infinity,
@@ -1929,110 +1950,61 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Expandable payment options
-                  GestureDetector(
-                    onTap: () => setState(
-                      () => _showPaymentOptions = !_showPaymentOptions,
+                  // Payment options — always visible
+                  CustomerPicker(
+                    selectedCustomer: _selectedCustomer,
+                    filteredCustomers: _filteredCustomers,
+                    searchController: _searchController,
+                    showSearch: _showCustomerSearch,
+                    onToggleSearch: () => setState(
+                      () => _showCustomerSearch = !_showCustomerSearch,
                     ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _showPaymentOptions
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 18,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Payment Options',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (!_showPaymentOptions)
-                            Text(
-                              _isCredit
-                                  ? 'Credit'
-                                  : _paymentMethod.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                    onClearCustomer: () =>
+                        setState(() => _selectedCustomer = null),
+                    onAddCustomer: _showAddCustomerDialog,
+                    onSearchChanged: _filterCustomers,
+                    onSelectCustomer: (customer) {
+                      setState(() {
+                        _selectedCustomer = customer;
+                        _showCustomerSearch = false;
+                        _searchController.clear();
+                      });
+                    },
                   ),
-                  // Expandable content
-                  if (_showPaymentOptions) ...[
-                    const SizedBox(height: 8),
-                    CustomerPicker(
-                      selectedCustomer: _selectedCustomer,
-                      filteredCustomers: _filteredCustomers,
-                      searchController: _searchController,
-                      showSearch: _showCustomerSearch,
-                      onToggleSearch: () => setState(
-                        () => _showCustomerSearch = !_showCustomerSearch,
-                      ),
-                      onClearCustomer: () =>
-                          setState(() => _selectedCustomer = null),
-                      onAddCustomer: _showAddCustomerDialog,
-                      onSearchChanged: _filterCustomers,
-                      onSelectCustomer: (customer) {
-                        setState(() {
-                          _selectedCustomer = customer;
-                          _showCustomerSearch = false;
-                          _searchController.clear();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    PaymentSection(
-                      discountController: _discountController,
-                      amountPaidController: _amountPaidController,
-                      paymentMethod: _paymentMethod,
-                      isCredit: _isCredit,
-                      dueAmount: _dueAmount,
-                      total: _total,
-                      isSplitPayment: _isSplitPayment,
-                      cashAmountController: _cashAmountController,
-                      upiAmountController: _upiAmountController,
-                      onPaymentMethodChanged: (method) => setState(() {
-                        _paymentMethod = method;
-                        _isCredit = false;
-                        _isSplitPayment = false;
-                      }),
-                      onCreditToggled: () => setState(() {
-                        _isCredit = !_isCredit;
-                        if (_isCredit) _amountPaidController.clear();
-                      }),
-                      onSplitPaymentToggled: (val) => setState(() {
-                        _isSplitPayment = val;
-                        if (val) {
-                          _cashAmountController.text = _total.toStringAsFixed(
-                            2,
-                          );
-                          _upiAmountController.text = '0.00';
-                        } else {
-                          _cashAmountController.clear();
-                          _upiAmountController.clear();
-                        }
-                      }),
-                      onChanged: () => setState(() {}),
-                    ),
-                  ],
+                  const SizedBox(height: 8),
+                  PaymentSection(
+                    discountController: _discountController,
+                    amountPaidController: _amountPaidController,
+                    paymentMethod: _paymentMethod,
+                    isCredit: _isCredit,
+                    dueAmount: _dueAmount,
+                    total: _total,
+                    isSplitPayment: _isSplitPayment,
+                    cashAmountController: _cashAmountController,
+                    upiAmountController: _upiAmountController,
+                    onPaymentMethodChanged: (method) => setState(() {
+                      _paymentMethod = method;
+                      _isCredit = false;
+                      _isSplitPayment = false;
+                    }),
+                    onCreditToggled: () => setState(() {
+                      _isCredit = !_isCredit;
+                      if (_isCredit) _amountPaidController.clear();
+                    }),
+                    onSplitPaymentToggled: (val) => setState(() {
+                      _isSplitPayment = val;
+                      if (val) {
+                        _cashAmountController.text = _total.toStringAsFixed(
+                          2,
+                        );
+                        _upiAmountController.text = '0.00';
+                      } else {
+                        _cashAmountController.clear();
+                        _upiAmountController.clear();
+                      }
+                    }),
+                    onChanged: () => setState(() {}),
+                  ),
                 ],
               ),
             ),

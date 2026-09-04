@@ -6,3 +6,8 @@
 # Play Core (for deferred components)
 -keep class com.google.android.play.core.** { *; }
 -dontwarn com.google.android.play.core.**
+
+# Bluetooth printer plugin (uses reflection)
+-keep class com.anish.blur.** { *; }
+-keep class flutter_bluetooth_printer.** { *; }
+-dontwarn flutter_bluetooth_printer.**
