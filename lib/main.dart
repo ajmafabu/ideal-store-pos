@@ -298,6 +298,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       actions: [
         if (!_downloading)
           TextButton(
+            onPressed: () async {
+              await UpdateService().skipVersion(widget.update.latestVersion);
+              widget.onDismiss?.call();
+            },
+            child: const Text('Skip This Version'),
+          ),
+        if (!_downloading)
+          TextButton(
             onPressed: () {
               widget.onDismiss?.call();
             },

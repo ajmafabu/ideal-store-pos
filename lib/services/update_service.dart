@@ -4,13 +4,34 @@ import 'package:archive/archive.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/logger.dart';
 
 class UpdateService {
   static const _repo = 'ajmafabu/ideal-store-pos';
   static const _apiUrl = 'https://api.github.com/repos/$_repo/releases/latest';
+  static const _skipVersionKey = 'skipped_update_version';
 
-  /// Check GitHub for a newer version. Returns null if up-to-date.
+  /// Save a version to skip (won't show update dialog for this version)
+  Future<void> skipVersion(String version) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_skipVersionKey, version);
+    Logger.info('Update: skipped version $version');
+  }
+
+  /// Get the skipped version (if any)
+  Future<String?> getSkippedVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_skipVersionKey);
+  }
+
+  /// Clear skipped version (e.g., after a successful manual update)
+  Future<void> clearSkippedVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_skipVersionKey);
+  }
+
+  /// Check GitHub for a newer version. Returns null if up-to-date or skipped.
   Future<UpdateInfo?> checkForUpdate() async {
     try {
       final info = await PackageInfo.fromPlatform();
@@ -60,6 +81,14 @@ class UpdateService {
       if (latestVersion == currentVersion) {
         print('[UPDATE] Versions match - no update needed');
         await debugFile.writeAsString('Result: versions match\n', mode: FileMode.append);
+        return null;
+      }
+
+      // Check if this version was skipped
+      final skippedVersion = await getSkippedVersion();
+      if (skippedVersion == latestVersion) {
+        print('[UPDATE] Version $latestVersion was skipped by user');
+        await debugFile.writeAsString('Result: version skipped\n', mode: FileMode.append);
         return null;
       }
 
@@ -183,45 +212,74 @@ class UpdateService {
       sourceDir = exeFiles.first.parent.path;
     }
 
-    // Create a robust batch script — kills old process, cleans, copies, restarts
-    // NOTE: Dart $ interpolation writes raw paths (single backslash) into the batch file.
-    // Do NOT escape backslashes — Dart handles that.
+    // Create a robust batch script — uses set variables, proper error handling
     final batScript = '''
 @echo off
 title Ideal Store POS Updater
 set "LOG=%TEMP%\\update_install.log"
-echo [%date% %time%] Update started > "%LOG%"
-echo [%date% %time%] Source: $sourceDir >> "%LOG%"
-echo [%date% %time%] Dest: $appDir >> "%LOG%"
+
+:: Define paths using set (avoids Dart interpolation issues)
+set "SOURCE=$sourceDir"
+set "DEST=$appDir"
+set "EXE=$exeName"
+
+echo [%date% %time%] ====== UPDATE STARTED ======>> "%LOG%"
+echo [%date% %time%] Source: %%SOURCE%% >> "%LOG%"
+echo [%date% %time%] Dest: %%DEST%% >> "%LOG%"
+
+:: Validate paths exist
+if not exist "%%SOURCE%%" (
+    echo [%date% %time%] ERROR: Source path does not exist >> "%LOG%"
+    goto :ERROR
+)
+if not exist "%%DEST%%" (
+    echo [%date% %time%] ERROR: Dest path does not exist >> "%LOG%"
+    goto :ERROR
+)
 
 :: Wait for app to fully close
 echo [%date% %time%] Waiting 5s for app to close... >> "%LOG%"
 timeout /t 5 /nobreak >nul
 
 :: Force kill any remaining instance
-taskkill /f /im "$exeName" >nul 2>&1
+echo [%date% %time%] Killing old process... >> "%LOG%"
+taskkill /f /im "%%EXE%%" >nul 2>&1
 timeout /t 2 /nobreak >nul
 
-:: Remove old files (will be replaced)
+:: Kill again in case it lingered
+taskkill /f /im "%%EXE%%" >nul 2>&1
+
+:: Remove old files
 echo [%date% %time%] Deleting old files... >> "%LOG%"
-del /Q "$appDir\\*.dll" 2>>"%LOG%"
-del /Q "$appDir\\*.exe" 2>>"%LOG%"
-del /Q "$appDir\\*.dat" 2>>"%LOG%"
-del /Q "$appDir\\*.json" 2>>"%LOG%"
+del /Q "%%DEST%%\\*.dll" 2>>"%LOG%"
+del /Q "%%DEST%%\\*.exe" 2>>"%LOG%"
+del /Q "%%DEST%%\\*.dat" 2>>"%LOG%"
+del /Q "%%DEST%%\\*.json" 2>>"%LOG%"
 timeout /t 1 /nobreak >nul
 
-:: Copy new files from source to app directory
+:: Copy new files
 echo [%date% %time%] Copying new files... >> "%LOG%"
-xcopy /E /Y /I "$sourceDir" "$appDir" >> "%LOG%" 2>&1
-
-:: Verify exe exists
-if exist "$appDir\\$exeName" (
-    echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
-    start "" "$appDir\\$exeName"
-) else (
-    echo [%date% %time%] FAILED: exe not found at $appDir\\$exeName >> "%LOG%"
+xcopy /E /Y /I "%%SOURCE%%" "%%DEST%%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [%date% %time%] ERROR: xcopy failed with errorlevel %%errorlevel%% >> "%LOG%"
+    goto :ERROR
 )
 
+:: Verify exe exists after copy
+if not exist "%%DEST%%\\%%EXE%%" (
+    echo [%date% %time%] ERROR: exe not found after copy >> "%LOG%"
+    goto :ERROR
+)
+
+echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
+start "" "%%DEST%%\\%%EXE%%"
+goto :DONE
+
+:ERROR
+echo [%date% %time%] ====== UPDATE FAILED ======>> "%LOG%"
+echo Please download manually from: https://github.com/ajmafabu/ideal-store-pos/releases >> "%LOG%"
+
+:DONE
 :: Self-delete after a delay
 timeout /t 3 /nobreak >nul
 del "%~f0"
