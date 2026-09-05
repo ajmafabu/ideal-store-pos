@@ -100,7 +100,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       final products = await ref.read(productServiceProvider).getAllProducts();
       if (mounted) {
         setState(() {
-          _allProducts = products.where((p) => p.stock > 0).toList();
+          _allProducts = products;
           _filterProducts(_productSearchQuery);
         });
       }
@@ -613,12 +613,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
           .read(productServiceProvider)
           .getProductByBarcode(result);
       if (product != null && mounted) {
-        if (product.stock <= 0) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Out of stock!')));
-          return;
-        }
         _addToCart(product);
       } else if (mounted) {
         ScaffoldMessenger.of(
@@ -697,19 +691,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   void _addVoiceItem(Product product, double qty) {
-    if (product.stock <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _useTamilVoice
-                ? '${product.tamilName ?? product.name} இருப்பு இல்லை'
-                : '${product.name} is out of stock',
-          ),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
     ref.read(cartProvider.notifier).addItem(
       CartItem(
         productId: product.id,

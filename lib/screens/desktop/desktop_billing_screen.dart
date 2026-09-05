@@ -696,30 +696,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _showResults = results.isNotEmpty;
       if (results.length == 1) {
         final p = results.first;
-        if (p.stock <= 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${p.name} is out of stock'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          setState(() {
-            _searchResults = results;
-            _selectedProduct = null;
-            _showResults = true;
-          });
-        } else {
-          final cost = (p.purchasePrice > 0)
-              ? p.purchasePrice
-              : (p.variants.isNotEmpty
-                  ? p.variants.first.purchasePrice
-                  : 0.0);
-          _selectedProduct = p;
-          _qtyController.text = '1';
-          _costController.text = cost.toStringAsFixed(2);
-          _searchResults = [];
-          _showResults = false;
-        }
+        final cost = (p.purchasePrice > 0)
+            ? p.purchasePrice
+            : (p.variants.isNotEmpty
+                ? p.variants.first.purchasePrice
+                : 0.0);
+        _selectedProduct = p;
+        _qtyController.text = '1';
+        _costController.text = cost.toStringAsFixed(2);
+        _searchResults = [];
+        _showResults = false;
       } else {
         _selectedProduct = null;
       }
@@ -780,15 +766,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           .where((p) => p.name.toLowerCase() == q)
           .firstOrNull;
       if (match != null) {
-        if ((match.stock as num).toInt() <= 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Product has no stock. Add stock before billing.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          return;
-        }
         setState(() {
           _selectedProduct = match;
           final price = (match.sellingPrice as num).toDouble();
@@ -1500,19 +1477,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${item.name} no longer exists'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-      if (product.stock < item.qty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '${item.name}: insufficient stock (${product.stock.toInt()} available, ${item.qty} in cart)',
-              ),
               backgroundColor: Colors.red,
             ),
           );

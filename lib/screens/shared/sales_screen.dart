@@ -1141,7 +1141,6 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
           .select(
             'id, name, selling_price, purchase_price, stock, unit, gst_rate, hsn_code',
           )
-          .gt('stock', 0)
           .order('name');
       if (mounted) {
         setState(() {

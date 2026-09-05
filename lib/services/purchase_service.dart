@@ -264,10 +264,12 @@ class PurchaseService {
       }
 
       if (pendingPurchases.isEmpty) {
-        // Cache normally
-        try {
-          await _offlineService.cachePurchases(supabaseRaw);
-        } catch (_) {}
+        // Only overwrite cache if Supabase actually returned data
+        if (supabaseRaw.isNotEmpty) {
+          try {
+            await _offlineService.cachePurchases(supabaseRaw);
+          } catch (_) {}
+        }
         return supabasePurchases;
       }
 
