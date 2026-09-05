@@ -122,7 +122,6 @@ class Purchase {
     'is_credit': isCredit,
     'amount_paid': amountPaid,
     'due_amount': dueAmount,
-    'payment_method': paymentMethod,
     'due_date': dueDate?.toIso8601String(),
   };
 }

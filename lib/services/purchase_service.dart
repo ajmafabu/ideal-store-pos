@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/purchase.dart';
 import '../utils/logger.dart';
@@ -24,10 +25,12 @@ class PurchaseService {
   Future<Purchase> createPurchase(Purchase purchase) async {
     try {
       final insertData = purchase.toInsertJson();
-      print('[PURCHASE] Creating purchase: total=${insertData['total_amount']}, items=${insertData['items'].length}');
-      print('[PURCHASE] Insert data keys: ${insertData.keys.toList()}');
-      print('[PURCHASE] supplier_id=${insertData['supplier_id']}, created_by=${insertData['created_by']}');
-      print('[PURCHASE] Full insert data: $insertData');
+      final logFile = File('${Directory.systemTemp.path}\\purchase_debug.log');
+      await logFile.writeAsString(
+        '=== createPurchase ===\n'
+        'Time: ${DateTime.now()}\n'
+        'Insert data: $insertData\n',
+      );
 
       final response = await _client
           .from('purchases')
@@ -36,7 +39,10 @@ class PurchaseService {
           .single();
 
       final purchaseId = response['id'] as String;
-      print('[PURCHASE] SUCCESS — created with id: $purchaseId');
+      await logFile.writeAsString(
+        'SUCCESS: id=$purchaseId\n',
+        mode: FileMode.append,
+      );
 
       // Add stock and inventory batches in parallel (non-fatal — purchase is already saved)
       final itemFutures = <Future>[];
@@ -116,9 +122,14 @@ class PurchaseService {
       }
 
       return Purchase.fromJson(response);
-    } catch (e) {
-      print('[PURCHASE] ❌ INSERT FAILED: $e');
-      print('[PURCHASE] Error type: ${e.runtimeType}');
+    } catch (e, stack) {
+      final logFile = File('${Directory.systemTemp.path}\\purchase_debug.log');
+      await logFile.writeAsString(
+        'FAILED: $e\n'
+        'Type: ${e.runtimeType}\n'
+        'Stack: $stack\n',
+        mode: FileMode.append,
+      );
       Logger.warning('Supabase insert failed, saving offline: $e');
       // Queue for offline sync
       final insertData = purchase.toInsertJson();
