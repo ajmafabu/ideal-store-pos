@@ -218,6 +218,7 @@ class UpdateService {
     }
 
     // Create a robust batch script — uses set variables, proper error handling
+    // NOTE: In batch files, variables use %VAR% (single percent), not %%VAR%%
     final batScript = '''
 @echo off
 title Ideal Store POS Updater
@@ -229,15 +230,15 @@ set "DEST=$appDir"
 set "EXE=$exeName"
 
 echo [%date% %time%] ====== UPDATE STARTED ======>> "%LOG%"
-echo [%date% %time%] Source: %%SOURCE%% >> "%LOG%"
-echo [%date% %time%] Dest: %%DEST%% >> "%LOG%"
+echo [%date% %time%] Source: %SOURCE% >> "%LOG%"
+echo [%date% %time%] Dest: %DEST% >> "%LOG%"
 
 :: Validate paths exist
-if not exist "%%SOURCE%%" (
+if not exist "%SOURCE%" (
     echo [%date% %time%] ERROR: Source path does not exist >> "%LOG%"
     goto :ERROR
 )
-if not exist "%%DEST%%" (
+if not exist "%DEST%" (
     echo [%date% %time%] ERROR: Dest path does not exist >> "%LOG%"
     goto :ERROR
 )
@@ -248,36 +249,36 @@ timeout /t 5 /nobreak >nul
 
 :: Force kill any remaining instance
 echo [%date% %time%] Killing old process... >> "%LOG%"
-taskkill /f /im "%%EXE%%" >nul 2>&1
+taskkill /f /im "%EXE%" >nul 2>&1
 timeout /t 2 /nobreak >nul
 
 :: Kill again in case it lingered
-taskkill /f /im "%%EXE%%" >nul 2>&1
+taskkill /f /im "%EXE%" >nul 2>&1
 
 :: Remove old files
 echo [%date% %time%] Deleting old files... >> "%LOG%"
-del /Q "%%DEST%%\\*.dll" 2>>"%LOG%"
-del /Q "%%DEST%%\\*.exe" 2>>"%LOG%"
-del /Q "%%DEST%%\\*.dat" 2>>"%LOG%"
-del /Q "%%DEST%%\\*.json" 2>>"%LOG%"
+del /Q "%DEST%\\*.dll" 2>>"%LOG%"
+del /Q "%DEST%\\*.exe" 2>>"%LOG%"
+del /Q "%DEST%\\*.dat" 2>>"%LOG%"
+del /Q "%DEST%\\*.json" 2>>"%LOG%"
 timeout /t 1 /nobreak >nul
 
 :: Copy new files
 echo [%date% %time%] Copying new files... >> "%LOG%"
-xcopy /E /Y /I "%%SOURCE%%" "%%DEST%%" >> "%LOG%" 2>&1
+xcopy /E /Y /I "%SOURCE%" "%DEST%" >> "%LOG%" 2>&1
 if errorlevel 1 (
-    echo [%date% %time%] ERROR: xcopy failed with errorlevel %%errorlevel%% >> "%LOG%"
+    echo [%date% %time%] ERROR: xcopy failed with errorlevel %errorlevel% >> "%LOG%"
     goto :ERROR
 )
 
 :: Verify exe exists after copy
-if not exist "%%DEST%%\\%%EXE%%" (
+if not exist "%DEST%\\%EXE%" (
     echo [%date% %time%] ERROR: exe not found after copy >> "%LOG%"
     goto :ERROR
 )
 
 echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
-start "" "%%DEST%%\\%%EXE%%"
+start "" "%DEST%\\%EXE%"
 goto :DONE
 
 :ERROR
