@@ -27,26 +27,28 @@ class ThermalRow {
 class TamilBitmapRenderer {
   static const double _canvasW = 500;
 
-  static const double _snoX = 0;
-  static const double _snoW = 30;
+  static const double _startX = 5.0;
+
+  static const double _snoX = 5;
+  static const double _snoW = 25;
 
   static const double _partX = 30;
   static const double _partW = 240;
 
   static const double _qtyX = 270;
-  static const double _qtyW = 50;
+  static const double _qtyW = 45;
 
-  static const double _rateX = 320;
-  static const double _rateW = 90;
+  static const double _rateX = 315;
+  static const double _rateW = 85;
 
-  static const double _amtX = 410;
+  static const double _amtX = 400;
   static const double _amtW = 90;
 
   static const double _borderH = 1.0;
   static const double _cellPadY = 3.0;
   static const double _tamilRowPad = 6.0;
   static const double _lineGap = 2.0;
-  static const double _topPad = 1.0;
+  static const double _topPad = 5.0;
 
   static Future<Uint8List> renderToBitmap(
     String text, {
@@ -285,12 +287,12 @@ class TamilBitmapRenderer {
         case _LineType.centered:
           if (li.painter != null) {
             final cx = (_canvasW - li.painter!.width) / 2;
-            li.painter!.paint(canvas, Offset(cx > 0 ? cx : 0, y));
+            li.painter!.paint(canvas, Offset(cx > _startX ? cx : _startX, y));
           }
           y += li.height;
         case _LineType.leftAligned:
           if (li.painter != null) {
-            li.painter!.paint(canvas, Offset(_snoX, y));
+            li.painter!.paint(canvas, Offset(_startX, y));
           }
           y += li.height;
         case _LineType.rightAligned:
