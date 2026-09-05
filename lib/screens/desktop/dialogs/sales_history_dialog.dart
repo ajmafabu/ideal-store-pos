@@ -122,6 +122,24 @@ class _DesktopSalesHistoryDialogState
         children: [
           const Text('Sales History'),
           const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 18),
+            onPressed: () {
+              ref.invalidate(salesHistoryProvider);
+              ref.invalidate(productsProvider);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sales history refreshed'),
+                  backgroundColor: Color(0xFF059669),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            tooltip: 'Refresh',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 8),
           if (!_loadedOffline)
             const SizedBox(
               width: 16, height: 16,

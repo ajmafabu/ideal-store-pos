@@ -990,15 +990,33 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 color: const Color(0xFF0F172A),
-                child: const Row(
+                child: Row(
                   children: [
-                    SizedBox(width: 40, child: Text('#', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600))),
-                    SizedBox(width: 12),
-                    Expanded(child: Text('SUPPLIER', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
-                    SizedBox(width: 80, child: Text('ITEMS', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
-                    SizedBox(width: 120, child: Text('AMOUNT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
-                    SizedBox(width: 140, child: Text('DATE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
-                    SizedBox(width: 48),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.white70, size: 18),
+                      onPressed: () {
+                        ref.invalidate(purchasesProvider);
+                        ref.invalidate(productsProvider);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Purchase history refreshed'),
+                            backgroundColor: Color(0xFF059669),
+                            duration: Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      tooltip: 'Refresh',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 12),
+                    const SizedBox(width: 40, child: Text('#', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600))),
+                    const SizedBox(width: 12),
+                    const Expanded(child: Text('SUPPLIER', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    const SizedBox(width: 80, child: Text('ITEMS', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    const SizedBox(width: 120, child: Text('AMOUNT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    const SizedBox(width: 140, child: Text('DATE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),

@@ -344,74 +344,63 @@ class PurchaseService {
       final totalAmount =
           (purchaseData['total_amount'] as num?)?.toDouble() ?? 0;
 
-      // Run ALL cleanup operations in parallel (not sequential)
-      final cleanupFutures = <Future>[];
+      // Delete the purchase record FIRST (fast, critical path)
+      await _client.from('purchases').delete().eq('id', purchaseId);
+      ProductService.invalidateCache();
 
+      // Everything else runs in background (fire-and-forget)
       // Delete inventory batches
-      cleanupFutures.add(
-        _client.from('inventory_batches').delete().eq('purchase_id', purchaseId)
-            .catchError((e) => Logger.warning('Failed to delete inventory batches: $e')),
-      );
+      _client.from('inventory_batches').delete().eq('purchase_id', purchaseId)
+          .catchError((e) => Logger.warning('Failed to delete inventory batches: $e'));
 
-      // Decrement stock per item using direct UPDATE (faster than RPC)
+      // Decrement stock per item
       for (final item in items) {
         final productId = item['product_id'] as String?;
         final qty = (item['qty'] as num?)?.toInt() ?? 0;
         if (productId != null && qty > 0) {
-          cleanupFutures.add(
-            _client
-                .from('products')
-                .select('stock')
-                .eq('id', productId)
-                .single()
-                .then((current) async {
-                  final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-                  await _client
-                      .from('products')
-                      .update({
-                        'stock': currentStock - qty,
-                        'updated_at': DateTime.now().toUtc().toIso8601String(),
-                      })
-                      .eq('id', productId);
-                })
-                .catchError((e) => Logger.warning('Failed to decrement stock for $productId: $e')),
-          );
+          _client
+              .from('products')
+              .select('stock')
+              .eq('id', productId)
+              .single()
+              .then((current) {
+                final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
+                _client
+                    .from('products')
+                    .update({
+                      'stock': currentStock - qty,
+                      'updated_at': DateTime.now().toUtc().toIso8601String(),
+                    })
+                    .eq('id', productId);
+              })
+              .catchError((e) => Logger.warning('Failed to decrement stock for $productId: $e'));
         }
       }
 
       // Reverse account entry
       if (!isCredit && totalAmount > 0) {
-        cleanupFutures.add(
-          _accountService.getAccounts().then((accounts) {
-            if (accounts.isNotEmpty) {
-              final account = accounts.firstWhere(
-                (a) => a.accountType == 'cash',
-                orElse: () => accounts.first,
-              );
-              return _accountService.addTransaction(
-                accountId: account.id,
-                type: 'in',
-                amount: totalAmount,
-                category: 'purchase_reversal',
-                description: 'Reversed purchase',
-              );
-            }
-          }).catchError((e) => Logger.error('Failed to reverse account entry', e)),
-        );
+        _accountService.getAccounts().then((accounts) {
+          if (accounts.isNotEmpty) {
+            final account = accounts.firstWhere(
+              (a) => a.accountType == 'cash',
+              orElse: () => accounts.first,
+            );
+            _accountService.addTransaction(
+              accountId: account.id,
+              type: 'in',
+              amount: totalAmount,
+              category: 'purchase_reversal',
+              description: 'Reversed purchase',
+            );
+          }
+        }).catchError((e) => Logger.error('Failed to reverse account entry', e));
       }
 
       // Delete supplier payment
       if (isCredit && supplierId != null) {
-        cleanupFutures.add(
-          _client.from('supplier_payments').delete().eq('purchase_id', purchaseId)
-              .catchError((e) => Logger.warning('Failed to delete supplier payment: $e')),
-        );
+        _client.from('supplier_payments').delete().eq('purchase_id', purchaseId)
+            .catchError((e) => Logger.warning('Failed to delete supplier payment: $e'));
       }
-
-      // Wait for all cleanup, then delete the purchase
-      await Future.wait(cleanupFutures);
-      await _client.from('purchases').delete().eq('id', purchaseId);
-      ProductService.invalidateCache();
     } catch (e) {
       Logger.warning('Delete purchase failed (offline?), queuing: $e');
       await _offlineService.queuePendingWrite({
