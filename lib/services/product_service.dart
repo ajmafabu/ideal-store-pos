@@ -336,10 +336,20 @@ class ProductService {
 
   Future<void> addStock(String productId, int quantity) async {
     try {
-      await _client.rpc(
-        'increment_stock',
-        params: {'p_product_id': productId, 'p_qty': quantity},
-      );
+      // Use direct UPDATE instead of RPC to trigger Supabase Realtime events
+      final current = await _client
+          .from('products')
+          .select('stock')
+          .eq('id', productId)
+          .single();
+      final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
+      await _client
+          .from('products')
+          .update({
+            'stock': currentStock + quantity,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', productId);
       ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('addStock', e, stackTrace);
@@ -353,10 +363,20 @@ class ProductService {
 
   Future<void> deductStock(String productId, int quantity) async {
     try {
-      await _client.rpc(
-        'decrement_stock',
-        params: {'p_product_id': productId, 'p_qty': quantity},
-      );
+      // Use direct UPDATE instead of RPC to trigger Supabase Realtime events
+      final current = await _client
+          .from('products')
+          .select('stock')
+          .eq('id', productId)
+          .single();
+      final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
+      await _client
+          .from('products')
+          .update({
+            'stock': currentStock - quantity,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', productId);
       ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('deductStock', e, stackTrace);
