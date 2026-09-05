@@ -740,6 +740,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         // Ctrl+2 / F2: Purchase History tab
         if ((ctrl && key == LogicalKeyboardKey.digit2) || key == LogicalKeyboardKey.f2) {
           setState(() => _showHistory = true);
+          ref.invalidate(purchasesProvider);
           return;
         }
 
@@ -890,7 +891,10 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                       _purchaseTab(
                         'PURCHASE HISTORY',
                         _showHistory,
-                        () => setState(() => _showHistory = true),
+                        () {
+                          setState(() => _showHistory = true);
+                          ref.invalidate(purchasesProvider);
+                        },
                       ),
                     ],
                   ),

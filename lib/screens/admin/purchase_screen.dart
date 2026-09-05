@@ -23,7 +23,8 @@ class PurchaseScreen extends ConsumerStatefulWidget {
   ConsumerState<PurchaseScreen> createState() => _PurchaseScreenState();
 }
 
-class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
+class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
+    with SingleTickerProviderStateMixin {
   final List<PurchaseItem> _cart = [];
   final _searchController = TextEditingController();
   final _amountPaidController = TextEditingController();
@@ -35,6 +36,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
   bool _isCredit = false;
   String _paymentMethod = 'cash';
   bool _isLoading = false;
+  TabController? _tabController;
 
   double get _total => _cart.fold(0.0, (sum, item) => sum + item.total);
   double get _amountPaid =>
@@ -44,8 +46,16 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController!.addListener(_onTabChange);
     _loadProducts();
     _loadSuppliers();
+  }
+
+  void _onTabChange() {
+    if (_tabController?.index == 1) {
+      ref.invalidate(purchasesProvider);
+    }
   }
 
   Future<void> _loadProducts() async {
@@ -1084,6 +1094,8 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
 
   @override
   void dispose() {
+    _tabController?.removeListener(_onTabChange);
+    _tabController?.dispose();
     _searchController.dispose();
     _amountPaidController.dispose();
     super.dispose();
@@ -1096,8 +1108,9 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Purchases'),
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
               Tab(text: 'New Purchase'),
               Tab(text: 'History'),
             ],
