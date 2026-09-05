@@ -27,28 +27,25 @@ class ThermalRow {
 class TamilBitmapRenderer {
   static const double _canvasW = 500;
 
-  static const double _startX = 2.0;
-
   static const double _snoX = 2;
-  static const double _snoW = 25;
+  static const double _snoW = 22;
 
-  static const double _partX = 27;
-  static const double _partW = 253;
+  static const double _partX = 24;
+  static const double _partW = 240;
 
-  static const double _qtyX = 280;
-  static const double _qtyW = 45;
+  static const double _qtyX = 264;
+  static const double _qtyW = 40;
 
-  static const double _rateX = 325;
-  static const double _rateW = 85;
+  static const double _rateX = 304;
+  static const double _rateW = 80;
 
-  static const double _amtX = 410;
-  static const double _amtW = 88;
+  static const double _amtX = 384;
+  static const double _amtW = 110;
 
+  static const double _tableRight = 494;
   static const double _borderH = 1.0;
-  static const double _cellPadY = 3.0;
-  static const double _tamilRowPad = 6.0;
-  static const double _tamilBotPad = 4.0;
-  static const double _lineGap = 2.0;
+  static const double _cellPadY = 2.0;
+  static const double _lineGap = 1.5;
   static const double _topPad = 2.0;
 
   static Future<Uint8List> renderToBitmap(
@@ -141,12 +138,12 @@ class TamilBitmapRenderer {
           line.startsWith('Date:') ||
           line.startsWith('Customer:');
       final sz = isFirst
-          ? 28.0
+          ? 26.0
           : (line == 'QUOTATION'
-              ? 24.0
-              : (line.startsWith('Customer:') ? 20.0 : 18.0));
+              ? 22.0
+              : (line.startsWith('Customer:') ? 18.0 : 16.0));
       final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: _canvasW - 20);
+      tp.layout(maxWidth: _canvasW - 10);
       lineInfos.add(
         _LineInfo(
           type: _LineType.centered,
@@ -160,16 +157,16 @@ class TamilBitmapRenderer {
     lineInfos.add(_LineInfo(type: _LineType.borderTop, height: _borderH));
     totalH += _borderH;
 
-    final hdrSno = _makeTp('#', 18, true);
-    final hdrPart = _makeTp('Item', 18, true);
-    final hdrQty = _makeTp('Qty', 18, true);
-    final hdrRate = _makeTp('Rate', 18, true);
-    final hdrAmt = _makeTp('Amt', 18, true);
+    final hdrSno = _makeTp('#', 16, true);
+    final hdrPart = _makeTp('Item', 16, true);
+    final hdrQty = _makeTp('Qty', 16, true);
+    final hdrRate = _makeTp('Rate', 16, true);
+    final hdrAmt = _makeTp('Amt', 16, true);
     hdrSno.layout(maxWidth: _snoW);
     hdrPart.layout(maxWidth: _partW - 6);
     hdrQty.layout(maxWidth: _qtyW);
     hdrRate.layout(maxWidth: _rateW);
-    hdrAmt.layout(maxWidth: _amtW - 6);
+    hdrAmt.layout(maxWidth: _amtW - 4);
     final hdrH = hdrSno.height + _cellPadY * 2;
     lineInfos.add(
       _LineInfo(
@@ -184,32 +181,48 @@ class TamilBitmapRenderer {
     totalH += _borderH;
 
     for (final row in rows) {
-      final sno = _makeTp('${row.sNo}', 20, true);
-      final part = _makeTp(row.productName, 20, true);
-      final qty = _makeTp('${row.qty}', 20, true);
-      final rate = _makeTp(row.rate.toStringAsFixed(2), 20, true);
-      final amt = _makeTp(row.amount.toStringAsFixed(2), 20, true);
+      final sno = _makeTp('${row.sNo}', 18, true);
+      final qty = _makeTp('${row.qty}', 18, true);
+      final rate = _makeTp(row.rate.toStringAsFixed(2), 18, true);
+      final amt = _makeTp(row.amount.toStringAsFixed(2), 18, true);
 
       sno.layout(maxWidth: _snoW);
-      part.layout(maxWidth: _partW);
       qty.layout(maxWidth: _qtyW);
       rate.layout(maxWidth: _rateW);
       amt.layout(maxWidth: _amtW);
 
+      var productName = row.productName;
+      final partTp = _makeTp(productName, 18, true);
+      partTp.layout(maxWidth: _partW - 6);
+      if (partTp.width > _partW - 6) {
+        int maxChars = productName.length;
+        while (maxChars > 3) {
+          final test = '${productName.substring(0, maxChars)}…';
+          final testTp = _makeTp(test, 18, true);
+          testTp.layout(maxWidth: _partW - 6);
+          if (testTp.width <= _partW - 6) {
+            productName = test;
+            break;
+          }
+          maxChars--;
+        }
+        if (maxChars <= 3) productName = '${productName.substring(0, 3)}…';
+      }
+
+      final part = _makeTp(productName, 18, true);
+      part.layout(maxWidth: _partW - 6);
+
       final maxH = [sno, part, qty, rate, amt]
           .fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
-
-      final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(row.productName);
-      final rowPadExtra = hasTamil ? _tamilRowPad + _tamilBotPad : 0.0;
 
       lineInfos.add(
         _LineInfo(
           type: _LineType.tableRow,
-          height: maxH + _cellPadY * 2 + rowPadExtra,
+          height: maxH + _cellPadY * 2,
           painters: [sno, part, qty, rate, amt],
         ),
       );
-      totalH += maxH + _cellPadY * 2 + rowPadExtra;
+      totalH += maxH + _cellPadY * 2;
 
       lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
       totalH += _borderH;
@@ -219,9 +232,9 @@ class TamilBitmapRenderer {
       final isNetTotal = line.startsWith('NET TOTAL');
       final isTotalItems = line.startsWith('Total Items');
       final isBold = isNetTotal || line.startsWith('Total');
-      final sz = isNetTotal ? 24.0 : 18.0;
+      final sz = isNetTotal ? 22.0 : 16.0;
       final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: _canvasW - 20);
+      tp.layout(maxWidth: _canvasW - 10);
       lineInfos.add(
         _LineInfo(
           type: isNetTotal
@@ -236,8 +249,8 @@ class TamilBitmapRenderer {
 
     for (final line in footerLines) {
       if (line.isEmpty) continue;
-      final tp = _makeTp(line, 18, false);
-      tp.layout(maxWidth: _canvasW - 20);
+      final tp = _makeTp(line, 16, false);
+      tp.layout(maxWidth: _canvasW - 10);
       lineInfos.add(
         _LineInfo(
           type: _LineType.centered,
@@ -272,14 +285,14 @@ class TamilBitmapRenderer {
         case _LineType.borderTop:
           canvas.drawLine(
             Offset(_snoX, y),
-            Offset(_amtX + _amtW, y),
+            Offset(_tableRight, y),
             borderPaint,
           );
           y += li.height;
         case _LineType.borderRow:
           canvas.drawLine(
             Offset(_snoX, y),
-            Offset(_amtX + _amtW, y),
+            Offset(_tableRight, y),
             borderPaint,
           );
           y += li.height;
@@ -288,17 +301,17 @@ class TamilBitmapRenderer {
         case _LineType.centered:
           if (li.painter != null) {
             final cx = (_canvasW - li.painter!.width) / 2;
-            li.painter!.paint(canvas, Offset(cx > _startX ? cx : _startX, y));
+            li.painter!.paint(canvas, Offset(cx > 0 ? cx : 0, y));
           }
           y += li.height;
         case _LineType.leftAligned:
           if (li.painter != null) {
-            li.painter!.paint(canvas, Offset(_startX, y));
+            li.painter!.paint(canvas, Offset(_snoX, y));
           }
           y += li.height;
         case _LineType.rightAligned:
           if (li.painter != null) {
-            final rx = _amtX + _amtW - li.painter!.width;
+            final rx = _tableRight - li.painter!.width;
             li.painter!.paint(canvas, Offset(rx > 0 ? rx : 0, y));
           }
           y += li.height;
@@ -322,13 +335,13 @@ class TamilBitmapRenderer {
               final cellY = y + (li.height - tp.height) / 2;
               double cellX;
               if (i == 0) {
-                cellX = _snoX + 2;
+                cellX = _snoX + ((_snoW - tp.width) / 2);
               } else if (i == 1) {
                 cellX = _partX + 3;
               } else {
                 final colX = i == 2 ? _qtyX : (i == 3 ? _rateX : _amtX);
                 final colW = i == 2 ? _qtyW : (i == 3 ? _rateW : _amtW);
-                cellX = colX + colW - tp.width - 4;
+                cellX = colX + colW - tp.width - 3;
               }
               tp.paint(canvas, Offset(cellX, cellY));
             }
@@ -357,7 +370,7 @@ class TamilBitmapRenderer {
           color: Colors.black,
           fontFamily: fontFamily,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-          height: hasTamil ? 1.35 : null,
+          height: hasTamil ? 1.2 : null,
         ),
       ),
       textDirection: TextDirection.ltr,

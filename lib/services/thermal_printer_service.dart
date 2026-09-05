@@ -287,16 +287,15 @@ class ThermalPrinterService {
 
       final pdf = pw.Document();
 
-      // 80mm thermal paper, zero margins, image docks top-left
-      const paperWidthMm = 80.0;
+      // Calculate physical dimensions from pixel canvas
+      final imageWidthMm = iw * 25.4 / 203;
       final imageHeightMm = ih * 25.4 / 203;
-
-      // Split into pages if too tall (thermal printer limit ~297mm = A4)
       const maxPageHeightMm = 297.0;
+
       if (imageHeightMm <= maxPageHeightMm) {
         final pageFormat = PdfPageFormat(
-          PdfPageFormat.mm * paperWidthMm,
-          PdfPageFormat.mm * (imageHeightMm + 2),
+          PdfPageFormat.mm * imageWidthMm,
+          PdfPageFormat.mm * (imageHeightMm + 1),
           marginBottom: 0,
           marginTop: 0,
           marginLeft: 0,
@@ -309,14 +308,14 @@ class ThermalPrinterService {
               alignment: pw.Alignment.topLeft,
               child: pw.Image(
                 pw.MemoryImage(pngBytes),
-                width: PdfPageFormat.mm * paperWidthMm,
+                width: PdfPageFormat.mm * imageWidthMm,
+                height: PdfPageFormat.mm * imageHeightMm,
                 fit: pw.BoxFit.contain,
               ),
             ),
           ),
         );
       } else {
-        // Split image into vertical chunks
         final totalChunks = (imageHeightMm / maxPageHeightMm).ceil();
         final chunkHeightPx = ih ~/ totalChunks;
 
@@ -326,20 +325,13 @@ class ThermalPrinterService {
           final chunkHMm = chunkH * 25.4 / 203;
 
           final chunkBytes = await _cropImagePng(
-            pngBytes,
-            iw,
-            ih,
-            0,
-            startY,
-            iw,
-            chunkH,
+            pngBytes, iw, ih, 0, startY, iw, chunkH,
           );
-
           if (chunkBytes.isEmpty) continue;
 
           final pageFormat = PdfPageFormat(
-            PdfPageFormat.mm * paperWidthMm,
-            PdfPageFormat.mm * (chunkHMm + 2),
+            PdfPageFormat.mm * imageWidthMm,
+            PdfPageFormat.mm * (chunkHMm + 1),
             marginBottom: 0,
             marginTop: 0,
             marginLeft: 0,
@@ -353,7 +345,8 @@ class ThermalPrinterService {
                 alignment: pw.Alignment.topLeft,
                 child: pw.Image(
                   pw.MemoryImage(chunkBytes),
-                  width: PdfPageFormat.mm * paperWidthMm,
+                  width: PdfPageFormat.mm * imageWidthMm,
+                  height: PdfPageFormat.mm * chunkHMm,
                   fit: pw.BoxFit.contain,
                 ),
               ),
