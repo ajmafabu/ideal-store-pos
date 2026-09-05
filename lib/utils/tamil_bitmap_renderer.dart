@@ -33,20 +33,21 @@ class TamilBitmapRenderer {
   static const double _snoW = 25;
 
   static const double _partX = 27;
-  static const double _partW = 240;
+  static const double _partW = 253;
 
-  static const double _qtyX = 267;
+  static const double _qtyX = 280;
   static const double _qtyW = 45;
 
-  static const double _rateX = 312;
+  static const double _rateX = 325;
   static const double _rateW = 85;
 
-  static const double _amtX = 397;
-  static const double _amtW = 90;
+  static const double _amtX = 410;
+  static const double _amtW = 88;
 
   static const double _borderH = 1.0;
   static const double _cellPadY = 3.0;
   static const double _tamilRowPad = 6.0;
+  static const double _tamilBotPad = 4.0;
   static const double _lineGap = 2.0;
   static const double _topPad = 2.0;
 
@@ -165,10 +166,10 @@ class TamilBitmapRenderer {
     final hdrRate = _makeTp('Rate', 18, true);
     final hdrAmt = _makeTp('Amt', 18, true);
     hdrSno.layout(maxWidth: _snoW);
-    hdrPart.layout(maxWidth: _partW - 4);
+    hdrPart.layout(maxWidth: _partW - 6);
     hdrQty.layout(maxWidth: _qtyW);
     hdrRate.layout(maxWidth: _rateW);
-    hdrAmt.layout(maxWidth: _amtW - 4);
+    hdrAmt.layout(maxWidth: _amtW - 6);
     final hdrH = hdrSno.height + _cellPadY * 2;
     lineInfos.add(
       _LineInfo(
@@ -199,7 +200,7 @@ class TamilBitmapRenderer {
           .fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
 
       final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(row.productName);
-      final rowPadExtra = hasTamil ? _tamilRowPad : 0.0;
+      final rowPadExtra = hasTamil ? _tamilRowPad + _tamilBotPad : 0.0;
 
       lineInfos.add(
         _LineInfo(
@@ -323,7 +324,7 @@ class TamilBitmapRenderer {
               if (i == 0) {
                 cellX = _snoX + 2;
               } else if (i == 1) {
-                cellX = _partX + 4;
+                cellX = _partX + 3;
               } else {
                 final colX = i == 2 ? _qtyX : (i == 3 ? _rateX : _amtX);
                 final colW = i == 2 ? _qtyW : (i == 3 ? _rateW : _amtW);
@@ -356,7 +357,7 @@ class TamilBitmapRenderer {
           color: Colors.black,
           fontFamily: fontFamily,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-          height: hasTamil ? 1.3 : null,
+          height: hasTamil ? 1.35 : null,
         ),
       ),
       textDirection: TextDirection.ltr,
