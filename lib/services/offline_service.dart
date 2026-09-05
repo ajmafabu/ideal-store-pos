@@ -783,9 +783,23 @@ class OfflineService {
 
   Future<bool> isOnline() async {
     try {
+      // First check basic connectivity
       final connectivity = Connectivity();
       final results = await connectivity.checkConnectivity();
-      return results.any((r) => r != ConnectivityResult.none);
+      final hasConnectivity = results.any((r) => r != ConnectivityResult.none);
+      if (!hasConnectivity) return false;
+
+      // Then verify Supabase is actually reachable
+      try {
+        await Supabase.instance.client
+            .from('products')
+            .select('id')
+            .limit(1)
+            .timeout(const Duration(seconds: 5));
+        return true;
+      } catch (e) {
+        return false;
+      }
     } catch (e) {
       return false;
     }

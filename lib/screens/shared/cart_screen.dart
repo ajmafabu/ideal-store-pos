@@ -1040,6 +1040,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       } else {
         try {
           await ref.read(saleServiceProvider).createSale(sale);
+          ref.invalidate(productsProvider);
         } catch (e) {
           savedOffline = true;
           final saleJson = sale.toInsertJson();

@@ -115,6 +115,10 @@ class PurchaseService {
       Logger.warning('Supabase insert failed, saving offline: $e');
       // Queue for offline sync
       final insertData = purchase.toInsertJson();
+      // Add id and created_at so Purchase.fromJson() can parse pending data after restart
+      final offlineId = DateTime.now().microsecondsSinceEpoch.toString();
+      insertData['id'] = offlineId;
+      insertData['created_at'] = DateTime.now().toUtc().toIso8601String();
       await _offlineService.queuePendingWrite({
         'table': 'purchases',
         'operation': 'insert',

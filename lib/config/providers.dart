@@ -668,8 +668,22 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         },
       );
 
-  channel.subscribe();
+  channel.subscribe((status, [error]) {
+    Logger.info('Realtime channel status: $status');
+    if (error != null) {
+      Logger.error('Realtime channel error', error);
+    }
+  });
   ref.onDispose(() => channel.unsubscribe());
+
+  // Fallback: refresh products every 60s even if Realtime drops
+  final timer = Timer.periodic(const Duration(seconds: 60), (_) {
+    ProductService.invalidateCache();
+    ref.invalidate(productsProvider);
+    ref.invalidate(stockValueProvider);
+  });
+  ref.onDispose(() => timer.cancel());
+
   return channel;
 });
 
