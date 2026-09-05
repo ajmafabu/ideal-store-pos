@@ -130,7 +130,7 @@ class ThermalInvoice {
       headerLines: header,
       rows: rows,
       totalLines: totals,
-      footerLines: const ['thank you'],
+      footerLines: const ['Thank you for shopping with us!'],
     );
   }
 
@@ -206,7 +206,7 @@ class ThermalInvoice {
       headerLines: header,
       rows: rows,
       totalLines: totals,
-      footerLines: const ['thank you'],
+      footerLines: const ['Thank you for shopping with us!'],
     );
   }
 
