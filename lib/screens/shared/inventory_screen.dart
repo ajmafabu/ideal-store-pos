@@ -733,6 +733,22 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         title: const Text('Inventory'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.invalidate(productsProvider);
+              _loadSalesStats();
+              _loadCategories();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Inventory refreshed'),
+                  backgroundColor: Color(0xFF059669),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            tooltip: 'Refresh',
+          ),
+          IconButton(
             icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
             onPressed: () => setState(() => _isGridView = !_isGridView),
             tooltip: _isGridView ? 'List View' : 'Grid View',
