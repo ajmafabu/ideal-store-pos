@@ -114,11 +114,14 @@ class PurchaseService {
     } catch (e) {
       Logger.warning('Supabase insert failed, saving offline: $e');
       // Queue for offline sync
+      final insertData = purchase.toInsertJson();
       await _offlineService.queuePendingWrite({
         'table': 'purchases',
         'operation': 'insert',
-        'data': purchase.toInsertJson(),
+        'data': insertData,
       });
+      // Also cache locally so History tab shows it immediately
+      await _offlineService.addCachedPurchase(insertData);
       // Queue stock increments for each item
       for (final item in purchase.items) {
         await _offlineService.queuePendingWrite({
@@ -154,9 +157,11 @@ class PurchaseService {
 
       final list = <Purchase>[];
       final rawList = <Map<String, dynamic>>[];
+      final supabaseIds = <String>{};
       for (final e in response as List) {
         final map = e as Map<String, dynamic>;
         rawList.add(map);
+        supabaseIds.add(map['id'] as String);
         try {
           list.add(Purchase.fromJson(map));
         } catch (parseError) {
@@ -202,24 +207,16 @@ class PurchaseService {
           return p;
         }).toList();
 
-        // Cache for offline
-        try {
-          await _offlineService.cachePurchases(rawList);
-        } catch (e) {
-          Logger.warning('Failed to cache purchases for offline: $e');
-        }
+        // Cache for offline + merge any pending offline purchases
+        final merged = await _mergeOfflinePurchases(result, rawList, supabaseIds);
 
-        return result;
+        return merged;
       }
 
-      // Cache for offline
-      try {
-        await _offlineService.cachePurchases(rawList);
-      } catch (e) {
-        Logger.warning('Failed to cache purchases for offline: $e');
-      }
+      // Cache for offline + merge any pending offline purchases
+      final merged = await _mergeOfflinePurchases(list, rawList, supabaseIds);
 
-      return list;
+      return merged;
     } catch (e) {
       Logger.error('Failed to fetch purchases', e);
       // Offline fallback
@@ -233,6 +230,51 @@ class PurchaseService {
         Logger.warning('Failed to load purchases from offline cache: $e');
       }
       return [];
+    }
+  }
+
+  /// Merge pending offline purchases (not yet in Supabase) into the result list
+  Future<List<Purchase>> _mergeOfflinePurchases(
+    List<Purchase> supabasePurchases,
+    List<Map<String, dynamic>> supabaseRaw,
+    Set<String> supabaseIds,
+  ) async {
+    try {
+      // Get purchases that are queued for sync but not yet in Supabase
+      final pendingRaw = _offlineService.getPendingPurchases();
+      final pendingPurchases = <Purchase>[];
+      for (final rawData in pendingRaw) {
+        // Skip if this purchase already exists in Supabase
+        final pid = rawData['id'] as String?;
+        if (pid != null && supabaseIds.contains(pid)) continue;
+        try {
+          pendingPurchases.add(Purchase.fromJson(rawData));
+        } catch (e) {
+          Logger.warning('Failed to parse pending purchase: $e');
+        }
+      }
+
+      if (pendingPurchases.isEmpty) {
+        // Cache normally
+        try {
+          await _offlineService.cachePurchases(supabaseRaw);
+        } catch (_) {}
+        return supabasePurchases;
+      }
+
+      // Merge: pending offline purchases + Supabase purchases
+      final mergedList = [...pendingPurchases, ...supabasePurchases];
+
+      // Update cache with Supabase data only (pending will be added on next offline save)
+      try {
+        await _offlineService.cachePurchases(supabaseRaw);
+      } catch (_) {}
+
+      Logger.info('Merged ${pendingPurchases.length} pending offline purchases');
+      return mergedList;
+    } catch (e) {
+      Logger.warning('Failed to merge offline purchases: $e');
+      return supabasePurchases;
     }
   }
 

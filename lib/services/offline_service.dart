@@ -138,6 +138,29 @@ class OfflineService {
         .toList();
   }
 
+  Future<void> addCachedPurchase(Map<String, dynamic> purchase) async {
+    await _ensureInitialized();
+    final id = purchase['id'] as String? ?? DateTime.now().microsecondsSinceEpoch.toString();
+    purchase['id'] = id;
+    await _purchasesBox.put(id, purchase);
+    await _purchasesBox.flush();
+    Logger.info('Cached offline purchase: $id');
+  }
+
+  Future<void> removeCachedPurchase(String id) async {
+    await _ensureInitialized();
+    await _purchasesBox.delete(id);
+    await _purchasesBox.flush();
+  }
+
+  List<Map<String, dynamic>> getPendingPurchases() {
+    if (!_initialized) return [];
+    return _pendingWritesBox.values
+        .where((w) => w['table'] == 'purchases' && w['operation'] == 'insert')
+        .map((w) => Map<String, dynamic>.from(w['data'] as Map))
+        .toList();
+  }
+
   // ========== EXPENSE CACHING ==========
 
   Future<void> cacheExpenses(List<Map<String, dynamic>> expenses) async {
