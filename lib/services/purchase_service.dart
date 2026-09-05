@@ -24,9 +24,10 @@ class PurchaseService {
   Future<Purchase> createPurchase(Purchase purchase) async {
     try {
       final insertData = purchase.toInsertJson();
-      Logger.info(
-        'Creating purchase: total=${insertData['total_amount']}, items=${insertData['items'].length}',
-      );
+      print('[PURCHASE] Creating purchase: total=${insertData['total_amount']}, items=${insertData['items'].length}');
+      print('[PURCHASE] Insert data keys: ${insertData.keys.toList()}');
+      print('[PURCHASE] supplier_id=${insertData['supplier_id']}, created_by=${insertData['created_by']}');
+      print('[PURCHASE] Full insert data: $insertData');
 
       final response = await _client
           .from('purchases')
@@ -35,7 +36,7 @@ class PurchaseService {
           .single();
 
       final purchaseId = response['id'] as String;
-      Logger.info('Purchase created with id: $purchaseId');
+      print('[PURCHASE] SUCCESS — created with id: $purchaseId');
 
       // Add stock and inventory batches in parallel (non-fatal — purchase is already saved)
       final itemFutures = <Future>[];
@@ -116,6 +117,8 @@ class PurchaseService {
 
       return Purchase.fromJson(response);
     } catch (e) {
+      print('[PURCHASE] ❌ INSERT FAILED: $e');
+      print('[PURCHASE] Error type: ${e.runtimeType}');
       Logger.warning('Supabase insert failed, saving offline: $e');
       // Queue for offline sync
       final insertData = purchase.toInsertJson();
