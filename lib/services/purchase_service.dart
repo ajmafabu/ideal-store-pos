@@ -344,64 +344,72 @@ class PurchaseService {
       final totalAmount =
           (purchaseData['total_amount'] as num?)?.toDouble() ?? 0;
 
-      try {
-        await _client
-            .from('inventory_batches')
-            .delete()
-            .eq('purchase_id', purchaseId);
-      } catch (e) {
-        Logger.warning('Failed to delete inventory batches: $e');
-      }
+      // Run ALL cleanup operations in parallel (not sequential)
+      final cleanupFutures = <Future>[];
 
-      // Decrement stock per item (with individual error handling)
+      // Delete inventory batches
+      cleanupFutures.add(
+        _client.from('inventory_batches').delete().eq('purchase_id', purchaseId)
+            .catchError((e) => Logger.warning('Failed to delete inventory batches: $e')),
+      );
+
+      // Decrement stock per item using direct UPDATE (faster than RPC)
       for (final item in items) {
         final productId = item['product_id'] as String?;
         final qty = (item['qty'] as num?)?.toInt() ?? 0;
         if (productId != null && qty > 0) {
-          try {
-            await _client.rpc(
-              'decrement_stock',
-              params: {'p_product_id': productId, 'p_qty': qty},
-            );
-          } catch (e) {
-            Logger.warning('Failed to decrement stock for $productId: $e');
-          }
+          cleanupFutures.add(
+            _client
+                .from('products')
+                .select('stock')
+                .eq('id', productId)
+                .single()
+                .then((current) async {
+                  final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
+                  await _client
+                      .from('products')
+                      .update({
+                        'stock': currentStock - qty,
+                        'updated_at': DateTime.now().toUtc().toIso8601String(),
+                      })
+                      .eq('id', productId);
+                })
+                .catchError((e) => Logger.warning('Failed to decrement stock for $productId: $e')),
+          );
         }
       }
 
-      // Reverse account entry (Money In — undo the Money Out)
+      // Reverse account entry
       if (!isCredit && totalAmount > 0) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          if (accounts.isNotEmpty) {
-            final account = accounts.firstWhere(
-              (a) => a.accountType == 'cash',
-              orElse: () => accounts.first,
-            );
-            await _accountService.addTransaction(
-              accountId: account.id,
-              type: 'in',
-              amount: totalAmount,
-              category: 'purchase_reversal',
-              description: 'Reversed purchase',
-            );
-          }
-        } catch (e) {
-          Logger.error('Failed to reverse account entry for purchase', e);
-        }
+        cleanupFutures.add(
+          _accountService.getAccounts().then((accounts) {
+            if (accounts.isNotEmpty) {
+              final account = accounts.firstWhere(
+                (a) => a.accountType == 'cash',
+                orElse: () => accounts.first,
+              );
+              return _accountService.addTransaction(
+                accountId: account.id,
+                type: 'in',
+                amount: totalAmount,
+                category: 'purchase_reversal',
+                description: 'Reversed purchase',
+              );
+            }
+          }).catchError((e) => Logger.error('Failed to reverse account entry', e)),
+        );
       }
 
+      // Delete supplier payment
       if (isCredit && supplierId != null) {
-        try {
-          await _client
-              .from('supplier_payments')
-              .delete()
-              .eq('purchase_id', purchaseId);
-        } catch (e) {
-          Logger.warning('Failed to delete supplier payment for purchase: $e');
-        }
+        cleanupFutures.add(
+          _client.from('supplier_payments').delete().eq('purchase_id', purchaseId)
+              .catchError((e) => Logger.warning('Failed to delete supplier payment: $e')),
+        );
       }
 
+      // Wait for all cleanup, then delete the purchase
+      await Future.wait(cleanupFutures);
       await _client.from('purchases').delete().eq('id', purchaseId);
       ProductService.invalidateCache();
     } catch (e) {
