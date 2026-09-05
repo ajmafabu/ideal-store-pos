@@ -143,25 +143,14 @@ class PurchaseService {
   }
 
   Future<List<Purchase>> getPurchases({int limit = 100}) async {
-    final online = await _offlineService.isOnline();
-    if (!online) {
-      try {
-        final cached = _offlineService.getCachedPurchases();
-        if (cached.isNotEmpty) {
-          return cached.map((e) => Purchase.fromJson(e)).toList();
-        }
-      } catch (e) {
-        Logger.warning('Failed to read cached purchases (offline): $e');
-      }
-      return [];
-    }
-
+    // Always try Supabase first — isOnline() can give false negatives
     try {
       final response = await _client
           .from('purchases')
           .select()
           .order('created_at', ascending: false)
-          .limit(limit);
+          .limit(limit)
+          .timeout(const Duration(seconds: 10));
 
       final list = <Purchase>[];
       final rawList = <Map<String, dynamic>>[];
@@ -215,19 +204,15 @@ class PurchaseService {
           return p;
         }).toList();
 
-        // Cache for offline + merge any pending offline purchases
         final merged = await _mergeOfflinePurchases(result, rawList, supabaseIds);
-
         return merged;
       }
 
-      // Cache for offline + merge any pending offline purchases
       final merged = await _mergeOfflinePurchases(list, rawList, supabaseIds);
-
       return merged;
     } catch (e) {
-      Logger.error('Failed to fetch purchases', e);
-      // Offline fallback
+      Logger.warning('Supabase fetch failed, using cache: $e');
+      // Offline fallback — use cache
       try {
         final cached = _offlineService.getCachedPurchases();
         if (cached.isNotEmpty) {
