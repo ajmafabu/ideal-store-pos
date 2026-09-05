@@ -790,16 +790,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     if (_searchResults.isEmpty) return;
     final product = _searchResults[_selectedResultIndex];
 
-    if ((product.stock as num).toInt() <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Product has no stock. Add stock before billing.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
     _selectedProduct = product;
 
     final cost = (product.purchasePrice > 0)
