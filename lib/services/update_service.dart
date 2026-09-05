@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:archive/archive.dart';
-import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,7 +49,12 @@ class UpdateService {
           'API URL: $_apiUrl\n',
           mode: FileMode.append);
 
-      final response = await http.get(Uri.parse(_apiUrl)).timeout(const Duration(seconds: 15));
+      final client = HttpClient()
+        ..badCertificateCallback = (cert, host, port) => true;
+      final request = await client.getUrl(Uri.parse(_apiUrl));
+      final response = await request.close().timeout(const Duration(seconds: 15));
+      final body = await response.transform(utf8.decoder).join();
+      client.close();
       print('[UPDATE] API response status: ${response.statusCode}');
       await debugFile.writeAsString(
           'Response status: ${response.statusCode}\n',
@@ -58,12 +62,12 @@ class UpdateService {
 
       if (response.statusCode != 200) {
         await debugFile.writeAsString(
-            'Response body: ${response.body}\n',
+            'Response body: $body\n',
             mode: FileMode.append);
         return null;
       }
 
-      final release = json.decode(response.body);
+      final release = json.decode(body);
       final tagName = release['tag_name'] ?? '';
       final latestVersion = tagName.replaceFirst('v', '');
       print('[UPDATE] Latest version from GitHub: $latestVersion');
@@ -142,15 +146,16 @@ class UpdateService {
 
     // Download zip
     Logger.info('Downloading update: ${update.downloadUrl}');
-    final client = http.Client();
-    final request = http.Request('GET', Uri.parse(update.downloadUrl));
-    final response = await client.send(request).timeout(const Duration(minutes: 5));
+    final client = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true;
+    final request = await client.getUrl(Uri.parse(update.downloadUrl));
+    final response = await request.close().timeout(const Duration(minutes: 5));
 
     final totalBytes = response.contentLength ?? 0;
     var receivedBytes = 0;
     final sink = File(zipPath).openWrite();
 
-    await for (final chunk in response.stream) {
+    await for (final chunk in response) {
       sink.add(chunk);
       receivedBytes += chunk.length;
       if (totalBytes > 0) {
