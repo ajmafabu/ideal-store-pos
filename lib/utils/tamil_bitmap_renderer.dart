@@ -25,17 +25,18 @@ class ThermalRow {
 }
 
 class TamilBitmapRenderer {
-  static const double _snoX = 0;
+  static const double _margin = 15.0;
+  static const double _snoX = 15;
   static const double _snoW = 20;
-  static const double _partX = 22;
+  static const double _partX = 37;
   static const double _partW = 242;
-  static const double _qtyX = 264;
+  static const double _qtyX = 281;
   static const double _qtyW = 36;
-  static const double _rateX = 302;
+  static const double _rateX = 319;
   static const double _rateW = 100;
-  static const double _amtX = 402;
-  static const double _amtW = 174;
-  static const double _lineEnd = 578;
+  static const double _amtX = 421;
+  static const double _amtW = 188;
+  static const double _lineEnd = 609;
   static const double _borderH = 1.0;
 
   static Future<Uint8List> renderToBitmap(
@@ -113,16 +114,16 @@ class TamilBitmapRenderer {
     double fontSize = 24,
   }) async {
     const cw = ThermalColumnLayout.printableWidthPx;
-    const lineGap = 4.0;
+    const lineGap = 2.0;
     const cellPadY = 3.0;
 
     final List<_LineInfo> lineInfos = [];
-    double totalH = 2;
+    double totalH = 1;
 
     for (final line in headerLines) {
       if (line.isEmpty) {
-        lineInfos.add(_LineInfo(type: _LineType.empty, height: 6));
-        totalH += 6;
+        lineInfos.add(_LineInfo(type: _LineType.empty, height: 4));
+        totalH += 4;
         continue;
       }
       final isFirst = line == headerLines.first;
@@ -265,7 +266,7 @@ class TamilBitmapRenderer {
       totalH += tp.height + lineGap;
     }
 
-    totalH += 2;
+    totalH += 1;
 
     final width = cw.toInt();
     final height = totalH.ceil();
@@ -281,7 +282,7 @@ class TamilBitmapRenderer {
       ..color = Colors.black
       ..strokeWidth = _borderH;
 
-    double y = 2;
+    double y = 1;
     for (final li in lineInfos) {
       switch (li.type) {
         case _LineType.empty:
@@ -310,7 +311,7 @@ class TamilBitmapRenderer {
           y += li.height;
         case _LineType.leftAligned:
           if (li.painter != null) {
-            li.painter!.paint(canvas, Offset(0, y));
+            li.painter!.paint(canvas, Offset(_margin, y));
           }
           y += li.height;
         case _LineType.rightAligned:
