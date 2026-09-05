@@ -287,14 +287,14 @@ class ThermalPrinterService {
 
       final pdf = pw.Document();
 
-      // Calculate physical dimensions from pixel canvas
-      final imageWidthMm = iw * 25.4 / 203;
+      // Fixed 78mm thermal paper width
+      const paperWidthMm = 78.0;
       final imageHeightMm = ih * 25.4 / 203;
       const maxPageHeightMm = 297.0;
 
       if (imageHeightMm <= maxPageHeightMm) {
         final pageFormat = PdfPageFormat(
-          PdfPageFormat.mm * imageWidthMm,
+          PdfPageFormat.mm * paperWidthMm,
           PdfPageFormat.mm * (imageHeightMm + 1),
           marginBottom: 0,
           marginTop: 0,
@@ -308,7 +308,7 @@ class ThermalPrinterService {
               alignment: pw.Alignment.topLeft,
               child: pw.Image(
                 pw.MemoryImage(pngBytes),
-                width: PdfPageFormat.mm * imageWidthMm,
+                width: PdfPageFormat.mm * paperWidthMm,
                 height: PdfPageFormat.mm * imageHeightMm,
                 fit: pw.BoxFit.contain,
               ),
@@ -330,7 +330,7 @@ class ThermalPrinterService {
           if (chunkBytes.isEmpty) continue;
 
           final pageFormat = PdfPageFormat(
-            PdfPageFormat.mm * imageWidthMm,
+            PdfPageFormat.mm * paperWidthMm,
             PdfPageFormat.mm * (chunkHMm + 1),
             marginBottom: 0,
             marginTop: 0,
@@ -345,7 +345,7 @@ class ThermalPrinterService {
                 alignment: pw.Alignment.topLeft,
                 child: pw.Image(
                   pw.MemoryImage(chunkBytes),
-                  width: PdfPageFormat.mm * imageWidthMm,
+                  width: PdfPageFormat.mm * paperWidthMm,
                   height: PdfPageFormat.mm * chunkHMm,
                   fit: pw.BoxFit.contain,
                 ),
