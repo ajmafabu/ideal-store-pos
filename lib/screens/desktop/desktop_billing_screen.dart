@@ -96,7 +96,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   bool _isSyncing = false;
   bool _isProcessing = false;
   double _customerCredit = 0;
-  String _searchMode = 'code'; // 'code' or 'products'
+  String _searchMode = 'products'; // 'code' or 'products'
   String _selectedUnitType = 'pieces';
   int _piecesPerUnit = 1;
   String? _selectedRateLabel;
