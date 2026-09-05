@@ -287,8 +287,8 @@ class ThermalPrinterService {
 
       final pdf = pw.Document();
 
-      // Fixed 78mm thermal paper width
-      const paperWidthMm = 78.0;
+      // Fixed 80mm thermal paper width
+      const paperWidthMm = 80.0;
       final imageHeightMm = ih * 25.4 / 203;
       const maxPageHeightMm = 297.0;
 
