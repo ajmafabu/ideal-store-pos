@@ -444,6 +444,13 @@ class OfflineService {
         writeFutures.add(
           _syncSingleWrite(write)
               .then((_) async {
+                // Remove offline-cached purchase after successful sync
+                if (write['table'] == 'purchases' && write['operation'] == 'insert') {
+                  final dataId = (write['data'] as Map<String, dynamic>)['id'] as String?;
+                  if (dataId != null) {
+                    await removeCachedPurchase(dataId);
+                  }
+                }
                 await removePendingWrite(write['id'] as String);
               })
               .catchError((e) async {
@@ -664,8 +671,9 @@ class OfflineService {
       case 'insert':
         final insertData = Map<String, dynamic>.from(data);
         insertData.remove('id');
-        // Check for duplicate before insert
-        if (data['id'] != null) {
+        // Check for duplicate before insert (only for valid UUIDs to avoid postgres crash)
+        final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+        if (data['id'] != null && uuidPattern.hasMatch(data['id'] as String)) {
           final existing = await supabase
               .from(table)
               .select('id')

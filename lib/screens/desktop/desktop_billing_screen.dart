@@ -1700,7 +1700,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
+        // Queue stock deductions for each item
+        for (final item in sale.items) {
+          await offlineService.queuePendingWrite({
+            'table': 'products',
+            'operation': 'stock_deduct',
+            'data': {'product_id': item.productId, 'qty': item.qty},
+          });
+        }
         ref.invalidate(salesHistoryProvider);
+        ref.invalidate(productsProvider);
         ref.read(desktopBillingProvider.notifier).resetAfterSale(sessionIndex);
         if (mounted) {
           _resetSaleState();
@@ -1734,7 +1743,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
+        // Queue stock deductions for each item
+        for (final item in sale.items) {
+          await offlineService.queuePendingWrite({
+            'table': 'products',
+            'operation': 'stock_deduct',
+            'data': {'product_id': item.productId, 'qty': item.qty},
+          });
+        }
         ref.invalidate(salesHistoryProvider);
+        ref.invalidate(productsProvider);
       } catch (e) {
         Logger.warning('Failed to save sale offline: $e');
       }

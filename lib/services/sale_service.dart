@@ -5,6 +5,7 @@ import '../utils/logger.dart';
 import 'account_service.dart';
 import 'audit_service.dart';
 import 'offline_service.dart';
+import 'product_service.dart';
 
 class SaleService {
   final SupabaseClient _client;
@@ -32,6 +33,16 @@ class SaleService {
           );
 
       final createdSale = Sale.fromJson(response);
+
+      // Deduct stock for each item
+      final productService = ProductService();
+      for (final item in sale.items) {
+        try {
+          await productService.deductStock(item.productId, item.qty);
+        } catch (e) {
+          Logger.error('Stock deduction failed for ${item.productId}', e);
+        }
+      }
 
       AuditService().log(
         action: 'create',

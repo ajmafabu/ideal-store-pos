@@ -1036,7 +1036,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
+        // Queue stock deductions for each item
+        for (final item in sale.items) {
+          await offlineService.queuePendingWrite({
+            'table': 'products',
+            'operation': 'stock_deduct',
+            'data': {'product_id': item.productId, 'qty': item.qty},
+          });
+        }
         ref.invalidate(salesHistoryProvider);
+        ref.invalidate(productsProvider);
       } else {
         try {
           await ref.read(saleServiceProvider).createSale(sale);
@@ -1048,7 +1057,16 @@ class _CartScreenState extends ConsumerState<CartScreen>
               ? sale.id
               : DateTime.now().millisecondsSinceEpoch.toString();
           await offlineService.saveSaleOffline(saleJson);
+          // Queue stock deductions for each item
+          for (final item in sale.items) {
+            await offlineService.queuePendingWrite({
+              'table': 'products',
+              'operation': 'stock_deduct',
+              'data': {'product_id': item.productId, 'qty': item.qty},
+            });
+          }
           ref.invalidate(salesHistoryProvider);
+          ref.invalidate(productsProvider);
         }
       }
 

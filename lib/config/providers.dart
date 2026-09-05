@@ -50,13 +50,13 @@ final forceSyncProvider = FutureProvider<bool>((ref) async {
 // Periodically refreshes pending sync count (every 10 seconds)
 final syncStatusProvider = StreamProvider<SyncStatus>((ref) async* {
   final offlineService = ref.watch(offlineServiceProvider);
-  final connectivityService = ref.watch(connectivityServiceProvider);
 
   while (true) {
     final pendingSales = offlineService.pendingCount;
     final pendingOps = offlineService.pendingOpsCount;
     final pendingWrites = offlineService.pendingWritesCount;
-    final isConnected = connectivityService.isConnected;
+    // Use actual Supabase reachability, not just basic network connectivity
+    final isConnected = await offlineService.isOnline();
 
     yield SyncStatus(
       isConnected: isConnected,
