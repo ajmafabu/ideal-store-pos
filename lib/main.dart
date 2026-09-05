@@ -129,51 +129,55 @@ void main() async {
 }
 
 void _scheduleUpdateCheck() {
-  // Auto-update is Windows-only
   if (!Platform.isWindows) return;
 
-  Timer(const Duration(seconds: 7), () async {
-    final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
-    try {
-      await logFile.writeAsString(
-          '=== Update Check v1.0.24 ===\nTime: ${DateTime.now()}\n');
-
-      final updateService = UpdateService();
-      final update = await updateService.checkForUpdate();
-
-      if (update != null) {
-        await logFile.writeAsString(
-            'UPDATE FOUND: ${update.currentVersion} → ${update.latestVersion}\n'
-            'URL: ${update.downloadUrl}\n',
-            mode: FileMode.append);
-
-        if (routerNavigatorKey.currentState != null) {
-          await logFile.writeAsString('NavigatorState found, pushing dialog route\n', mode: FileMode.append);
-          routerNavigatorKey.currentState!.push(
-            DialogRoute(
-              context: routerNavigatorKey.currentContext!,
-              barrierDismissible: false,
-              builder: (_) => _UpdateDialog(
-                update: update,
-                onDismiss: () => routerNavigatorKey.currentState!.pop(),
-              ),
-            ),
-          );
-        } else {
-          await logFile.writeAsString('ERROR: NavigatorState is null\n', mode: FileMode.append);
-          print('[UPDATE] ERROR: NavigatorState is null');
-        }
-      } else {
-        await logFile.writeAsString('No update available\n', mode: FileMode.append);
-        print('[UPDATE] App is up to date');
-      }
-    } catch (e, st) {
-      print('[UPDATE] Update check failed: $e');
+  void checkWithRetry(int attempt) {
+    Timer(const Duration(seconds: 5), () async {
+      final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
       try {
-        logFile.writeAsStringSync('ERROR: $e\n$st\n', mode: FileMode.append);
-      } catch (_) {}
-    }
-  });
+        await logFile.writeAsString(
+            '=== Update Check (attempt $attempt) ===\nTime: ${DateTime.now()}\n');
+
+        final updateService = UpdateService();
+        final update = await updateService.checkForUpdate();
+
+        if (update != null) {
+          await logFile.writeAsString(
+              'UPDATE FOUND: ${update.currentVersion} → ${update.latestVersion}\n'
+              'URL: ${update.downloadUrl}\n',
+              mode: FileMode.append);
+
+          if (routerNavigatorKey.currentState != null) {
+            await logFile.writeAsString('NavigatorState found, pushing dialog\n', mode: FileMode.append);
+            routerNavigatorKey.currentState!.push(
+              DialogRoute(
+                context: routerNavigatorKey.currentContext!,
+                barrierDismissible: false,
+                builder: (_) => _UpdateDialog(
+                  update: update,
+                  onDismiss: () => routerNavigatorKey.currentState!.pop(),
+                ),
+              ),
+            );
+          } else if (attempt < 5) {
+            await logFile.writeAsString('NavigatorState null, retrying (attempt ${attempt + 1})\n', mode: FileMode.append);
+            checkWithRetry(attempt + 1);
+          } else {
+            await logFile.writeAsString('ERROR: NavigatorState still null after $attempt attempts\n', mode: FileMode.append);
+          }
+        } else {
+          await logFile.writeAsString('No update available\n', mode: FileMode.append);
+        }
+      } catch (e, st) {
+        print('[UPDATE] Update check failed: $e');
+        try {
+          logFile.writeAsStringSync('ERROR: $e\n$st\n', mode: FileMode.append);
+        } catch (_) {}
+      }
+    });
+  }
+
+  checkWithRetry(1);
 }
 
 class MyApp extends ConsumerStatefulWidget {
