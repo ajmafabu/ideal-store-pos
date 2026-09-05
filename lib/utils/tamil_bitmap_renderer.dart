@@ -26,15 +26,15 @@ class ThermalRow {
 
 class TamilBitmapRenderer {
   static const double _snoX = 0;
-  static const double _snoW = 35;
-  static const double _partX = 37;
-  static const double _partW = 200;
-  static const double _qtyX = 239;
-  static const double _qtyW = 65;
+  static const double _snoW = 25;
+  static const double _partX = 28;
+  static const double _partW = 214;
+  static const double _qtyX = 244;
+  static const double _qtyW = 51;
   static const double _rateX = 306;
   static const double _rateW = 130;
   static const double _amtX = 438;
-  static const double _amtW = 140;
+  static const double _amtW = 138;
   static const double _lineEnd = 578;
   static const double _borderH = 1.0;
 
@@ -181,12 +181,12 @@ class TamilBitmapRenderer {
     for (final row in rows) {
       final sno = _makeTp('${row.sNo}', 26, true);
       var productName = row.productName;
-      if (productName.length > 18) {
-        final cutPoint = productName.lastIndexOf(' ', 18);
+      if (productName.length > 20) {
+        final cutPoint = productName.lastIndexOf(' ', 20);
         if (cutPoint > 10) {
           productName = '${productName.substring(0, cutPoint)}…';
         } else {
-          productName = '${productName.substring(0, 16)}…';
+          productName = '${productName.substring(0, 18)}…';
         }
       }
       final part = _makeTp(productName, 26, true);
