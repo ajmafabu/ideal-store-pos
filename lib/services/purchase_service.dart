@@ -358,6 +358,7 @@ class PurchaseService {
       }
 
       await _client.from('purchases').delete().eq('id', purchaseId);
+      ProductService.invalidateCache();
     } catch (e) {
       Logger.warning('Delete purchase failed (offline?), queuing: $e');
       await _offlineService.queuePendingWrite({
@@ -365,6 +366,7 @@ class PurchaseService {
         'operation': 'delete',
         'data': {'id': purchaseId},
       });
+      rethrow;
     }
   }
 

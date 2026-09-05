@@ -265,6 +265,8 @@ class OfflineService {
     op['id'] = id;
     op['timestamp'] = DateTime.now().toIso8601String();
     op['synced'] = false;
+    op['retry_count'] = 0;
+    op['last_error'] = null;
     await _pendingWritesBox.put(id, op);
     Logger.info('Queued pending write: ${op['type']} for ${op['table']}');
   }
@@ -325,6 +327,8 @@ class OfflineService {
     final id =
         saleData['id'] ?? DateTime.now().millisecondsSinceEpoch.toString();
     saleData['id'] = id;
+    saleData['retry_count'] = 0;
+    saleData['last_error'] = null;
     await _pendingBox.put(id, saleData);
     // Also add to local sales cache so it appears in history immediately
     await _salesBox.put(id, saleData);
@@ -360,6 +364,8 @@ class OfflineService {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     op['id'] = id;
     op['timestamp'] = DateTime.now().toIso8601String();
+    op['retry_count'] = 0;
+    op['last_error'] = null;
     await _pendingOpsBox.put(id, op);
     Logger.info('Queued operation: ${op['type']} for ${op['sale_id']}');
   }
@@ -432,6 +438,7 @@ class OfflineService {
 
     // Sync pending writes in PARALLEL (purchases, expenses, products, etc.)
     if (writes.isNotEmpty) {
+      const maxRetries = 5;
       final writeFutures = <Future>[];
       for (final write in writes) {
         writeFutures.add(
@@ -439,8 +446,17 @@ class OfflineService {
               .then((_) async {
                 await removePendingWrite(write['id'] as String);
               })
-              .catchError((e) {
+              .catchError((e) async {
                 Logger.error('Failed to sync write: ${write['id']}', e);
+                final retryCount = (write['retry_count'] as int? ?? 0) + 1;
+                write['retry_count'] = retryCount;
+                write['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+                if (retryCount >= maxRetries) {
+                  Logger.error('Max retries ($maxRetries) exceeded for write ${write["id"]}, removing', e);
+                  await removePendingWrite(write['id'] as String);
+                } else {
+                  await _pendingWritesBox.put(write['id'] as String, write);
+                }
                 allSynced = false;
               }),
         );
@@ -450,6 +466,7 @@ class OfflineService {
 
     // Sync pending operations (edit/delete) in PARALLEL
     if (ops.isNotEmpty) {
+      const maxRetries = 5;
       final opFutures = <Future>[];
       for (final op in ops) {
         opFutures.add(
@@ -487,8 +504,17 @@ class OfflineService {
             }
 
             await removePendingOperation(op['id'] as String);
-          }().catchError((e) {
+          }().catchError((e) async {
             Logger.error('Failed to sync operation: ${op['id']}', e);
+            final retryCount = (op['retry_count'] as int? ?? 0) + 1;
+            op['retry_count'] = retryCount;
+            op['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+            if (retryCount >= maxRetries) {
+              Logger.error('Max retries exceeded for operation ${op["id"]}, removing');
+              await removePendingOperation(op['id'] as String);
+            } else {
+              await _pendingOpsBox.put(op['id'] as String, op);
+            }
             allSynced = false;
           }),
         );
@@ -498,6 +524,7 @@ class OfflineService {
 
     // Sync new sales in PARALLEL (account entries created per-sale)
     if (sales.isNotEmpty) {
+      const maxRetries = 5;
       final saleFutures = <Future>[];
       for (final sale in sales) {
         saleFutures.add(
@@ -587,11 +614,20 @@ class OfflineService {
             // Also remove from local cache (the sale now exists in Supabase with its real UUID)
             await _salesBox.delete(saleId);
             print('[SYNC] Sale $saleId synced successfully');
-          }().catchError((e) {
+          }().catchError((e) async {
             final msg = 'Failed to sync sale ${sale['id']}: $e';
             print('[SYNC ERROR] $msg');
             Logger.error(msg);
             lastSyncError = msg;
+            final retryCount = (sale['retry_count'] as int? ?? 0) + 1;
+            sale['retry_count'] = retryCount;
+            sale['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+            if (retryCount >= maxRetries) {
+              Logger.error('Max retries exceeded for sale ${sale["id"]}, removing');
+              await removePendingSale(sale['id'] as String);
+            } else {
+              await _pendingBox.put(sale['id'] as String, sale);
+            }
             allSynced = false;
           }),
         );

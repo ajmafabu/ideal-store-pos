@@ -2073,6 +2073,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                     .read(purchaseServiceProvider)
                     .deletePurchase(purchase.id);
                 ref.invalidate(purchasesProvider);
+                ref.invalidate(productsProvider);
                 ref.invalidate(accountsProvider);
                 ref.invalidate(todayTransactionsProvider);
                 if (context.mounted) {

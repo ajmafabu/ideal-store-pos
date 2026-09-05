@@ -614,6 +614,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         schema: 'public',
         table: 'products',
         callback: (payload) {
+          ProductService.invalidateCache();
           ref.invalidate(productsProvider);
           ref.invalidate(stockValueProvider);
         },
