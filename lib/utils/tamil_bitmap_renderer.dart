@@ -34,9 +34,9 @@ class TamilBitmapRenderer {
   static const double _qtyX = 314;
   static const double _qtyW = 50;
   static const double _rateX = 366;
-  static const double _rateW = 100;
-  static const double _amtX = 468;
-  static const double _amtW = 110;
+  static const double _rateW = 84;
+  static const double _amtX = 452;
+  static const double _amtW = 118;
 
   static Future<Uint8List> renderToBitmap(
     String text, {
@@ -139,7 +139,7 @@ class TamilBitmapRenderer {
           line == 'QUOTATION' ||
           line.startsWith('Date:') ||
           line.startsWith('Customer:');
-      final sz = isFirst ? 28.0 : (line.startsWith('Customer:') ? 24.0 : 22.0);
+      final sz = isFirst ? 32.0 : (line == 'QUOTATION' ? 28.0 : (line.startsWith('Customer:') ? 24.0 : 22.0));
       final tp = _makeTp(line, sz, isBold);
       tp.layout(maxWidth: cw);
       lineInfos.add(
@@ -157,11 +157,11 @@ class TamilBitmapRenderer {
     totalH += sepH;
 
     // Table header
-    final hdrSno = _makeTp('#', 20, true);
-    final hdrPart = _makeTp('Item', 20, true);
-    final hdrQty = _makeTp('Qty', 20, true);
-    final hdrRate = _makeTp('Rate', 20, true);
-    final hdrAmt = _makeTp('Amt', 20, true);
+    final hdrSno = _makeTp('#', 24, true);
+    final hdrPart = _makeTp('Item', 24, true);
+    final hdrQty = _makeTp('Qty', 24, true);
+    final hdrRate = _makeTp('Rate', 24, true);
+    final hdrAmt = _makeTp('Amt', 24, true);
     hdrSno.layout(maxWidth: _snoW);
     hdrPart.layout(maxWidth: _partW);
     hdrQty.layout(maxWidth: _qtyW);
@@ -183,26 +183,26 @@ class TamilBitmapRenderer {
 
     // Data rows
     for (final row in rows) {
-      final sno = _makeTp('${row.sNo}', 24, true);
+      final sno = _makeTp('${row.sNo}', 30, true);
       // Truncate product name smartly — avoid cutting mid-word or mid-Tamil glyph
       var productName = row.productName;
-      if (productName.length > 22) {
-        // Try to break at last space before 22 chars
-        final cutPoint = productName.lastIndexOf(' ', 22);
-        if (cutPoint > 14) {
+      if (productName.length > 20) {
+        // Try to break at last space before 20 chars
+        final cutPoint = productName.lastIndexOf(' ', 20);
+        if (cutPoint > 12) {
           productName = '${productName.substring(0, cutPoint)}…';
         } else {
-          productName = '${productName.substring(0, 20)}…';
+          productName = '${productName.substring(0, 18)}…';
         }
       }
       final part = _makeTp(
         productName,
-        24,
+        30,
         true,
       );
-      final qty = _makeTp('${row.qty}', 24, true);
-      final rate = _makeTp(row.rate.toStringAsFixed(2), 24, true);
-      final amt = _makeTp(row.amount.toStringAsFixed(2), 24, true);
+      final qty = _makeTp('${row.qty}', 30, true);
+      final rate = _makeTp(row.rate.toStringAsFixed(2), 30, true);
+      final amt = _makeTp(row.amount.toStringAsFixed(2), 30, true);
       sno.layout(maxWidth: _snoW);
       part.layout(maxWidth: _partW);
       qty.layout(maxWidth: _qtyW);
@@ -239,7 +239,7 @@ class TamilBitmapRenderer {
       final isNetTotal = line.startsWith('NET TOTAL');
       final isTotalItems = line.startsWith('Total Items');
       final isBold = isNetTotal || line.startsWith('Total');
-      final sz = isNetTotal ? 24.0 : 20.0;
+      final sz = isNetTotal ? 32.0 : 24.0;
       final tp = _makeTp(line, sz, isBold);
       tp.layout(maxWidth: cw);
       lineInfos.add(
@@ -257,7 +257,7 @@ class TamilBitmapRenderer {
     // Footer
     for (final line in footerLines) {
       if (line.isEmpty) continue;
-      final tp = _makeTp(line, 20, false);
+      final tp = _makeTp(line, 24, false);
       tp.layout(maxWidth: cw);
       lineInfos.add(
         _LineInfo(

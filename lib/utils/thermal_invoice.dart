@@ -24,17 +24,17 @@ class ThermalReceiptData {
       sb.writeln(line);
     }
     // Fixed-width columns for 80mm thermal printer (48 chars total)
-    // S.No=4, Particulars=24, Qty=5, Rate=9, Amt=10
-    sb.writeln('S.No Particulars             Qty    Rate      Amt');
+    // S.No=4, Particulars=22, Qty=5, Rate=9, Amt=8
+    sb.writeln('S.No Particulars           Qty    Rate      Amt');
     sb.writeln('\u2500' * 48);
     for (final row in rows) {
       final sno = row.sNo.toString().padLeft(2);
-      final name = row.productName.length > 24
-          ? row.productName.substring(0, 24)
-          : row.productName.padRight(24);
+      final name = row.productName.length > 22
+          ? row.productName.substring(0, 22)
+          : row.productName.padRight(22);
       final qty = row.qty.toString().padLeft(4);
       final rate = _fmt(row.rate).padLeft(9);
-      final amt = _fmt(row.amount).padLeft(10);
+      final amt = _fmt(row.amount).padLeft(8);
       sb.writeln('$sno  $name $qty $rate $amt');
     }
     for (final line in totalLines) {
