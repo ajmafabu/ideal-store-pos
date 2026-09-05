@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 class ThermalColumnLayout {
   ThermalColumnLayout._();
-  static const double printableWidthPx = 624;
+  static const double printableWidthPx = 500;
   static const double dpi = 203;
 }
 
@@ -25,30 +25,39 @@ class ThermalRow {
 }
 
 class TamilBitmapRenderer {
-  static const double _margin = 15.0;
-  static const double _snoX = 15;
-  static const double _snoW = 20;
-  static const double _partX = 37;
-  static const double _partW = 242;
-  static const double _qtyX = 281;
-  static const double _qtyW = 36;
-  static const double _rateX = 319;
-  static const double _rateW = 100;
-  static const double _amtX = 421;
-  static const double _amtW = 188;
-  static const double _lineEnd = 609;
+  static const double _canvasW = 500;
+  static const double _lineEnd = 495;
+
+  static const double _snoX = 10;
+  static const double _snoW = 25;
+
+  static const double _partX = 35;
+  static const double _partW = 230;
+
+  static const double _qtyX = 275;
+  static const double _qtyW = 45;
+
+  static const double _rateX = 320;
+  static const double _rateW = 80;
+
+  static const double _amtX = 405;
+  static const double _amtW = 85;
+
   static const double _borderH = 1.0;
+  static const double _cellPadY = 3.0;
+  static const double _lineGap = 2.0;
+  static const double _topPad = 1.0;
 
   static Future<Uint8List> renderToBitmap(
     String text, {
     double fontSize = 32,
-    double maxWidth = 576,
+    double maxWidth = 500,
     bool bold = false,
   }) async {
     if (text.isEmpty) return Uint8List(0);
 
     final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(text);
-    final fontFamily = hasTamil ? 'NotoSansTamil' : 'NotoSans';
+    final fontFamily = hasTamil ? 'Nirmala UI' : 'NotoSans';
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
@@ -113,12 +122,8 @@ class TamilBitmapRenderer {
     required List<String> footerLines,
     double fontSize = 24,
   }) async {
-    const cw = ThermalColumnLayout.printableWidthPx;
-    const lineGap = 2.0;
-    const cellPadY = 3.0;
-
     final List<_LineInfo> lineInfos = [];
-    double totalH = 1;
+    double totalH = _topPad;
 
     for (final line in headerLines) {
       if (line.isEmpty) {
@@ -133,38 +138,36 @@ class TamilBitmapRenderer {
           line.startsWith('Date:') ||
           line.startsWith('Customer:');
       final sz = isFirst
-          ? 30.0
+          ? 28.0
           : (line == 'QUOTATION'
-              ? 26.0
-              : (line.startsWith('Customer:') ? 22.0 : 20.0));
+              ? 24.0
+              : (line.startsWith('Customer:') ? 20.0 : 18.0));
       final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: cw);
+      tp.layout(maxWidth: _canvasW - 20);
       lineInfos.add(
         _LineInfo(
           type: _LineType.centered,
-          height: tp.height + lineGap,
+          height: tp.height + _lineGap,
           painter: tp,
         ),
       );
-      totalH += tp.height + lineGap;
+      totalH += tp.height + _lineGap;
     }
 
-    // Top border of table
     lineInfos.add(_LineInfo(type: _LineType.borderTop, height: _borderH));
     totalH += _borderH;
 
-    // Table header
-    final hdrSno = _makeTp('#', 20, true);
-    final hdrPart = _makeTp('Item', 20, true);
-    final hdrQty = _makeTp('Qty', 20, true);
-    final hdrRate = _makeTp('Rate', 20, true);
-    final hdrAmt = _makeTp('Amt', 20, true);
+    final hdrSno = _makeTp('#', 18, true);
+    final hdrPart = _makeTp('Item', 18, true);
+    final hdrQty = _makeTp('Qty', 18, true);
+    final hdrRate = _makeTp('Rate', 18, true);
+    final hdrAmt = _makeTp('Amt', 18, true);
     hdrSno.layout(maxWidth: _snoW);
     hdrPart.layout(maxWidth: _partW);
     hdrQty.layout(maxWidth: _qtyW);
     hdrRate.layout(maxWidth: _rateW);
     hdrAmt.layout(maxWidth: _amtW);
-    final hdrH = hdrSno.height + cellPadY * 2;
+    final hdrH = hdrSno.height + _cellPadY * 2;
     lineInfos.add(
       _LineInfo(
         type: _LineType.tableRow,
@@ -174,101 +177,74 @@ class TamilBitmapRenderer {
     );
     totalH += hdrH;
 
-    // Border after header
     lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
     totalH += _borderH;
 
-    // Data rows
     for (final row in rows) {
-      final sno = _makeTp('${row.sNo}', 22, true);
-      var productName = row.productName;
+      final sno = _makeTp('${row.sNo}', 20, true);
+      final part = _makeTp(row.productName, 20, true);
+      final qty = _makeTp('${row.qty}', 20, true);
+      final rate = _makeTp(row.rate.toStringAsFixed(2), 20, true);
+      final amt = _makeTp(row.amount.toStringAsFixed(2), 20, true);
 
-      // Pixel-based truncation
-      final partTp = _makeTp(productName, 22, true);
-      partTp.layout(maxWidth: _partW - 8);
-      if (partTp.width > _partW - 8) {
-        int maxChars = productName.length;
-        while (maxChars > 3) {
-          final test = '${productName.substring(0, maxChars)}…';
-          final testTp = _makeTp(test, 22, true);
-          testTp.layout(maxWidth: _partW - 8);
-          if (testTp.width <= _partW - 8) {
-            productName = test;
-            break;
-          }
-          maxChars--;
-        }
-        if (maxChars <= 3) productName = '${productName.substring(0, 3)}…';
-      }
-
-      final part = _makeTp(productName, 22, true);
-      final qty = _makeTp('${row.qty}', 22, true);
-      final rate = _makeTp(row.rate.toStringAsFixed(2), 22, true);
-      final amt = _makeTp(row.amount.toStringAsFixed(2), 22, true);
       sno.layout(maxWidth: _snoW);
-      part.layout(maxWidth: _partW - 8);
+      part.layout(maxWidth: _partW);
       qty.layout(maxWidth: _qtyW);
       rate.layout(maxWidth: _rateW);
       amt.layout(maxWidth: _amtW);
-      final h = [
-        sno,
-        part,
-        qty,
-        rate,
-        amt,
-      ].fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
+
+      final maxH = [sno, part, qty, rate, amt]
+          .fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
+
       lineInfos.add(
         _LineInfo(
           type: _LineType.tableRow,
-          height: h + cellPadY * 2,
+          height: maxH + _cellPadY * 2,
           painters: [sno, part, qty, rate, amt],
         ),
       );
-      totalH += h + cellPadY * 2;
+      totalH += maxH + _cellPadY * 2;
 
-      // Border after each data row
       lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
       totalH += _borderH;
     }
 
-    // Totals
     for (final line in totalLines) {
       final isNetTotal = line.startsWith('NET TOTAL');
       final isTotalItems = line.startsWith('Total Items');
       final isBold = isNetTotal || line.startsWith('Total');
-      final sz = isNetTotal ? 26.0 : 20.0;
+      final sz = isNetTotal ? 24.0 : 18.0;
       final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: cw);
+      tp.layout(maxWidth: _canvasW - 20);
       lineInfos.add(
         _LineInfo(
           type: isNetTotal
               ? _LineType.centered
               : (isTotalItems ? _LineType.leftAligned : _LineType.centered),
-          height: tp.height + lineGap,
+          height: tp.height + _lineGap,
           painter: tp,
         ),
       );
-      totalH += tp.height + lineGap;
+      totalH += tp.height + _lineGap;
     }
 
-    // Footer
     for (final line in footerLines) {
       if (line.isEmpty) continue;
-      final tp = _makeTp(line, 20, false);
-      tp.layout(maxWidth: cw);
+      final tp = _makeTp(line, 18, false);
+      tp.layout(maxWidth: _canvasW - 20);
       lineInfos.add(
         _LineInfo(
           type: _LineType.centered,
-          height: tp.height + lineGap,
+          height: tp.height + _lineGap,
           painter: tp,
         ),
       );
-      totalH += tp.height + lineGap;
+      totalH += tp.height + _lineGap;
     }
 
-    totalH += 1;
+    totalH += _topPad;
 
-    final width = cw.toInt();
+    final width = _canvasW.toInt();
     final height = totalH.ceil();
 
     final recorder = ui.PictureRecorder();
@@ -282,22 +258,22 @@ class TamilBitmapRenderer {
       ..color = Colors.black
       ..strokeWidth = _borderH;
 
-    double y = 1;
+    double y = _topPad;
     for (final li in lineInfos) {
       switch (li.type) {
         case _LineType.empty:
           y += li.height;
         case _LineType.borderTop:
           canvas.drawLine(
-            Offset(0, y),
-            Offset(_lineEnd, y),
+            Offset(_snoX, y),
+            Offset(_amtX + _amtW, y),
             borderPaint,
           );
           y += li.height;
         case _LineType.borderRow:
           canvas.drawLine(
-            Offset(0, y),
-            Offset(_lineEnd, y),
+            Offset(_snoX, y),
+            Offset(_amtX + _amtW, y),
             borderPaint,
           );
           y += li.height;
@@ -305,23 +281,22 @@ class TamilBitmapRenderer {
           y += li.height;
         case _LineType.centered:
           if (li.painter != null) {
-            final cx = (width - li.painter!.width) / 2;
+            final cx = (_canvasW - li.painter!.width) / 2;
             li.painter!.paint(canvas, Offset(cx > 0 ? cx : 0, y));
           }
           y += li.height;
         case _LineType.leftAligned:
           if (li.painter != null) {
-            li.painter!.paint(canvas, Offset(_margin, y));
+            li.painter!.paint(canvas, Offset(_snoX, y));
           }
           y += li.height;
         case _LineType.rightAligned:
           if (li.painter != null) {
-            final rx = width - li.painter!.width;
+            final rx = _amtX + _amtW - li.painter!.width;
             li.painter!.paint(canvas, Offset(rx > 0 ? rx : 0, y));
           }
           y += li.height;
         case _LineType.tableRow:
-          // Draw vertical borders
           final vLineTop = y;
           final vLineBot = y + li.height;
           canvas.drawLine(Offset(_snoX, vLineTop), Offset(_snoX, vLineBot), borderPaint);
@@ -335,20 +310,16 @@ class TamilBitmapRenderer {
           canvas.drawLine(Offset(_amtX, vLineTop), Offset(_amtX, vLineBot), borderPaint);
           canvas.drawLine(Offset(_amtX + _amtW, vLineTop), Offset(_amtX + _amtW, vLineBot), borderPaint);
 
-          // Render cell content — vertically centered
           if (li.painters != null && li.painters!.length >= 5) {
             for (int i = 0; i < 5; i++) {
               final tp = li.painters![i];
               final cellY = y + (li.height - tp.height) / 2;
               double cellX;
               if (i == 0) {
-                // S.No - left +2px
                 cellX = _snoX + 2;
               } else if (i == 1) {
-                // Particulars - left +4px
                 cellX = _partX + 4;
               } else {
-                // Qty, Rate, Amount - right -4px
                 final colX = i == 2 ? _qtyX : (i == 3 ? _rateX : _amtX);
                 final colW = i == 2 ? _qtyW : (i == 3 ? _rateW : _amtW);
                 cellX = colX + colW - tp.width - 4;
@@ -370,7 +341,7 @@ class TamilBitmapRenderer {
 
   static TextPainter _makeTp(String text, double fontSize, bool bold) {
     final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(text);
-    final fontFamily = hasTamil ? 'NotoSansTamil' : 'NotoSans';
+    final fontFamily = hasTamil ? 'Nirmala UI' : 'NotoSans';
 
     return TextPainter(
       text: TextSpan(

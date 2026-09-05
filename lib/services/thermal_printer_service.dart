@@ -288,7 +288,7 @@ class ThermalPrinterService {
       final pdf = pw.Document();
 
       // Use exact 80mm thermal paper width (not calculated from image)
-      // 80mm paper = 80mm wide, image is 624px at 203 DPI
+      // 80mm paper = 80mm wide, image is 500px at 203 DPI
       const paperWidthMm = 80.0;
       const marginLeft = 2.0; // small left margin
       const marginRight = 2.0; // small right margin
