@@ -26,22 +26,21 @@ class ThermalRow {
 
 class TamilBitmapRenderer {
   static const double _canvasW = 500;
-  static const double _lineEnd = 495;
 
-  static const double _snoX = 10;
+  static const double _snoX = 0;
   static const double _snoW = 25;
 
-  static const double _partX = 35;
-  static const double _partW = 230;
+  static const double _partX = 25;
+  static const double _partW = 225;
 
-  static const double _qtyX = 275;
-  static const double _qtyW = 45;
+  static const double _qtyX = 250;
+  static const double _qtyW = 60;
 
-  static const double _rateX = 320;
-  static const double _rateW = 80;
+  static const double _rateX = 310;
+  static const double _rateW = 90;
 
-  static const double _amtX = 405;
-  static const double _amtW = 85;
+  static const double _amtX = 400;
+  static const double _amtW = 100;
 
   static const double _borderH = 1.0;
   static const double _cellPadY = 3.0;
@@ -351,6 +350,7 @@ class TamilBitmapRenderer {
           color: Colors.black,
           fontFamily: fontFamily,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          height: hasTamil ? 1.3 : null,
         ),
       ),
       textDirection: TextDirection.ltr,

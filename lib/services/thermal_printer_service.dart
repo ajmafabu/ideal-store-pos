@@ -287,11 +287,10 @@ class ThermalPrinterService {
 
       final pdf = pw.Document();
 
-      // Use exact 80mm thermal paper width (not calculated from image)
-      // 80mm paper = 80mm wide, image is 500px at 203 DPI
+      // 80mm thermal paper with strict 5mm margins on all sides
       const paperWidthMm = 80.0;
-      const marginLeft = 2.0; // small left margin
-      const marginRight = 2.0; // small right margin
+      const marginMm = 5.0;
+      final printableWidthMm = paperWidthMm - (marginMm * 2);
       final imageHeightMm = ih * 25.4 / 203;
 
       // Split into pages if too tall (thermal printer limit ~297mm = A4)
@@ -299,19 +298,19 @@ class ThermalPrinterService {
       if (imageHeightMm <= maxPageHeightMm) {
         final pageFormat = PdfPageFormat(
           PdfPageFormat.mm * paperWidthMm,
-          PdfPageFormat.mm * (imageHeightMm + 5), // small bottom padding
-          marginBottom: 0,
-          marginTop: 0,
-          marginLeft: marginLeft,
-          marginRight: marginRight,
+          PdfPageFormat.mm * (imageHeightMm + marginMm * 2),
+          marginBottom: marginMm,
+          marginTop: marginMm,
+          marginLeft: marginMm,
+          marginRight: marginMm,
         );
         pdf.addPage(
           pw.Page(
             pageFormat: pageFormat,
             build: (context) => pw.Image(
               pw.MemoryImage(pngBytes),
-              width: PdfPageFormat.mm * (paperWidthMm - marginLeft - marginRight),
-              fit: pw.BoxFit.fitWidth,
+              width: PdfPageFormat.mm * printableWidthMm,
+              fit: pw.BoxFit.contain,
             ),
           ),
         );
@@ -339,11 +338,11 @@ class ThermalPrinterService {
 
           final pageFormat = PdfPageFormat(
             PdfPageFormat.mm * paperWidthMm,
-            PdfPageFormat.mm * (chunkHMm + 2),
-            marginBottom: 0,
-            marginTop: 0,
-            marginLeft: marginLeft,
-            marginRight: marginRight,
+            PdfPageFormat.mm * (chunkHMm + marginMm * 2),
+            marginBottom: marginMm,
+            marginTop: marginMm,
+            marginLeft: marginMm,
+            marginRight: marginMm,
           );
 
           pdf.addPage(
@@ -351,8 +350,8 @@ class ThermalPrinterService {
               pageFormat: pageFormat,
               build: (context) => pw.Image(
                 pw.MemoryImage(chunkBytes),
-                width: PdfPageFormat.mm * (paperWidthMm - marginLeft - marginRight),
-                fit: pw.BoxFit.fitWidth,
+                width: PdfPageFormat.mm * printableWidthMm,
+                fit: pw.BoxFit.contain,
               ),
             ),
           );
