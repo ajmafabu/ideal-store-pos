@@ -37,10 +37,14 @@ class PurchaseService {
       final purchaseId = response['id'] as String;
       Logger.info('Purchase created with id: $purchaseId');
 
-      // Add stock and inventory batches in parallel
+      // Add stock and inventory batches in parallel (non-fatal — purchase is already saved)
       final itemFutures = <Future>[];
       for (final item in purchase.items) {
-        itemFutures.add(_productService.addStock(item.productId, item.qty));
+        itemFutures.add(
+          _productService.addStock(item.productId, item.qty).catchError((e) {
+            Logger.error('Stock add failed for ${item.productId}', e);
+          }),
+        );
 
         // Update product purchase_price to latest purchase price
         itemFutures.add(
