@@ -26,15 +26,15 @@ class ThermalRow {
 
 class TamilBitmapRenderer {
   static const double _snoX = 0;
-  static const double _snoW = 25;
-  static const double _partX = 28;
-  static const double _partW = 214;
-  static const double _qtyX = 244;
-  static const double _qtyW = 51;
-  static const double _rateX = 306;
-  static const double _rateW = 130;
-  static const double _amtX = 438;
-  static const double _amtW = 138;
+  static const double _snoW = 20;
+  static const double _partX = 22;
+  static const double _partW = 242;
+  static const double _qtyX = 264;
+  static const double _qtyW = 36;
+  static const double _rateX = 302;
+  static const double _rateW = 100;
+  static const double _amtX = 404;
+  static const double _amtW = 172;
   static const double _lineEnd = 578;
   static const double _borderH = 1.0;
 
@@ -326,9 +326,8 @@ class TamilBitmapRenderer {
           // Render cell content
           if (li.painters != null && li.painters!.length >= 5) {
             final cellY = y + cellPadY;
-            // S.No - center
-            final snoCx = _snoX + (_snoW - li.painters![0].width) / 2;
-            li.painters![0].paint(canvas, Offset(snoCx, cellY));
+            // S.No - left
+            li.painters![0].paint(canvas, Offset(_snoX + 4, cellY));
             // Particulars - left
             li.painters![1].paint(canvas, Offset(_partX + 4, cellY));
             // Qty - right
