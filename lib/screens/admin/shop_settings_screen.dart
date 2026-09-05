@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
+import '../../config/theme_provider.dart';
 import '../../services/thermal_printer_service.dart';
 
 class ShopSettingsScreen extends ConsumerStatefulWidget {
@@ -236,6 +237,11 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Theme Mode
+              _ThemeModeSection(),
 
               const SizedBox(height: 16),
 
@@ -735,6 +741,129 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
             vertical: 14,
           ),
           prefixIcon: Icon(icon, color: Colors.grey.shade500),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeModeSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentMode = ref.watch(themeProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.dark_mode_rounded,
+                color: Color(0xFF667eea),
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Appearance',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose your preferred theme',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _themeOption(
+                  ref,
+                  context,
+                  icon: Icons.light_mode,
+                  label: 'Light',
+                  mode: ThemeMode.light,
+                  current: currentMode,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _themeOption(
+                  ref,
+                  context,
+                  icon: Icons.dark_mode,
+                  label: 'Dark',
+                  mode: ThemeMode.dark,
+                  current: currentMode,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _themeOption(
+                  ref,
+                  context,
+                  icon: Icons.brightness_auto,
+                  label: 'System',
+                  mode: ThemeMode.system,
+                  current: currentMode,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _themeOption(
+    WidgetRef ref,
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required ThemeMode mode,
+    required ThemeMode current,
+  }) {
+    final selected = current == mode;
+    return GestureDetector(
+      onTap: () => ref.read(themeProvider.notifier).setThemeMode(mode),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF667eea) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? const Color(0xFF667eea) : Colors.grey.shade300,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 24,
+              color: selected ? Colors.white : Colors.grey.shade600,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                color: selected ? Colors.white : Colors.grey.shade700,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -43,6 +43,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
   bool _isCredit = false;
   bool _isSplitPayment = false;
   bool _isProcessing = false;
+  bool _showPaymentOptions = false;
   List<Customer> _customers = [];
   List<Customer> _filteredCustomers = [];
   bool _showCustomerSearch = false;
@@ -1925,6 +1926,45 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     ],
                   ),
                   const SizedBox(height: 8),
+                  // Always-visible payment method chips
+                  Row(
+                    children: [
+                      const Text('Payment: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                      const SizedBox(width: 4),
+                      ChoiceChip(
+                        label: const Text('Cash', style: TextStyle(fontSize: 11)),
+                        selected: !_isCredit && _paymentMethod == 'cash',
+                        onSelected: (_) => setState(() {
+                          _paymentMethod = 'cash';
+                          _isCredit = false;
+                          _isSplitPayment = false;
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('Digital', style: TextStyle(fontSize: 11)),
+                        selected: !_isCredit && _paymentMethod == 'digital',
+                        onSelected: (_) => setState(() {
+                          _paymentMethod = 'digital';
+                          _isCredit = false;
+                          _isSplitPayment = false;
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      ChoiceChip(
+                        label: const Text('Credit', style: TextStyle(fontSize: 11)),
+                        selected: _isCredit,
+                        onSelected: (_) => setState(() {
+                          _isCredit = !_isCredit;
+                          if (_isCredit) _amountPaidController.clear();
+                          _isSplitPayment = false;
+                        }),
+                        backgroundColor: Colors.orange.shade100,
+                        selectedColor: Colors.orange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   // Complete button
                   SizedBox(
                     width: double.infinity,
@@ -1950,61 +1990,110 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Payment options — always visible
-                  CustomerPicker(
-                    selectedCustomer: _selectedCustomer,
-                    filteredCustomers: _filteredCustomers,
-                    searchController: _searchController,
-                    showSearch: _showCustomerSearch,
-                    onToggleSearch: () => setState(
-                      () => _showCustomerSearch = !_showCustomerSearch,
+                  // Expandable payment options
+                  GestureDetector(
+                    onTap: () => setState(
+                      () => _showPaymentOptions = !_showPaymentOptions,
                     ),
-                    onClearCustomer: () =>
-                        setState(() => _selectedCustomer = null),
-                    onAddCustomer: _showAddCustomerDialog,
-                    onSearchChanged: _filterCustomers,
-                    onSelectCustomer: (customer) {
-                      setState(() {
-                        _selectedCustomer = customer;
-                        _showCustomerSearch = false;
-                        _searchController.clear();
-                      });
-                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _showPaymentOptions
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 18,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Payment Options',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (!_showPaymentOptions)
+                            Text(
+                              _isCredit
+                                  ? 'Credit'
+                                  : _paymentMethod.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  PaymentSection(
-                    discountController: _discountController,
-                    amountPaidController: _amountPaidController,
-                    paymentMethod: _paymentMethod,
-                    isCredit: _isCredit,
-                    dueAmount: _dueAmount,
-                    total: _total,
-                    isSplitPayment: _isSplitPayment,
-                    cashAmountController: _cashAmountController,
-                    upiAmountController: _upiAmountController,
-                    onPaymentMethodChanged: (method) => setState(() {
-                      _paymentMethod = method;
-                      _isCredit = false;
-                      _isSplitPayment = false;
-                    }),
-                    onCreditToggled: () => setState(() {
-                      _isCredit = !_isCredit;
-                      if (_isCredit) _amountPaidController.clear();
-                    }),
-                    onSplitPaymentToggled: (val) => setState(() {
-                      _isSplitPayment = val;
-                      if (val) {
-                        _cashAmountController.text = _total.toStringAsFixed(
-                          2,
-                        );
-                        _upiAmountController.text = '0.00';
-                      } else {
-                        _cashAmountController.clear();
-                        _upiAmountController.clear();
-                      }
-                    }),
-                    onChanged: () => setState(() {}),
-                  ),
+                  // Expandable content
+                  if (_showPaymentOptions) ...[
+                    const SizedBox(height: 8),
+                    CustomerPicker(
+                      selectedCustomer: _selectedCustomer,
+                      filteredCustomers: _filteredCustomers,
+                      searchController: _searchController,
+                      showSearch: _showCustomerSearch,
+                      onToggleSearch: () => setState(
+                        () => _showCustomerSearch = !_showCustomerSearch,
+                      ),
+                      onClearCustomer: () =>
+                          setState(() => _selectedCustomer = null),
+                      onAddCustomer: _showAddCustomerDialog,
+                      onSearchChanged: _filterCustomers,
+                      onSelectCustomer: (customer) {
+                        setState(() {
+                          _selectedCustomer = customer;
+                          _showCustomerSearch = false;
+                          _searchController.clear();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    PaymentSection(
+                      discountController: _discountController,
+                      amountPaidController: _amountPaidController,
+                      paymentMethod: _paymentMethod,
+                      isCredit: _isCredit,
+                      dueAmount: _dueAmount,
+                      total: _total,
+                      isSplitPayment: _isSplitPayment,
+                      cashAmountController: _cashAmountController,
+                      upiAmountController: _upiAmountController,
+                      onPaymentMethodChanged: (method) => setState(() {
+                        _paymentMethod = method;
+                        _isCredit = false;
+                        _isSplitPayment = false;
+                      }),
+                      onCreditToggled: () => setState(() {
+                        _isCredit = !_isCredit;
+                        if (_isCredit) _amountPaidController.clear();
+                      }),
+                      onSplitPaymentToggled: (val) => setState(() {
+                        _isSplitPayment = val;
+                        if (val) {
+                          _cashAmountController.text = _total.toStringAsFixed(
+                            2,
+                          );
+                          _upiAmountController.text = '0.00';
+                        } else {
+                          _cashAmountController.clear();
+                          _upiAmountController.clear();
+                        }
+                      }),
+                      onChanged: () => setState(() {}),
+                    ),
+                  ],
                 ],
               ),
             ),
