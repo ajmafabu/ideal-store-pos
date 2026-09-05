@@ -286,24 +286,33 @@ class ThermalPrinterService {
       if (iw <= 0 || ih <= 0) return false;
 
       final pdf = pw.Document();
-      final imageWidthMm = iw * 25.4 / 203;
+
+      // Use exact 80mm thermal paper width (not calculated from image)
+      // 80mm paper = 80mm wide, image is 624px at 203 DPI
+      const paperWidthMm = 80.0;
+      const marginLeft = 2.0; // small left margin
+      const marginRight = 2.0; // small right margin
       final imageHeightMm = ih * 25.4 / 203;
 
       // Split into pages if too tall (thermal printer limit ~297mm = A4)
       const maxPageHeightMm = 297.0;
       if (imageHeightMm <= maxPageHeightMm) {
         final pageFormat = PdfPageFormat(
-          PdfPageFormat.mm * imageWidthMm,
-          PdfPageFormat.mm * imageHeightMm,
+          PdfPageFormat.mm * paperWidthMm,
+          PdfPageFormat.mm * (imageHeightMm + 5), // small bottom padding
           marginBottom: 0,
           marginTop: 0,
-          marginLeft: 0,
-          marginRight: 0,
+          marginLeft: marginLeft,
+          marginRight: marginRight,
         );
         pdf.addPage(
           pw.Page(
             pageFormat: pageFormat,
-            build: (context) => pw.Image(pw.MemoryImage(pngBytes)),
+            build: (context) => pw.Image(
+              pw.MemoryImage(pngBytes),
+              width: PdfPageFormat.mm * (paperWidthMm - marginLeft - marginRight),
+              fit: pw.BoxFit.fitWidth,
+            ),
           ),
         );
       } else {
@@ -316,7 +325,6 @@ class ThermalPrinterService {
           final chunkH = (i == totalChunks - 1) ? ih - startY : chunkHeightPx;
           final chunkHMm = chunkH * 25.4 / 203;
 
-          // Crop the chunk from the full image
           final chunkBytes = await _cropImagePng(
             pngBytes,
             iw,
@@ -330,18 +338,22 @@ class ThermalPrinterService {
           if (chunkBytes.isEmpty) continue;
 
           final pageFormat = PdfPageFormat(
-            PdfPageFormat.mm * imageWidthMm,
-            PdfPageFormat.mm * chunkHMm,
+            PdfPageFormat.mm * paperWidthMm,
+            PdfPageFormat.mm * (chunkHMm + 2),
             marginBottom: 0,
             marginTop: 0,
-            marginLeft: 0,
-            marginRight: 0,
+            marginLeft: marginLeft,
+            marginRight: marginRight,
           );
 
           pdf.addPage(
             pw.Page(
               pageFormat: pageFormat,
-              build: (context) => pw.Image(pw.MemoryImage(chunkBytes)),
+              build: (context) => pw.Image(
+                pw.MemoryImage(chunkBytes),
+                width: PdfPageFormat.mm * (paperWidthMm - marginLeft - marginRight),
+                fit: pw.BoxFit.fitWidth,
+              ),
             ),
           );
         }
