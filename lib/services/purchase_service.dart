@@ -143,7 +143,6 @@ class PurchaseService {
   }
 
   Future<List<Purchase>> getPurchases({int limit = 100}) async {
-    // Always try Supabase first — isOnline() can give false negatives
     try {
       final response = await _client
           .from('purchases')
@@ -166,64 +165,88 @@ class PurchaseService {
         }
       }
 
-      final missingIds = list
-          .where(
-            (p) =>
-                (p.supplierName == null || p.supplierName!.isEmpty) &&
-                p.supplierId != null,
-          )
-          .map((p) => p.supplierId!)
-          .toSet()
-          .toList();
+      // Supabase returned data — normal path
+      if (list.isNotEmpty) {
+        final missingIds = list
+            .where(
+              (p) =>
+                  (p.supplierName == null || p.supplierName!.isEmpty) &&
+                  p.supplierId != null,
+            )
+            .map((p) => p.supplierId!)
+            .toSet()
+            .toList();
 
-      if (missingIds.isNotEmpty) {
-        final suppliersRes = await _client
-            .from('suppliers')
-            .select('id, name')
-            .inFilter('id', missingIds);
-        final nameMap = {
-          for (final s in suppliersRes as List)
-            s['id'] as String: s['name'] as String,
-        };
-        final result = list.map((p) {
-          if (p.supplierId != null && nameMap.containsKey(p.supplierId)) {
-            return Purchase(
-              id: p.id,
-              supplierName: nameMap[p.supplierId],
-              items: p.items,
-              totalAmount: p.totalAmount,
-              createdBy: p.createdBy,
-              createdAt: p.createdAt,
-              supplierId: p.supplierId,
-              isCredit: p.isCredit,
-              amountPaid: p.amountPaid,
-              dueAmount: p.dueAmount,
-              paymentMethod: p.paymentMethod,
-            );
-          }
-          return p;
-        }).toList();
+        if (missingIds.isNotEmpty) {
+          final suppliersRes = await _client
+              .from('suppliers')
+              .select('id, name')
+              .inFilter('id', missingIds);
+          final nameMap = {
+            for (final s in suppliersRes as List)
+              s['id'] as String: s['name'] as String,
+          };
+          final result = list.map((p) {
+            if (p.supplierId != null && nameMap.containsKey(p.supplierId)) {
+              return Purchase(
+                id: p.id,
+                supplierName: nameMap[p.supplierId],
+                items: p.items,
+                totalAmount: p.totalAmount,
+                createdBy: p.createdBy,
+                createdAt: p.createdAt,
+                supplierId: p.supplierId,
+                isCredit: p.isCredit,
+                amountPaid: p.amountPaid,
+                dueAmount: p.dueAmount,
+                paymentMethod: p.paymentMethod,
+              );
+            }
+            return p;
+          }).toList();
 
-        final merged = await _mergeOfflinePurchases(result, rawList, supabaseIds);
+          final merged = await _mergeOfflinePurchases(result, rawList, supabaseIds);
+          return merged;
+        }
+
+        final merged = await _mergeOfflinePurchases(list, rawList, supabaseIds);
         return merged;
       }
 
-      final merged = await _mergeOfflinePurchases(list, rawList, supabaseIds);
-      return merged;
+      // Supabase returned EMPTY — fall back to cache (like sales does)
+      Logger.warning('Supabase returned 0 purchases, falling back to cache');
+      return _loadOfflinePurchases(limit: limit);
     } catch (e) {
       Logger.warning('Supabase fetch failed, using cache: $e');
-      // Offline fallback — use cache
-      try {
-        final cached = _offlineService.getCachedPurchases();
-        if (cached.isNotEmpty) {
-          Logger.info('Loaded ${cached.length} purchases from offline cache');
-          return cached.map((e) => Purchase.fromJson(e)).toList();
-        }
-      } catch (e) {
-        Logger.warning('Failed to load purchases from offline cache: $e');
-      }
-      return [];
+      return _loadOfflinePurchases(limit: limit);
     }
+  }
+
+  /// Load purchases from local cache + pending writes (mirrors sale_service._loadOfflineSales)
+  List<Purchase> _loadOfflinePurchases({int limit = 100}) {
+    final cached = _offlineService.getCachedPurchases();
+    final pendingRaw = _offlineService.getPendingPurchases();
+    final allOffline = <String, Map<String, dynamic>>{};
+    for (final p in cached) {
+      final id = p['id']?.toString() ?? '';
+      if (id.isNotEmpty) allOffline[id] = p;
+    }
+    for (final p in pendingRaw) {
+      final id = p['id']?.toString() ?? '';
+      if (id.isNotEmpty) allOffline[id] = p;
+    }
+    final merged = allOffline.values.toList()
+      ..sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+    final purchases = <Purchase>[];
+    for (final e in merged.take(limit)) {
+      try {
+        purchases.add(Purchase.fromJson(e));
+      } catch (ex) {
+        Logger.warning('Failed to parse cached purchase: $ex');
+      }
+    }
+    Logger.info('Loaded ${purchases.length} purchases from offline cache+pending');
+    return purchases;
   }
 
   /// Merge pending offline purchases (not yet in Supabase) into the result list
