@@ -340,6 +340,7 @@ class ProductService {
         'increment_stock',
         params: {'p_product_id': productId, 'p_qty': quantity},
       );
+      ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('addStock', e, stackTrace);
       await _offlineService.queuePendingWrite({
@@ -356,6 +357,7 @@ class ProductService {
         'decrement_stock',
         params: {'p_product_id': productId, 'p_qty': quantity},
       );
+      ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('deductStock', e, stackTrace);
       await _offlineService.queuePendingWrite({
