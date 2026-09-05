@@ -334,7 +334,7 @@ class PurchaseService {
     try {
       final purchaseData = await _client
           .from('purchases')
-          .select('items, is_credit, supplier_id, total_amount, payment_method')
+          .select('items, is_credit, supplier_id, total_amount')
           .eq('id', purchaseId)
           .single();
 
@@ -343,7 +343,6 @@ class PurchaseService {
       final supplierId = purchaseData['supplier_id'] as String?;
       final totalAmount =
           (purchaseData['total_amount'] as num?)?.toDouble() ?? 0;
-      final paymentMethod = purchaseData['payment_method'] as String? ?? 'cash';
 
       try {
         await _client
@@ -375,14 +374,8 @@ class PurchaseService {
         try {
           final accounts = await _accountService.getAccounts();
           if (accounts.isNotEmpty) {
-            final accountType =
-                (paymentMethod == 'upi' ||
-                    paymentMethod == 'digital' ||
-                    paymentMethod == 'bank')
-                ? 'bank'
-                : 'cash';
             final account = accounts.firstWhere(
-              (a) => a.accountType == accountType,
+              (a) => a.accountType == 'cash',
               orElse: () => accounts.first,
             );
             await _accountService.addTransaction(
