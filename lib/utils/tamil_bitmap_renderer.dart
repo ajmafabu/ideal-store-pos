@@ -28,22 +28,23 @@ class TamilBitmapRenderer {
   static const double _canvasW = 500;
 
   static const double _snoX = 0;
-  static const double _snoW = 25;
+  static const double _snoW = 30;
 
-  static const double _partX = 25;
-  static const double _partW = 225;
+  static const double _partX = 30;
+  static const double _partW = 240;
 
-  static const double _qtyX = 250;
-  static const double _qtyW = 60;
+  static const double _qtyX = 270;
+  static const double _qtyW = 50;
 
-  static const double _rateX = 310;
+  static const double _rateX = 320;
   static const double _rateW = 90;
 
-  static const double _amtX = 400;
-  static const double _amtW = 100;
+  static const double _amtX = 410;
+  static const double _amtW = 90;
 
   static const double _borderH = 1.0;
   static const double _cellPadY = 3.0;
+  static const double _tamilRowPad = 6.0;
   static const double _lineGap = 2.0;
   static const double _topPad = 1.0;
 
@@ -162,10 +163,10 @@ class TamilBitmapRenderer {
     final hdrRate = _makeTp('Rate', 18, true);
     final hdrAmt = _makeTp('Amt', 18, true);
     hdrSno.layout(maxWidth: _snoW);
-    hdrPart.layout(maxWidth: _partW);
+    hdrPart.layout(maxWidth: _partW - 4);
     hdrQty.layout(maxWidth: _qtyW);
     hdrRate.layout(maxWidth: _rateW);
-    hdrAmt.layout(maxWidth: _amtW);
+    hdrAmt.layout(maxWidth: _amtW - 4);
     final hdrH = hdrSno.height + _cellPadY * 2;
     lineInfos.add(
       _LineInfo(
@@ -195,14 +196,17 @@ class TamilBitmapRenderer {
       final maxH = [sno, part, qty, rate, amt]
           .fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
 
+      final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(row.productName);
+      final rowPadExtra = hasTamil ? _tamilRowPad : 0.0;
+
       lineInfos.add(
         _LineInfo(
           type: _LineType.tableRow,
-          height: maxH + _cellPadY * 2,
+          height: maxH + _cellPadY * 2 + rowPadExtra,
           painters: [sno, part, qty, rate, amt],
         ),
       );
-      totalH += maxH + _cellPadY * 2;
+      totalH += maxH + _cellPadY * 2 + rowPadExtra;
 
       lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
       totalH += _borderH;
