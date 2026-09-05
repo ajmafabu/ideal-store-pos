@@ -135,6 +135,20 @@ void _scheduleUpdateCheck() {
     Timer(const Duration(seconds: 5), () async {
       final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
       try {
+        // Skip if we just installed an update (avoids update loop)
+        final markerFile = File('${Directory.systemTemp.path}\\pos_just_updated');
+        if (await markerFile.exists()) {
+          final markerContent = await markerFile.readAsString();
+          final installTime = DateTime.tryParse(markerContent);
+          if (installTime != null && DateTime.now().difference(installTime).inMinutes < 5) {
+            await logFile.writeAsString(
+                'Skipped update check — just updated ${DateTime.now().difference(installTime).inSeconds}s ago\n',
+                mode: FileMode.append);
+            return;
+          }
+          await markerFile.delete();
+        }
+
         await logFile.writeAsString(
             '=== Update Check (attempt $attempt) ===\nTime: ${DateTime.now()}\n');
 

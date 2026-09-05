@@ -33,6 +33,19 @@ class UpdateService {
   /// Check GitHub for a newer version. Returns null if up-to-date or skipped.
   Future<UpdateInfo?> checkForUpdate() async {
     try {
+      // Skip if we just installed an update (avoids loop when Windows caches old version info)
+      final markerFile = File('${Directory.systemTemp.path}\\pos_just_updated');
+      if (await markerFile.exists()) {
+        final markerContent = await markerFile.readAsString();
+        final installTime = DateTime.tryParse(markerContent);
+        if (installTime != null && DateTime.now().difference(installTime).inMinutes < 5) {
+          print('[UPDATE] Skipped - just updated ${DateTime.now().difference(installTime).inSeconds}s ago');
+          await markerFile.delete();
+          return null;
+        }
+        await markerFile.delete();
+      }
+
       final info = await PackageInfo.fromPlatform();
       final currentVersion = info.version;
       final buildNumber = info.buildNumber;
@@ -295,6 +308,10 @@ del "%~f0"
     await File(batPath).writeAsString(batScript);
 
     Logger.info('Starting updater: $batPath');
+
+    // Write marker so the restarted app knows we just updated
+    final markerFile = File('${Directory.systemTemp.path}\\pos_just_updated');
+    await markerFile.writeAsString(DateTime.now().toIso8601String());
 
     // Launch the batch script detached
     await Process.start('cmd.exe', ['/c', batPath], mode: ProcessStartMode.detached);
