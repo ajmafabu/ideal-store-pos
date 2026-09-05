@@ -248,17 +248,33 @@ class PurchaseService {
     Set<String> supabaseIds,
   ) async {
     try {
-      // Get purchases that are queued for sync but not yet in Supabase
+      // 1. Get purchases from pending writes (still queued for sync)
       final pendingRaw = _offlineService.getPendingPurchases();
+      final offlineIds = <String>{};
       final pendingPurchases = <Purchase>[];
       for (final rawData in pendingRaw) {
-        // Skip if this purchase already exists in Supabase
         final pid = rawData['id'] as String?;
         if (pid != null && supabaseIds.contains(pid)) continue;
+        offlineIds.add(pid ?? '');
         try {
           pendingPurchases.add(Purchase.fromJson(rawData));
         } catch (e) {
           Logger.warning('Failed to parse pending purchase: $e');
+        }
+      }
+
+      // 2. Also check cache for orphaned purchases (pending write removed after max retries)
+      final cachedPurchases = _offlineService.getCachedPurchases();
+      for (final cached in cachedPurchases) {
+        final cid = cached['id'] as String?;
+        if (cid == null) continue;
+        // Skip if already in Supabase or already found in pending writes
+        if (supabaseIds.contains(cid) || offlineIds.contains(cid)) continue;
+        try {
+          pendingPurchases.add(Purchase.fromJson(cached));
+          Logger.info('Found orphaned cached purchase: $cid');
+        } catch (e) {
+          Logger.warning('Failed to parse cached purchase: $e');
         }
       }
 
@@ -270,15 +286,19 @@ class PurchaseService {
         return supabasePurchases;
       }
 
-      // Merge: pending offline purchases + Supabase purchases
+      // Merge: pending/offline purchases + Supabase purchases
       final mergedList = [...pendingPurchases, ...supabasePurchases];
 
-      // Update cache with Supabase data only (pending will be added on next offline save)
+      // Update cache with merged data so orphaned purchases persist
       try {
-        await _offlineService.cachePurchases(supabaseRaw);
+        final mergedRaw = [
+          ...pendingPurchases.map((p) => p.toInsertJson()..['id'] = p.id),
+          ...supabaseRaw,
+        ];
+        await _offlineService.cachePurchases(mergedRaw);
       } catch (_) {}
 
-      Logger.info('Merged ${pendingPurchases.length} pending offline purchases');
+      Logger.info('Merged ${pendingPurchases.length} pending/offline purchases');
       return mergedList;
     } catch (e) {
       Logger.warning('Failed to merge offline purchases: $e');

@@ -454,13 +454,15 @@ class OfflineService {
                 await removePendingWrite(write['id'] as String);
               })
               .catchError((e) async {
-                Logger.error('Failed to sync write: ${write['id']}', e);
+                Logger.error("Failed to sync write: ${write['id']}", e);
                 final retryCount = (write['retry_count'] as int? ?? 0) + 1;
                 write['retry_count'] = retryCount;
                 write['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
                 if (retryCount >= maxRetries) {
-                  Logger.error('Max retries ($maxRetries) exceeded for write ${write["id"]}, removing', e);
+                  Logger.error("Max retries ($maxRetries) exceeded for write ${write['id']}, removing pending write but keeping cached purchase", e);
                   await removePendingWrite(write['id'] as String);
+                  // Keep the cached purchase so it stays visible in history
+                  // It will be retried on next app restart when sync timer picks it up again
                 } else {
                   await _pendingWritesBox.put(write['id'] as String, write);
                 }
