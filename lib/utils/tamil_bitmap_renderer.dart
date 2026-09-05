@@ -232,7 +232,7 @@ class TamilBitmapRenderer {
       final isNetTotal = line.startsWith('NET TOTAL');
       final isTotalItems = line.startsWith('Total Items');
       final isBold = isNetTotal || line.startsWith('Total');
-      final sz = 24.0;
+      final sz = isNetTotal ? 32.0 : 24.0;
       final tp = _makeTp(line, sz, isBold);
       tp.layout(maxWidth: _canvasW - 20);
       lineInfos.add(
@@ -246,6 +246,17 @@ class TamilBitmapRenderer {
       );
       totalH += tp.height + _lineGap;
     }
+
+    final footerTp = _makeTp('─────── ⋆⋅☆⋅⋆ ───────', 18, false);
+    footerTp.layout(maxWidth: _canvasW - 20);
+    lineInfos.add(
+      _LineInfo(
+        type: _LineType.centered,
+        height: footerTp.height + _lineGap,
+        painter: footerTp,
+      ),
+    );
+    totalH += footerTp.height + _lineGap;
 
     totalH += _topPad;
 
