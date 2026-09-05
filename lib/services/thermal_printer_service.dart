@@ -287,10 +287,8 @@ class ThermalPrinterService {
 
       final pdf = pw.Document();
 
-      // 80mm thermal paper with strict 5mm margins on all sides
+      // 80mm thermal paper, zero margins, image docks top-left
       const paperWidthMm = 80.0;
-      const marginMm = 5.0;
-      final printableWidthMm = paperWidthMm - (marginMm * 2);
       final imageHeightMm = ih * 25.4 / 203;
 
       // Split into pages if too tall (thermal printer limit ~297mm = A4)
@@ -298,19 +296,22 @@ class ThermalPrinterService {
       if (imageHeightMm <= maxPageHeightMm) {
         final pageFormat = PdfPageFormat(
           PdfPageFormat.mm * paperWidthMm,
-          PdfPageFormat.mm * (imageHeightMm + marginMm * 2),
-          marginBottom: marginMm,
-          marginTop: marginMm,
-          marginLeft: marginMm,
-          marginRight: marginMm,
+          PdfPageFormat.mm * (imageHeightMm + 2),
+          marginBottom: 0,
+          marginTop: 0,
+          marginLeft: 0,
+          marginRight: 0,
         );
         pdf.addPage(
           pw.Page(
             pageFormat: pageFormat,
-            build: (context) => pw.Image(
-              pw.MemoryImage(pngBytes),
-              width: PdfPageFormat.mm * printableWidthMm,
-              fit: pw.BoxFit.contain,
+            build: (context) => pw.Align(
+              alignment: pw.Alignment.topLeft,
+              child: pw.Image(
+                pw.MemoryImage(pngBytes),
+                width: PdfPageFormat.mm * paperWidthMm,
+                fit: pw.BoxFit.contain,
+              ),
             ),
           ),
         );
@@ -338,20 +339,23 @@ class ThermalPrinterService {
 
           final pageFormat = PdfPageFormat(
             PdfPageFormat.mm * paperWidthMm,
-            PdfPageFormat.mm * (chunkHMm + marginMm * 2),
-            marginBottom: marginMm,
-            marginTop: marginMm,
-            marginLeft: marginMm,
-            marginRight: marginMm,
+            PdfPageFormat.mm * (chunkHMm + 2),
+            marginBottom: 0,
+            marginTop: 0,
+            marginLeft: 0,
+            marginRight: 0,
           );
 
           pdf.addPage(
             pw.Page(
               pageFormat: pageFormat,
-              build: (context) => pw.Image(
-                pw.MemoryImage(chunkBytes),
-                width: PdfPageFormat.mm * printableWidthMm,
-                fit: pw.BoxFit.contain,
+              build: (context) => pw.Align(
+                alignment: pw.Alignment.topLeft,
+                child: pw.Image(
+                  pw.MemoryImage(chunkBytes),
+                  width: PdfPageFormat.mm * paperWidthMm,
+                  fit: pw.BoxFit.contain,
+                ),
               ),
             ),
           );
