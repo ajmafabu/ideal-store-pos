@@ -40,7 +40,7 @@ class PaymentSection extends StatelessWidget {
         // Discount
         Row(
           children: [
-            const Text('Discount: Rs '),
+            const Text('Discount: ₹ '),
             SizedBox(
               width: 100,
               child: TextField(
@@ -103,7 +103,7 @@ class PaymentSection extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const Text('Amount Paid: Rs '),
+              const Text('Amount Paid: ₹ '),
               Expanded(
                 child: TextField(
                   controller: amountPaidController,
@@ -123,7 +123,7 @@ class PaymentSection extends StatelessWidget {
             children: [
               const Text('Due: '),
               Text(
-                'Rs ${dueAmount.toStringAsFixed(2)}',
+                '₹ ${dueAmount.toStringAsFixed(2)}',
                 style: TextStyle(
                   color: dueAmount > 0 ? Colors.red : Colors.green,
                   fontWeight: FontWeight.bold,
@@ -153,7 +153,7 @@ class PaymentSection extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Text('Cash: Rs '),
+                const Text('Cash: ₹ '),
                 Expanded(
                   child: TextField(
                     controller: cashAmountController,
@@ -184,7 +184,7 @@ class PaymentSection extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Text('UPI:   Rs '),
+                const Text('UPI:   ₹ '),
                 Expanded(
                   child: TextField(
                     controller: upiAmountController,

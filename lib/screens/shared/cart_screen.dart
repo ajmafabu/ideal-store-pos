@@ -172,7 +172,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Rs${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
+              '₹${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 12),
@@ -1324,32 +1324,29 @@ class _CartScreenState extends ConsumerState<CartScreen>
     required String action,
     required MaterialColor color,
   }) {
-    return SizedBox(
-      width: 100,
-      child: Material(
-        color: color.withValues(alpha: 0.08),
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: () => Navigator.pop(ctx, action),
         borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: () => Navigator.pop(ctx, action),
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 24, color: color),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: color.shade700,
-                  ),
-                  textAlign: TextAlign.center,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 24, color: color),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: color.shade700,
                 ),
-              ],
-            ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),
@@ -1903,7 +1900,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                           const Spacer(),
                           if ((_selectedCustomer!.totalCredit ?? 0) > 0)
                             Text(
-                              'Due: Rs${(_selectedCustomer!.totalCredit ?? 0).toStringAsFixed(0)}',
+                              'Due: ₹${(_selectedCustomer!.totalCredit ?? 0).toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: Colors.red,
@@ -1918,7 +1915,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${_cart.length} product${_cart.length != 1 ? 's' : ''} · Subtotal: Rs${_subtotal.toStringAsFixed(0)}',
+                        '${_cart.length} product${_cart.length != 1 ? 's' : ''} · Subtotal: ₹${_subtotal.toStringAsFixed(0)}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
