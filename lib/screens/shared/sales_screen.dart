@@ -23,52 +23,115 @@ import '../../widgets/empty_state.dart';
 import 'cart_screen.dart';
 import 'product_form_screen.dart';
 
-class SalesScreen extends ConsumerWidget {
+class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final salesAsync = ref.watch(salesHistoryProvider);
+  ConsumerState<SalesScreen> createState() => _SalesScreenState();
+}
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        body: Column(
-          children: [
-            // Compact single-line toolbar
-            Container(
-              color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.primary,
-              child: SafeArea(
-                bottom: false,
-                child: SizedBox(
-                  height: 36,
-                  child: const TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    dividerHeight: 0,
-                    indicatorSize: TabBarIndicatorSize.label,
-                    labelPadding: EdgeInsets.symmetric(horizontal: 12),
-                    labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    unselectedLabelStyle: TextStyle(fontSize: 13),
-                    tabs: [
-                      Tab(text: 'New Sale'),
-                      Tab(text: 'History'),
+class _SalesScreenState extends ConsumerState<SalesScreen> {
+  int _currentTab = 0;
+  final _cartKey = GlobalKey<CartScreenState>();
+
+  @override
+  Widget build(BuildContext context) {
+    final salesAsync = ref.watch(salesHistoryProvider);
+    final bgColor = Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.primary;
+
+    return Scaffold(
+      body: Column(
+        children: [
+          // Single compact toolbar line
+          Container(
+            color: bgColor,
+            child: SafeArea(
+              bottom: false,
+              child: SizedBox(
+                height: 40,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 8),
+                    _buildTabBtn('Sale', 0),
+                    const SizedBox(width: 2),
+                    _buildTabBtn('History', 1),
+                    const Spacer(),
+                    if (_currentTab == 0) ...[
+                      _buildToolbarAction(
+                        icon: Icons.pause_circle_outline,
+                        onTap: () => _cartKey.currentState?.holdBill(),
+                        tooltip: 'Hold',
+                      ),
+                      _buildToolbarAction(
+                        icon: Icons.qr_code_scanner,
+                        onTap: () => _cartKey.currentState?.scanAndAdd(),
+                        tooltip: 'Scan',
+                      ),
+                      _buildToolbarAction(
+                        icon: Icons.translate,
+                        onTap: () => _cartKey.currentState?.toggleLang(),
+                        tooltip: 'Lang',
+                      ),
+                      _buildToolbarAction(
+                        icon: Icons.mic,
+                        onTap: () => _cartKey.currentState?.toggleMic(),
+                        tooltip: 'Mic',
+                      ),
                     ],
-                  ),
+                    const SizedBox(width: 4),
+                  ],
                 ),
               ),
             ),
-            // Tab content
-            Expanded(
-              child: TabBarView(
-                children: [
-                  CartScreen(),
-                  _SalesHistory(salesAsync: salesAsync),
-                ],
-              ),
+          ),
+          // Tab content
+          Expanded(
+            child: IndexedStack(
+              index: _currentTab,
+              children: [
+                CartScreen(key: _cartKey),
+                _SalesHistory(salesAsync: salesAsync),
+              ],
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBtn(String label, int index) {
+    final isActive = _currentTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentTab = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
         ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolbarAction({
+    required IconData icon,
+    required VoidCallback? onTap,
+    required String tooltip,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Icon(icon, size: 18, color: Colors.white),
       ),
     );
   }

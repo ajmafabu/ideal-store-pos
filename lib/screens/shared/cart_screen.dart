@@ -27,10 +27,10 @@ class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
   @override
-  ConsumerState<CartScreen> createState() => _CartScreenState();
+  ConsumerState<CartScreen> createState() => CartScreenState();
 }
 
-class _CartScreenState extends ConsumerState<CartScreen>
+class CartScreenState extends ConsumerState<CartScreen>
     with AutomaticKeepAliveClientMixin {
   final _discountController = TextEditingController();
   final _amountPaidController = TextEditingController();
@@ -525,41 +525,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
     setState(() {});
   }
 
-  Widget _buildCompactAction({
-    required IconData icon,
-    required VoidCallback onTap,
-    required String tooltip,
-    Color? color,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Icon(icon, size: 18, color: color ?? Colors.grey.shade600),
-      ),
-    );
-  }
-
-  Widget _buildCompactActionBadge({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Badge(
-          label: Text(label, style: const TextStyle(fontSize: 9)),
-          child: Icon(icon, size: 18, color: color ?? Colors.grey.shade600),
-        ),
-      ),
-    );
-  }
-
   Widget _buildProductChip(Product product) {
     final inCart = _cart.where((c) => c.productId == product.id).length;
     return InkWell(
@@ -819,7 +784,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  Future<void> _scanAndAdd() async {
+  Future<void> scanAndAdd() async {
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
@@ -839,7 +804,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  Future<void> _toggleVoiceBilling() async {
+  Future<void> toggleMic() async {
     if (_isListening) {
       await _voiceBilling.stopListening();
       setState(() => _isListening = false);
@@ -1632,7 +1597,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  void _holdBill() {
+  void toggleLang() {
+    setState(() => _useTamilVoice = !_useTamilVoice);
+  }
+
+  void holdBill() {
     if (_cart.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -1801,51 +1770,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
     return Scaffold(
       body: Column(
         children: [
-          // Compact action bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            color: Theme.of(context).colorScheme.surface,
-            child: Row(
-              children: [
-                if (_heldBills.isNotEmpty)
-                  _buildCompactActionBadge(
-                    icon: Icons.history,
-                    label: '${_heldBills.length}',
-                    onTap: _showHeldBills,
-                    color: Colors.orange,
-                  ),
-                _buildCompactAction(
-                  icon: Icons.pause_circle_outline,
-                  onTap: _holdBill,
-                  tooltip: 'Hold',
-                ),
-                _buildCompactAction(
-                  icon: Icons.qr_code_scanner,
-                  onTap: _scanAndAdd,
-                  tooltip: 'Scan',
-                ),
-                if (Platform.isAndroid) ...[
-                  _buildCompactAction(
-                    icon: _useTamilVoice ? Icons.language : Icons.translate,
-                    onTap: () => setState(() => _useTamilVoice = !_useTamilVoice),
-                    tooltip: _useTamilVoice ? 'தமி' : 'EN',
-                    color: _useTamilVoice ? Colors.orange : Colors.grey,
-                  ),
-                  _buildCompactAction(
-                    icon: Icons.mic,
-                    onTap: _toggleVoiceBilling,
-                    tooltip: 'Mic',
-                    color: _isListening ? Colors.red : Colors.grey,
-                  ),
-                ],
-                const Spacer(),
-                Text(
-                  '${_cart.length} items',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          ),
           if (_isListening)
             Container(
               width: double.infinity,
@@ -1891,7 +1815,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                   ),
                   const SizedBox(width: 6),
                   GestureDetector(
-                    onTap: _toggleVoiceBilling,
+                    onTap: toggleMic,
                     child: const Icon(
                       Icons.stop_circle,
                       color: Colors.red,
@@ -1923,7 +1847,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       )
                     : IconButton(
                         icon: const Icon(Icons.qr_code_scanner, size: 16),
-                        onPressed: _scanAndAdd,
+                        onPressed: scanAndAdd,
                       ),
                 border: const OutlineInputBorder(),
                 contentPadding: const EdgeInsets.symmetric(
