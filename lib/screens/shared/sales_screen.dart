@@ -33,19 +33,40 @@ class SalesScreen extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Sales'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'New Sale'),
-              Tab(text: 'History'),
-            ],
-          ),
-        ),
-        body: TabBarView(
+        body: Column(
           children: [
-            const CartScreen(),
-            _SalesHistory(salesAsync: salesAsync),
+            // Compact single-line toolbar
+            Container(
+              color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.primary,
+              child: SafeArea(
+                bottom: false,
+                child: SizedBox(
+                  height: 36,
+                  child: const TabBar(
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    dividerHeight: 0,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    labelPadding: EdgeInsets.symmetric(horizontal: 12),
+                    labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    unselectedLabelStyle: TextStyle(fontSize: 13),
+                    tabs: [
+                      Tab(text: 'New Sale'),
+                      Tab(text: 'History'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Tab content
+            Expanded(
+              child: TabBarView(
+                children: [
+                  CartScreen(),
+                  _SalesHistory(salesAsync: salesAsync),
+                ],
+              ),
+            ),
           ],
         ),
       ),

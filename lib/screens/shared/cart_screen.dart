@@ -525,6 +525,41 @@ class _CartScreenState extends ConsumerState<CartScreen>
     setState(() {});
   }
 
+  Widget _buildCompactAction({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+    Color? color,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Icon(icon, size: 18, color: color ?? Colors.grey.shade600),
+      ),
+    );
+  }
+
+  Widget _buildCompactActionBadge({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Badge(
+          label: Text(label, style: const TextStyle(fontSize: 9)),
+          child: Icon(icon, size: 18, color: color ?? Colors.grey.shade600),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductChip(Product product) {
     final inCart = _cart.where((c) => c.productId == product.id).length;
     return InkWell(
@@ -1764,55 +1799,53 @@ class _CartScreenState extends ConsumerState<CartScreen>
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('New Sale'),
-        actions: [
-          if (_heldBills.isNotEmpty)
-            IconButton(
-              icon: Badge(
-                label: Text('${_heldBills.length}'),
-                child: const Icon(Icons.history),
-              ),
-              onPressed: _showHeldBills,
-              tooltip: 'Recall held bill',
-            ),
-          IconButton(
-            icon: const Icon(Icons.pause_circle_outline),
-            onPressed: _holdBill,
-            tooltip: 'Hold current bill',
-          ),
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner),
-            onPressed: _scanAndAdd,
-            tooltip: 'Scan Barcode',
-          ),
-          if (Platform.isAndroid) ...[
-            IconButton(
-              icon: Icon(
-                _useTamilVoice ? Icons.language : Icons.translate,
-                color: _useTamilVoice ? Colors.orange : Colors.grey,
-                size: 20,
-              ),
-              onPressed: () => setState(() => _useTamilVoice = !_useTamilVoice),
-              tooltip: _useTamilVoice
-                  ? 'Tamil voice (tap for English)'
-                  : 'English voice (tap for Tamil)',
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.mic,
-                color: _isListening ? Colors.red : Colors.grey,
-              ),
-              onPressed: _toggleVoiceBilling,
-              tooltip: _useTamilVoice
-                  ? 'தமிழ் குரல் பில்லிங்'
-                  : 'Voice billing',
-            ),
-          ],
-        ],
-      ),
       body: Column(
         children: [
+          // Compact action bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            color: Theme.of(context).colorScheme.surface,
+            child: Row(
+              children: [
+                if (_heldBills.isNotEmpty)
+                  _buildCompactActionBadge(
+                    icon: Icons.history,
+                    label: '${_heldBills.length}',
+                    onTap: _showHeldBills,
+                    color: Colors.orange,
+                  ),
+                _buildCompactAction(
+                  icon: Icons.pause_circle_outline,
+                  onTap: _holdBill,
+                  tooltip: 'Hold',
+                ),
+                _buildCompactAction(
+                  icon: Icons.qr_code_scanner,
+                  onTap: _scanAndAdd,
+                  tooltip: 'Scan',
+                ),
+                if (Platform.isAndroid) ...[
+                  _buildCompactAction(
+                    icon: _useTamilVoice ? Icons.language : Icons.translate,
+                    onTap: () => setState(() => _useTamilVoice = !_useTamilVoice),
+                    tooltip: _useTamilVoice ? 'தமி' : 'EN',
+                    color: _useTamilVoice ? Colors.orange : Colors.grey,
+                  ),
+                  _buildCompactAction(
+                    icon: Icons.mic,
+                    onTap: _toggleVoiceBilling,
+                    tooltip: 'Mic',
+                    color: _isListening ? Colors.red : Colors.grey,
+                  ),
+                ],
+                const Spacer(),
+                Text(
+                  '${_cart.length} items',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ),
           if (_isListening)
             Container(
               width: double.infinity,
