@@ -1860,53 +1860,91 @@ class CartScreenState extends ConsumerState<CartScreen>
               focusNode: _productSearchFocusNode,
             ),
           ),
-          // Product strip - horizontal single row
-          SizedBox(
-            height: 56,
-            child: _productSearchQuery.isNotEmpty
-                ? _filteredProducts.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No products found',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      )
-                    : ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        itemCount: _filteredProducts.length > 20
-                            ? 20
-                            : _filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = _filteredProducts[index];
-                          return _buildProductChipHorizontal(product);
-                        },
-                      )
-                : _topSoldProducts.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Start selling to see top products',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
-                        ),
-                      )
-                    : ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        itemCount: _topSoldProducts.length,
-                        itemBuilder: (context, index) {
-                          final entry = _topSoldProducts[index];
-                          final pid = entry['product_id'] as String;
-                          final product = _allProducts
-                              .where((p) => p.id == pid)
-                              .firstOrNull;
-                          if (product == null) return const SizedBox();
-                          return _buildProductChipHorizontal(product);
-                        },
+          // Product strip - horizontal single row (only when NOT searching)
+          if (_productSearchQuery.isEmpty)
+            SizedBox(
+              height: 56,
+              child: _topSoldProducts.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'Start selling to see top products',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
                       ),
-          ),
-          // Cart items
-          Expanded(
-            child: _cart.isEmpty
+                    )
+                  : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      itemCount: _topSoldProducts.length,
+                      itemBuilder: (context, index) {
+                        final entry = _topSoldProducts[index];
+                        final pid = entry['product_id'] as String;
+                        final product = _allProducts
+                            .where((p) => p.id == pid)
+                            .firstOrNull;
+                        if (product == null) return const SizedBox();
+                        return _buildProductChipHorizontal(product);
+                      },
+                    ),
+            ),
+          // Product list (when searching)
+          if (_productSearchQuery.isNotEmpty)
+            Expanded(
+              child: _filteredProducts.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No products found',
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      itemCount: _filteredProducts.length,
+                      itemBuilder: (context, index) {
+                        final product = _filteredProducts[index];
+                        final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                          leading: Container(
+                            width: 4,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: inCart > 0 ? Colors.green : Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          title: Text(
+                            product.name,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            '₹${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                          trailing: inCart > 0
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    '×$inCart',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                )
+                              : const Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
+                          onTap: () => _showQtyPopup(product),
+                        );
+                      },
+                    ),
+            ),
+          // Cart items (only when NOT searching)
+          if (_productSearchQuery.isEmpty)
+            Expanded(
+              child: _cart.isEmpty
                 ? const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
