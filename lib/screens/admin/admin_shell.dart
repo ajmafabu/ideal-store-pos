@@ -592,313 +592,313 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                     controller: scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     children: [
-              _MoreMenuItem(
-                icon: Icons.people_alt_rounded,
-                title: 'Customers',
-                color: const Color(0xFF667eea),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(7));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.business_rounded,
-                title: 'Suppliers',
-                color: const Color(0xFF11998e),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(8));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.receipt_long_rounded,
-                title: 'Reports',
-                color: const Color(0xFF8E2DE2),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(5));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.receipt_rounded,
-                title: 'GST Reports',
-                color: const Color(0xFF00897B),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const GSTReportScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.lock_clock_rounded,
-                title: 'Daily Report (Z-Report)',
-                color: const Color(0xFFE91E63),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyReportScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.people_rounded,
-                title: 'Staff',
-                color: const Color(0xFF764ba2),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(6));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.money_off_rounded,
-                title: 'Expenses',
-                color: const Color(0xFFeb3349),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(4));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.account_balance_wallet_rounded,
-                title: 'Accounts',
-                color: const Color(0xFF11998e),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() => ref.read(currentTabProvider.notifier).setTab(9));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.store_rounded,
-                title: 'Shop Settings',
-                color: const Color(0xFF764ba2),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ShopSettingsScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.qr_code_2_rounded,
-                title: 'Barcode Labels',
-                color: const Color(0xFF00897B),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const BarcodeLabelScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.trending_down_rounded,
-                title: 'Slow Moving Stock',
-                color: const Color(0xFFE91E63),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SlowMovingScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.print_rounded,
-                title: 'Printer Setup',
-                color: const Color(0xFF5C6BC0),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSetupScreen()));
-                },
-              ),
-              const SizedBox(height: 8),
-              _MoreMenuItem(
-                icon: Icons.replay_rounded,
-                title: 'Returns',
-                color: const Color(0xFFFF9800),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnsScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.broken_image_rounded,
-                title: 'Damaged Products',
-                color: const Color(0xFFf44336),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DamagedScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.shopping_bag_rounded,
-                title: 'Purchase Orders',
-                color: const Color(0xFF11998e),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.analytics_rounded,
-                title: 'Analytics',
-                color: const Color(0xFF667eea),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.backup_rounded,
-                title: 'Backup & Restore',
-                color: const Color(0xFF11998e),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()));
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.receipt_long_rounded,
-                title: 'GST Filing Export',
-                color: const Color(0xFF00897B),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const GstFilingScreen()));
-                },
-              ),
-              const SizedBox(height: 8),
-              _MoreMenuItem(
-                icon: Icons.system_update_rounded,
-                title: 'Check for Updates',
-                color: const Color(0xFF2196F3),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  try {
-                    final service = UpdateService();
-                    final update = await service.checkForUpdate();
-                    if (!context.mounted) return;
+                      _MoreMenuSection('MANAGEMENT'),
+                      _MoreMenuItem(
+                        icon: Icons.people_alt_rounded,
+                        title: 'Customers',
+                        color: const Color(0xFF667eea),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(7));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.business_rounded,
+                        title: 'Suppliers',
+                        color: const Color(0xFF11998e),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(8));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.people_rounded,
+                        title: 'Staff',
+                        color: const Color(0xFF764ba2),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(6));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.money_off_rounded,
+                        title: 'Expenses',
+                        color: const Color(0xFFeb3349),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(4));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.account_balance_wallet_rounded,
+                        title: 'Accounts',
+                        color: const Color(0xFF11998e),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(9));
+                        },
+                      ),
+                      _MoreMenuSection('REPORTS'),
+                      _MoreMenuItem(
+                        icon: Icons.receipt_long_rounded,
+                        title: 'Reports',
+                        color: const Color(0xFF8E2DE2),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() => ref.read(currentTabProvider.notifier).setTab(5));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.receipt_rounded,
+                        title: 'GST Reports',
+                        color: const Color(0xFF00897B),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const GSTReportScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.lock_clock_rounded,
+                        title: 'Daily Report',
+                        color: const Color(0xFFE91E63),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyReportScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.analytics_rounded,
+                        title: 'Analytics',
+                        color: const Color(0xFF667eea),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsScreen()));
+                        },
+                      ),
+                      _MoreMenuSection('TOOLS'),
+                      _MoreMenuItem(
+                        icon: Icons.replay_rounded,
+                        title: 'Returns',
+                        color: const Color(0xFFFF9800),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnsScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.broken_image_rounded,
+                        title: 'Damaged Products',
+                        color: const Color(0xFFf44336),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const DamagedScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.shopping_bag_rounded,
+                        title: 'Purchase Orders',
+                        color: const Color(0xFF11998e),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.qr_code_2_rounded,
+                        title: 'Barcode Labels',
+                        color: const Color(0xFF00897B),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const BarcodeLabelScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.trending_down_rounded,
+                        title: 'Slow Moving Stock',
+                        color: const Color(0xFFE91E63),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const SlowMovingScreen()));
+                        },
+                      ),
+                      _MoreMenuSection('SETTINGS'),
+                      _MoreMenuItem(
+                        icon: Icons.store_rounded,
+                        title: 'Shop Settings',
+                        color: const Color(0xFF764ba2),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const ShopSettingsScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.print_rounded,
+                        title: 'Printer Setup',
+                        color: const Color(0xFF5C6BC0),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSetupScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.backup_rounded,
+                        title: 'Backup & Restore',
+                        color: const Color(0xFF11998e),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.receipt_long_rounded,
+                        title: 'GST Filing Export',
+                        color: const Color(0xFF00897B),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const GstFilingScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.system_update_rounded,
+                        title: 'Check for Updates',
+                        color: const Color(0xFF2196F3),
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          try {
+                            final service = UpdateService();
+                            final update = await service.checkForUpdate();
+                            if (!context.mounted) return;
 
-                    if (update == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('You are on the latest version')),
-                      );
-                      return;
-                    }
+                            if (update == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('You are on the latest version')),
+                              );
+                              return;
+                            }
 
-                    // Show update dialog
-                    final shouldUpdate = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: Row(
-                          children: [
-                            const Icon(Icons.system_update, color: Colors.blue),
-                            const SizedBox(width: 8),
-                            const Text('Update Available'),
-                          ],
+                            final shouldUpdate = await showDialog<bool>(
+                              context: context,
+                              builder: (dctx) => AlertDialog(
+                                title: Row(
+                                  children: [
+                                    const Icon(Icons.system_update, color: Colors.blue),
+                                    const SizedBox(width: 8),
+                                    const Text('Update Available'),
+                                  ],
+                                ),
+                                content: Text(
+                                  'Version ${update.latestVersion} is available.\n\nYou are on version ${update.currentVersion}',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(dctx, false),
+                                    child: const Text('Later'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(dctx, true),
+                                    child: const Text('Update Now'),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (shouldUpdate == true && context.mounted) {
+                              showDialog(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (dctx) => _UpdateProgressDialog(update: update),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Update check failed: $e')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      _ThemeMenuItem(),
+                      const SizedBox(height: 8),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                         ),
-                        content: Text(
-                          'Version ${update.latestVersion} is available.\n\nYou are on version ${update.currentVersion}',
+                        child: _MoreMenuItem(
+                          icon: Icons.lock_outline_rounded,
+                          title: 'Change Password',
+                          color: Colors.orange,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _showChangePassword();
+                          },
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(dctx, false),
-                            child: const Text('Later'),
-                          ),
-                          FilledButton(
-                            onPressed: () => Navigator.pop(dctx, true),
-                            child: const Text('Update Now'),
-                          ),
-                        ],
                       ),
-                    );
-
-                    if (shouldUpdate == true && context.mounted) {
-                      // Show progress dialog
-                      showDialog(
-                        context: context,
-                        barrierDismissible: false,
-                        builder: (dctx) => _UpdateProgressDialog(update: update),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Update check failed: $e')),
-                      );
-                    }
-                  }
-                },
-              ),
-              _ThemeMenuItem(),
-              const SizedBox(height: 8),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                ),
-                child: _MoreMenuItem(
-                  icon: Icons.lock_outline_rounded,
-                  title: 'Change Password',
-                  color: Colors.orange,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showChangePassword();
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-                ),
-                child: _MoreMenuItem(
-                  icon: Icons.delete_forever_rounded,
-                  title: 'Factory Reset',
-                  color: Colors.red,
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const FactoryResetScreen(),
+                      const SizedBox(height: 8),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                        ),
+                        child: _MoreMenuItem(
+                          icon: Icons.delete_forever_rounded,
+                          title: 'Factory Reset',
+                          color: Colors.red,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const FactoryResetScreen(),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
-                ),
-                child: _MoreMenuItem(
-                  icon: Icons.logout_rounded,
-                  title: 'Sign Out',
-                  color: Colors.red,
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Sign Out'),
-                        content: const Text('Are you sure you want to sign out?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
-                          ),
-                        ],
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                        ),
+                        child: _MoreMenuItem(
+                          icon: Icons.logout_rounded,
+                          title: 'Sign Out',
+                          color: Colors.red,
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            final confirmed = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Sign Out'),
+                                content: const Text('Are you sure you want to sign out?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirmed == true && context.mounted) {
+                              ref.invalidate(profileProvider);
+                              await ref.read(authServiceProvider).signOut();
+                              if (context.mounted) context.go('/login');
+                            }
+                          },
+                        ),
                       ),
-                    );
-                    if (confirmed == true && context.mounted) {
-                      ref.invalidate(profileProvider);
-                      await ref.read(authServiceProvider).signOut();
-                      if (context.mounted) context.go('/login');
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              ],
+                      const SizedBox(height: 8),
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1187,6 +1187,29 @@ class _MoreMenuItem extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400),
       onTap: onTap,
+    );
+  }
+}
+
+class _MoreMenuSection extends StatelessWidget {
+  final String title;
+  const _MoreMenuSection(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.4)
+              : Colors.grey.shade500,
+          letterSpacing: 1.2,
+        ),
+      ),
     );
   }
 }

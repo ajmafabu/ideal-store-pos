@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -178,6 +179,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
             StatefulBuilder(
               builder: (ctx, setDialogState) => TextField(
                 keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(
                   labelText: 'Quantity',
                   border: OutlineInputBorder(),
@@ -336,15 +338,18 @@ class _CartScreenState extends ConsumerState<CartScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Current: Rs ${item.price.toStringAsFixed(2)}'),
+            Text('Current: ₹${item.price.toStringAsFixed(2)}'),
             const SizedBox(height: 12),
             TextField(
               controller: priceController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+              ],
               decoration: const InputDecoration(
                 labelText: 'New Price',
                 border: OutlineInputBorder(),
-                prefixText: 'Rs ',
+                prefixText: '₹ ',
               ),
               autofocus: true,
             ),
@@ -488,7 +493,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
       child: Padding(
         padding: const EdgeInsets.all(2),
         child: Material(
-          color: isAction ? Colors.grey.shade200 : Colors.white,
+          color: isAction
+              ? (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey.shade800
+                  : Colors.grey.shade200)
+              : (Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey.shade900
+                  : Colors.white),
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             onTap: () {
@@ -517,7 +528,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: isAction ? Colors.grey.shade700 : Colors.black87,
+                  color: isAction
+                      ? (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white70
+                          : Colors.grey.shade700)
+                      : (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : Colors.black87),
                 ),
               ),
             ),
@@ -550,7 +567,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
               : Colors.grey.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: inCart > 0 ? Colors.green.shade300 : Colors.grey.shade200,
+            color: inCart > 0
+                ? Colors.green.shade300
+                : (Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade700
+                    : Colors.grey.shade200),
           ),
         ),
         child: Column(
@@ -594,7 +615,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
             ),
             Text(
               '₹${product.sellingPrice.toStringAsFixed(0)}',
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              style: TextStyle(
+                fontSize: 10,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade400
+                    : Colors.grey.shade600,
+              ),
             ),
           ],
         ),
@@ -905,27 +931,27 @@ class _CartScreenState extends ConsumerState<CartScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Complete Sale'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Items: ${_cart.length}'),
-            Text('Total: Rs ${_total.toStringAsFixed(2)}'),
-            if (_isSplitPayment && !_isCredit) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Cash: Rs${(double.tryParse(_cashAmountController.text) ?? 0).toStringAsFixed(2)}',
-              ),
-              Text(
-                'UPI: Rs${(double.tryParse(_upiAmountController.text) ?? 0).toStringAsFixed(2)}',
-              ),
-            ],
-            if (_isCredit) ...[
-              const SizedBox(height: 8),
-              Text('Customer: ${_selectedCustomer?.name ?? ""}'),
-              Text('Amount Paid: Rs ${_amountPaid.toStringAsFixed(2)}'),
-              Text(
-                'Due: Rs ${_dueAmount.toStringAsFixed(2)}',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Items: ${_cart.length}'),
+                Text('Total: ₹${_total.toStringAsFixed(2)}'),
+                if (_isSplitPayment && !_isCredit) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Cash: ₹${(double.tryParse(_cashAmountController.text) ?? 0).toStringAsFixed(2)}',
+                  ),
+                  Text(
+                    'UPI: ₹${(double.tryParse(_upiAmountController.text) ?? 0).toStringAsFixed(2)}',
+                  ),
+                ],
+                if (_isCredit) ...[
+                  const SizedBox(height: 8),
+                  Text('Customer: ${_selectedCustomer?.name ?? ""}'),
+                  Text('Amount Paid: ₹${_amountPaid.toStringAsFixed(2)}'),
+                  Text(
+                    'Due: ₹${_dueAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: Colors.red,
                   fontWeight: FontWeight.bold,
@@ -1052,6 +1078,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       }
 
       if (mounted) {
+        HapticFeedback.heavyImpact();
         if (savedOffline) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -1067,92 +1094,88 @@ class _CartScreenState extends ConsumerState<CartScreen>
             title: Text(_isCredit ? 'Credit Sale!' : 'Sale Completed!'),
             content: _isCredit
                 ? Text(
-                    'Total: Rs ${_total.toStringAsFixed(2)}\nDue: Rs ${_dueAmount.toStringAsFixed(2)}',
+                    'Total: ₹${_total.toStringAsFixed(2)}\nDue: ₹${_dueAmount.toStringAsFixed(2)}',
                   )
                 : Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Total: Rs ${_total.toStringAsFixed(2)}${savedOffline ? "\n(Saved offline)" : ""}',
+                        'Total: ₹${_total.toStringAsFixed(2)}${savedOffline ? "\n(Saved offline)" : ""}',
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        'PRINT',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blueGrey,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.print,
-                            label: 'Print',
-                            action: 'bluetooth_print',
-                            color: Colors.blue,
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.print,
+                              label: 'Bluetooth',
+                              action: 'bluetooth_print',
+                              color: Colors.blue,
+                            ),
                           ),
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.usb,
-                            label: 'USB Print',
-                            action: 'print',
-                            color: Colors.blue,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.usb,
+                              label: 'USB Print',
+                              action: 'print',
+                              color: Colors.blue,
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        'SHARE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blueGrey,
-                          letterSpacing: 1,
-                        ),
-                      ),
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                      Row(
                         children: [
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.picture_as_pdf,
-                            label: 'PDF',
-                            action: 'share',
-                            color: Colors.green,
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.picture_as_pdf,
+                              label: 'PDF',
+                              action: 'share',
+                              color: Colors.green,
+                            ),
                           ),
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.message,
-                            label: 'WhatsApp',
-                            action: 'whatsapp',
-                            color: Colors.green,
-                          ),
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.text_snippet,
-                            label: 'Text',
-                            action: 'thermal_share',
-                            color: Colors.green,
-                          ),
-                          _invoiceActionBtn(
-                            ctx,
-                            icon: Icons.email,
-                            label: 'Email',
-                            action: 'email',
-                            color: Colors.green,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.message,
+                              label: 'WhatsApp',
+                              action: 'whatsapp',
+                              color: Colors.green,
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.text_snippet,
+                              label: 'Text',
+                              action: 'thermal_share',
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _invoiceActionBtn(
+                              ctx,
+                              icon: Icons.email,
+                              label: 'Email',
+                              action: 'email',
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
@@ -1364,7 +1387,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
           TextButton(
             onPressed: () async {
               final email = emailController.text.trim();
-              if (email.isEmpty || !email.contains('@')) {
+              if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
                     content: Text('Enter valid email'),
@@ -1916,7 +1939,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         ),
                       ),
                       Text(
-                        'Rs ${_total.toStringAsFixed(0)}',
+                        '₹${_total.toStringAsFixed(0)}',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,

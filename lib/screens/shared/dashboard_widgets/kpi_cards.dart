@@ -25,6 +25,39 @@ class KpiCards extends ConsumerWidget {
       data: (sales) => sales.length,
     );
 
+    final isLoading = todaySales is AsyncLoading || todayExpenses is AsyncLoading || stockValue is AsyncLoading;
+
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Overview',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _SkeletonKpiCard()),
+                const SizedBox(width: 12),
+                Expanded(child: _SkeletonKpiCard()),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _SkeletonKpiCard()),
+                const SizedBox(width: 12),
+                Expanded(child: _SkeletonKpiCard()),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -47,7 +80,7 @@ class KpiCards extends ConsumerWidget {
                   value: todaySales.when(
                     loading: () => '...',
                     error: (_, __) => 'Rs0',
-                    data: (v) => 'Rs${_formatAmount(v)}',
+                    data: (v) => '₹${_formatAmount(v)}',
                   ),
                   icon: Icons.trending_up_rounded,
                   color: const Color(0xFF10B981),
@@ -80,7 +113,7 @@ class KpiCards extends ConsumerWidget {
                   value: todayExpenses.when(
                     loading: () => '...',
                     error: (_, __) => 'Rs0',
-                    data: (v) => 'Rs${_formatAmount(v)}',
+                    data: (v) => '₹${_formatAmount(v)}',
                   ),
                   icon: Icons.account_balance_wallet_rounded,
                   color: const Color(0xFFF59E0B),
@@ -94,7 +127,7 @@ class KpiCards extends ConsumerWidget {
                   value: todayGst.when(
                     loading: () => '...',
                     error: (_, __) => 'Rs0',
-                    data: (v) => 'Rs${_formatAmount(v)}',
+                    data: (v) => '₹${_formatAmount(v)}',
                   ),
                   icon: Icons.receipt_rounded,
                   color: const Color(0xFF0EA5E9),
@@ -114,7 +147,7 @@ class KpiCards extends ConsumerWidget {
                   value: avgOrderValue.when(
                     loading: () => '...',
                     error: (_, __) => 'Rs0',
-                    data: (v) => 'Rs${_formatAmount(v)}',
+                    data: (v) => '₹${_formatAmount(v)}',
                   ),
                   icon: Icons.analytics_rounded,
                   color: const Color(0xFFEC4899),
@@ -128,7 +161,7 @@ class KpiCards extends ConsumerWidget {
                   value: stockValue.when(
                     loading: () => '...',
                     error: (_, __) => 'Rs0',
-                    data: (v) => 'Rs${_formatAmount(v)}',
+                    data: (v) => '₹${_formatAmount(v)}',
                   ),
                   icon: Icons.inventory_2_rounded,
                   color: const Color(0xFF8B5CF6),
@@ -377,4 +410,45 @@ class _SparklinePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SparklinePainter old) =>
       old.data != data || old.color != color;
+}
+
+class _SkeletonKpiCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.grey.shade800 : Colors.grey.shade300;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey.shade900 : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 80,
+            height: 12,
+            decoration: BoxDecoration(
+              color: baseColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: 100,
+            height: 22,
+            decoration: BoxDecoration(
+              color: baseColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
