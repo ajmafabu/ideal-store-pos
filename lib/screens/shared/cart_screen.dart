@@ -220,21 +220,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _addToCartWithQty(Product product, int qty) async {
-    // Stock validation
-    final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
-    final requestedTotal = inCart + qty;
-    if (requestedTotal > product.stock) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Insufficient stock! Available: ${product.stock}, In cart: $inCart'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
     final picked = await RatePickerDialog.show(context, product);
     final price = picked?.price ?? product.sellingPrice;
     final rateLabel = picked?.label;
@@ -282,20 +267,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
   }
 
   Future<void> _addToCart(Product product) async {
-    // Stock validation
-    final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
-    if (inCart + 1 > product.stock) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Insufficient stock! Available: ${product.stock}, In cart: $inCart'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
     final picked = await RatePickerDialog.show(context, product);
     final price = picked?.price ?? product.sellingPrice;
     final rateLabel = picked?.label;
