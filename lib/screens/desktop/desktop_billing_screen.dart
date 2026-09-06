@@ -687,7 +687,13 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       if (aName != q && bName == q) return 1;
       if (aName.startsWith(q) && !bName.startsWith(q)) return -1;
       if (!aName.startsWith(q) && bName.startsWith(q)) return 1;
-      return 0;
+      final aStart = a.name.codeUnitAt(0);
+      final bStart = b.name.codeUnitAt(0);
+      final aIsLetter = (aStart >= 65 && aStart <= 90) || (aStart >= 97 && aStart <= 122);
+      final bIsLetter = (bStart >= 65 && bStart <= 90) || (bStart >= 97 && bStart <= 122);
+      if (aIsLetter && !bIsLetter) return -1;
+      if (!aIsLetter && bIsLetter) return 1;
+      return aName.compareTo(bName);
     });
 
     setState(() {

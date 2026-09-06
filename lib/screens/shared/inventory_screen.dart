@@ -657,7 +657,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         case 'value_asc': return (a.stock * a.sellingPrice).compareTo(b.stock * b.sellingPrice);
         case 'value_desc': return (b.stock * b.sellingPrice).compareTo(a.stock * a.sellingPrice);
         case 'name_desc': return b.name.compareTo(a.name);
-        default: return a.name.compareTo(b.name);
+        default:
+          final aStart = a.name.codeUnitAt(0);
+          final bStart = b.name.codeUnitAt(0);
+          final aIsLetter = (aStart >= 65 && aStart <= 90) || (aStart >= 97 && aStart <= 122);
+          final bIsLetter = (bStart >= 65 && bStart <= 90) || (bStart >= 97 && bStart <= 122);
+          if (aIsLetter && !bIsLetter) return -1;
+          if (!aIsLetter && bIsLetter) return 1;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       }
     });
 
