@@ -628,6 +628,191 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
+  Widget _buildProductChipHorizontal(Product product) {
+    final inCart = _cart.where((c) => c.productId == product.id).length;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: () => _showQtyPopup(product),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 100,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: inCart > 0
+                ? Colors.green.withValues(alpha: 0.1)
+                : Colors.grey.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: inCart > 0
+                  ? Colors.green.shade300
+                  : (Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.shade700
+                      : Colors.grey.shade200),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      product.name,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: inCart > 0 ? Colors.green.shade700 : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (inCart > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$inCart',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Text(
+                '₹${product.sellingPrice.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey.shade400
+                      : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPaymentOptionsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            16,
+            16,
+            MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Payment Options',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                CustomerPicker(
+                  selectedCustomer: _selectedCustomer,
+                  filteredCustomers: _filteredCustomers,
+                  searchController: _searchController,
+                  showSearch: _showCustomerSearch,
+                  onToggleSearch: () => setSheetState(
+                    () {
+                      setState(() => _showCustomerSearch = !_showCustomerSearch);
+                    },
+                  ),
+                  onClearCustomer: () => setSheetState(() {
+                    setState(() => _selectedCustomer = null);
+                  }),
+                  onAddCustomer: _showAddCustomerDialog,
+                  onSearchChanged: _filterCustomers,
+                  onSelectCustomer: (customer) {
+                    setSheetState(() {
+                      setState(() {
+                        _selectedCustomer = customer;
+                        _showCustomerSearch = false;
+                        _searchController.clear();
+                      });
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                PaymentSection(
+                  discountController: _discountController,
+                  amountPaidController: _amountPaidController,
+                  paymentMethod: _paymentMethod,
+                  isCredit: _isCredit,
+                  dueAmount: _dueAmount,
+                  total: _total,
+                  isSplitPayment: _isSplitPayment,
+                  cashAmountController: _cashAmountController,
+                  upiAmountController: _upiAmountController,
+                  onPaymentMethodChanged: (method) => setSheetState(() {
+                    setState(() {
+                      _paymentMethod = method;
+                      _isCredit = false;
+                      _isSplitPayment = false;
+                    });
+                  }),
+                  onCreditToggled: () => setSheetState(() {
+                    setState(() {
+                      _isCredit = !_isCredit;
+                      if (_isCredit) _amountPaidController.clear();
+                    });
+                  }),
+                  onSplitPaymentToggled: (val) => setSheetState(() {
+                    setState(() {
+                      _isSplitPayment = val;
+                      if (val) {
+                        _cashAmountController.text = _total.toStringAsFixed(2);
+                        _upiAmountController.text = '0.00';
+                      } else {
+                        _cashAmountController.clear();
+                        _upiAmountController.clear();
+                      }
+                    });
+                  }),
+                  onChanged: () => setSheetState(() {}),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _scanAndAdd() async {
     final result = await Navigator.push<String>(
       context,
@@ -1660,19 +1845,19 @@ class _CartScreenState extends ConsumerState<CartScreen>
           if (_isListening)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               color: Colors.red.withValues(alpha: 0.1),
               child: Row(
                 children: [
-                  const Icon(Icons.mic, size: 16, color: Colors.red),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.mic, size: 14, color: Colors.red),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       _partialText.isEmpty
                           ? (_useTamilVoice ? 'கேட்கிறது...' : 'Listening...')
                           : _partialText,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         color: _partialText.isEmpty
                             ? Colors.red.shade300
                             : Colors.red.shade700,
@@ -1700,29 +1885,29 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   GestureDetector(
                     onTap: _toggleVoiceBilling,
                     child: const Icon(
                       Icons.stop_circle,
                       color: Colors.red,
-                      size: 24,
+                      size: 20,
                     ),
                   ),
                 ],
               ),
             ),
-          // Always-visible search bar
+          // Search bar
           Container(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
             child: TextField(
               controller: _productSearchController,
               decoration: InputDecoration(
-                hintText: 'Search product by name or Tamil...',
-                prefixIcon: const Icon(Icons.search, size: 20),
+                hintText: 'Search product...',
+                prefixIcon: const Icon(Icons.search, size: 18),
                 suffixIcon: _productSearchQuery.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
+                        icon: const Icon(Icons.clear, size: 16),
                         onPressed: () {
                           _productSearchController.clear();
                           setState(() {
@@ -1733,13 +1918,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         },
                       )
                     : IconButton(
-                        icon: const Icon(Icons.qr_code_scanner, size: 18),
+                        icon: const Icon(Icons.qr_code_scanner, size: 16),
                         onPressed: _scanAndAdd,
                       ),
                 border: const OutlineInputBorder(),
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                  horizontal: 10,
+                  vertical: 6,
                 ),
                 isDense: true,
               ),
@@ -1747,56 +1932,38 @@ class _CartScreenState extends ConsumerState<CartScreen>
               focusNode: _productSearchFocusNode,
             ),
           ),
-          // Product grid
+          // Product strip - horizontal single row
           SizedBox(
-            height: 110,
+            height: 56,
             child: _productSearchQuery.isNotEmpty
                 ? _filteredProducts.isEmpty
                     ? const Center(
                         child: Text(
                           'No products found',
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          childAspectRatio: 2.5,
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
-                        ),
-                        itemCount: _filteredProducts.length > 30
-                            ? 30
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        itemCount: _filteredProducts.length > 20
+                            ? 20
                             : _filteredProducts.length,
                         itemBuilder: (context, index) {
                           final product = _filteredProducts[index];
-                          return _buildProductChip(product);
+                          return _buildProductChipHorizontal(product);
                         },
                       )
                 : _topSoldProducts.isEmpty
                     ? const Center(
                         child: Text(
                           'Start selling to see top products',
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          childAspectRatio: 2.5,
-                          crossAxisSpacing: 6,
-                          mainAxisSpacing: 6,
-                        ),
+                    : ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
                         itemCount: _topSoldProducts.length,
                         itemBuilder: (context, index) {
                           final entry = _topSoldProducts[index];
@@ -1805,13 +1972,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               .where((p) => p.id == pid)
                               .firstOrNull;
                           if (product == null) return const SizedBox();
-                          return _buildProductChip(product);
+                          return _buildProductChipHorizontal(product);
                         },
                       ),
           ),
-          // Divider
-          if (_cart.isNotEmpty)
-            const Divider(height: 1),
           // Cart items
           Expanded(
             child: _cart.isEmpty
@@ -1821,19 +1985,19 @@ class _CartScreenState extends ConsumerState<CartScreen>
                       children: [
                         Icon(
                           Icons.shopping_cart,
-                          size: 60,
+                          size: 48,
                           color: Colors.grey,
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: 6),
                         Text(
                           'Tap a product above to add',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
                         ),
                       ],
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     itemCount: _cart.length,
                     itemBuilder: (context, index) {
                       final item = _cart[index];
@@ -1850,9 +2014,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     },
                   ),
           ),
+          // Compact bottom bar
           if (_cart.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 boxShadow: [
@@ -1863,116 +2028,93 @@ class _CartScreenState extends ConsumerState<CartScreen>
                 ],
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Customer info with due (if selected)
-                  if (_selectedCustomer != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: (_selectedCustomer!.totalCredit ?? 0) > 0
-                            ? Colors.orange.withValues(alpha: 0.1)
-                            : Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.person,
-                            size: 14,
-                            color: (_selectedCustomer!.totalCredit ?? 0) > 0
-                                ? Colors.orange
-                                : Colors.blue,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _selectedCustomer!.name,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: (_selectedCustomer!.totalCredit ?? 0) > 0
-                                  ? Colors.orange
-                                  : Colors.blue,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Spacer(),
-                          if ((_selectedCustomer!.totalCredit ?? 0) > 0)
-                            Text(
-                              'Due: ₹${(_selectedCustomer!.totalCredit ?? 0).toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  // Compact summary
+                  // Row 1: Customer + Summary + Payment chips
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Customer chip
+                      if (_selectedCustomer != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                                ? Colors.orange.withValues(alpha: 0.1)
+                                : Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 12,
+                                color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                                    ? Colors.orange
+                                    : Colors.blue,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                _selectedCustomer!.name,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                                      ? Colors.orange
+                                      : Colors.blue,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if ((_selectedCustomer!.totalCredit ?? 0) > 0)
+                                Text(
+                                  ' Due:₹${(_selectedCustomer!.totalCredit ?? 0).toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      if (_selectedCustomer != null) const SizedBox(width: 6),
+                      // Summary text
                       Text(
-                        '${_cart.length} product${_cart.length != 1 ? 's' : ''} · Subtotal: ₹${_subtotal.toStringAsFixed(0)}',
+                        '${_cart.length} items · ₹${_total.toStringAsFixed(0)}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Total
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total:',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '₹${_total.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Always-visible payment method chips
-                  Row(
-                    children: [
-                      const Text('Payment: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 4),
+                      const Spacer(),
+                      // Payment chips compact
                       ChoiceChip(
-                        label: const Text('Cash', style: TextStyle(fontSize: 11)),
+                        label: const Text('₹', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         selected: !_isCredit && _paymentMethod == 'cash',
                         onSelected: (_) => setState(() {
                           _paymentMethod = 'cash';
                           _isCredit = false;
                           _isSplitPayment = false;
                         }),
+                        visualDensity: VisualDensity.compact,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       ChoiceChip(
-                        label: const Text('Digital', style: TextStyle(fontSize: 11)),
+                        label: const Text('📱', style: TextStyle(fontSize: 11)),
                         selected: !_isCredit && _paymentMethod == 'digital',
                         onSelected: (_) => setState(() {
                           _paymentMethod = 'digital';
                           _isCredit = false;
                           _isSplitPayment = false;
                         }),
+                        visualDensity: VisualDensity.compact,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       ChoiceChip(
-                        label: const Text('Credit', style: TextStyle(fontSize: 11)),
+                        label: const Text('⏱', style: TextStyle(fontSize: 11)),
                         selected: _isCredit,
                         onSelected: (_) => setState(() {
                           _isCredit = !_isCredit;
@@ -1981,139 +2123,55 @@ class _CartScreenState extends ConsumerState<CartScreen>
                         }),
                         backgroundColor: Colors.orange.shade100,
                         selectedColor: Colors.orange,
+                        visualDensity: VisualDensity.compact,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  // Complete button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: ElevatedButton(
-                      onPressed: _completeSale,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isCredit
-                            ? Colors.orange
-                            : Colors.green,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Text(
-                        _isCredit ? 'Complete Credit Sale' : 'Complete Sale',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Expandable payment options
-                  GestureDetector(
-                    onTap: () => setState(
-                      () => _showPaymentOptions = !_showPaymentOptions,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _showPaymentOptions
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            size: 18,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Payment Options',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (!_showPaymentOptions)
-                            Text(
-                              _isCredit
-                                  ? 'Credit'
-                                  : _paymentMethod.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
+                  const SizedBox(height: 6),
+                  // Row 2: Complete button + More options
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 40,
+                          child: ElevatedButton(
+                            onPressed: _completeSale,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _isCredit
+                                  ? Colors.orange
+                                  : Colors.green,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
-                        ],
+                            child: Text(
+                              _isCredit ? 'Complete Credit' : 'Complete Sale ₹${_total.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        height: 40,
+                        width: 40,
+                        child: OutlinedButton(
+                          onPressed: () => _showPaymentOptionsSheet(context),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: const Icon(Icons.tune, size: 18),
+                        ),
+                      ),
+                    ],
                   ),
-                  // Expandable content
-                  if (_showPaymentOptions) ...[
-                    const SizedBox(height: 8),
-                    CustomerPicker(
-                      selectedCustomer: _selectedCustomer,
-                      filteredCustomers: _filteredCustomers,
-                      searchController: _searchController,
-                      showSearch: _showCustomerSearch,
-                      onToggleSearch: () => setState(
-                        () => _showCustomerSearch = !_showCustomerSearch,
-                      ),
-                      onClearCustomer: () =>
-                          setState(() => _selectedCustomer = null),
-                      onAddCustomer: _showAddCustomerDialog,
-                      onSearchChanged: _filterCustomers,
-                      onSelectCustomer: (customer) {
-                        setState(() {
-                          _selectedCustomer = customer;
-                          _showCustomerSearch = false;
-                          _searchController.clear();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    PaymentSection(
-                      discountController: _discountController,
-                      amountPaidController: _amountPaidController,
-                      paymentMethod: _paymentMethod,
-                      isCredit: _isCredit,
-                      dueAmount: _dueAmount,
-                      total: _total,
-                      isSplitPayment: _isSplitPayment,
-                      cashAmountController: _cashAmountController,
-                      upiAmountController: _upiAmountController,
-                      onPaymentMethodChanged: (method) => setState(() {
-                        _paymentMethod = method;
-                        _isCredit = false;
-                        _isSplitPayment = false;
-                      }),
-                      onCreditToggled: () => setState(() {
-                        _isCredit = !_isCredit;
-                        if (_isCredit) _amountPaidController.clear();
-                      }),
-                      onSplitPaymentToggled: (val) => setState(() {
-                        _isSplitPayment = val;
-                        if (val) {
-                          _cashAmountController.text = _total.toStringAsFixed(
-                            2,
-                          );
-                          _upiAmountController.text = '0.00';
-                        } else {
-                          _cashAmountController.clear();
-                          _upiAmountController.clear();
-                        }
-                      }),
-                      onChanged: () => setState(() {}),
-                    ),
-                  ],
                 ],
               ),
             ),
