@@ -28,10 +28,10 @@ class TamilBitmapRenderer {
   static const double _canvasW = 610;
 
   static const double _snoX = 2;
-  static const double _snoW = 25;
+  static const double _snoW = 35;
 
-  static const double _partX = 27;
-  static const double _partW = 280;
+  static const double _partX = 37;
+  static const double _partW = 270;
 
   static const double _qtyX = 307;
   static const double _qtyW = 45;
