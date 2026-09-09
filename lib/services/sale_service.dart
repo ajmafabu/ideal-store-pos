@@ -409,7 +409,7 @@ class SaleService {
     }
   }
 
-  /// Manual fallback: restore stock, delete returns, delete account entries, delete sale.
+  /// Manual fallback: undo returns, restore stock, delete returns, delete sale.
   Future<void> _deleteSaleManually(String saleId) async {
     // 1. Fetch sale data
     final saleData = await _client
@@ -422,7 +422,66 @@ class SaleService {
 
     final items = saleData['items'] as List<dynamic>? ?? [];
 
-    // 2. Reverse account entry
+    // 2. Fetch linked returns (must delete these first due to FK constraint)
+    final returns = await _client
+        .from('product_returns')
+        .select('id, product_id, quantity, refund_amount')
+        .eq('original_sale_id', saleId);
+
+    // 3. Undo each return: deduct restored stock, reverse refund transaction
+    for (final ret in returns) {
+      final productId = ret['product_id'] as String?;
+      final qty = (ret['quantity'] as num?)?.toInt() ?? 0;
+      final refundAmount = (ret['refund_amount'] as num?)?.toDouble() ?? 0;
+
+      // Deduct stock that was restored by the return
+      if (productId != null && qty > 0) {
+        try {
+          await _client.rpc(
+            'decrement_stock',
+            params: {'p_product_id': productId, 'p_qty': qty},
+          );
+        } catch (e) {
+          Logger.warning('Failed to undo return stock for $productId: $e');
+        }
+      }
+
+      // Reverse refund account transaction
+      if (refundAmount > 0) {
+        try {
+          final accounts = await _client
+              .from('accounts')
+              .select('id')
+              .eq('account_type', 'cash')
+              .limit(1);
+          if (accounts.isNotEmpty) {
+            await _client.rpc(
+              'add_account_transaction',
+              params: {
+                'p_account_id': accounts[0]['id'],
+                'p_type': 'in',
+                'p_amount': refundAmount,
+                'p_category': 'return_reversal',
+                'p_description': 'Return reversed (sale $saleId deleted)',
+                'p_created_by': _client.auth.currentUser?.id,
+              },
+            );
+          }
+        } catch (e) {
+          Logger.warning('Failed to reverse refund transaction: $e');
+        }
+      }
+    }
+
+    // 4. Delete linked returns (clears FK constraint)
+    if (returns.isNotEmpty) {
+      await _client
+          .from('product_returns')
+          .delete()
+          .eq('original_sale_id', saleId);
+    }
+
+    // 5. Reverse account entry for the sale itself
     await reverseAccountForSale(
       _client,
       saleId: saleId,
@@ -433,7 +492,7 @@ class SaleService {
       digitalAmount: (saleData['digital_amount'] as num?)?.toDouble() ?? 0,
     );
 
-    // 3. Restore stock for each item
+    // 6. Restore stock for each item in the sale
     for (final item in items) {
       final productId = item['product_id'] as String?;
       final qty = (item['qty'] as num?)?.toInt() ?? 0;
@@ -449,7 +508,7 @@ class SaleService {
       }
     }
 
-    // 4. Delete the sale (this also triggers on_sale_credit_update for credit reversal)
+    // 7. Delete the sale
     await _client.from('sales').delete().eq('id', saleId);
 
     AuditService().log(
