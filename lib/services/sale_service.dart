@@ -170,7 +170,9 @@ class SaleService {
 
     // Offline or Supabase failed — load from cache + pending
     final offline = _loadOfflineSales(limit: limit);
-    print('[SALES] Offline: returning ${offline.length} sales from cache+pending');
+    print(
+      '[SALES] Offline: returning ${offline.length} sales from cache+pending',
+    );
     return offline;
   }
 
@@ -188,7 +190,9 @@ class SaleService {
       if (id.isNotEmpty) allOffline[id] = s;
     }
     final merged = allOffline.values.toList()
-      ..sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+      ..sort(
+        (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+      );
     final sales = <Sale>[];
     for (final e in merged.take(limit)) {
       try {
@@ -269,7 +273,9 @@ class SaleService {
         .like('description', '%sale #$saleId%')
         .maybeSingle();
     if (existingReversal != null) {
-      Logger.info('Account reversal already exists for sale $saleId — skipping');
+      Logger.info(
+        'Account reversal already exists for sale $saleId — skipping',
+      );
       return;
     }
 
@@ -360,7 +366,10 @@ class SaleService {
         action: 'delete',
         entityType: 'sale',
         entityId: saleId,
-        oldData: {'items': result['items'], 'final_amount': result['final_amount']},
+        oldData: {
+          'items': result['items'],
+          'final_amount': result['final_amount'],
+        },
         description: 'Deleted sale Rs.${result['final_amount']}',
       );
 
@@ -376,23 +385,33 @@ class SaleService {
             .maybeSingle();
         if (exists == null) {
           // Sale already gone — RPC succeeded previously.
-          // Credit reversal: handled by DB trigger (on_sale_credit_update).
-          // Account reversal: best-effort check via idempotent helper.
           Logger.info('Sale $saleId already deleted — cleaning up local state');
           _offlineService.applyDeleteToLocalCache(saleId);
           return;
         }
       } catch (_) {
-        // Network error checking — fall through to offline queue
+        // Network error checking — fall through
       }
 
-      // Sale still exists in Supabase — queue for retry
-      Logger.warning('Delete failed (offline?), queuing: $e');
-      await _offlineService.addPendingOperation({
-        'type': 'delete',
-        'sale_id': saleId,
-      });
-      _offlineService.applyDeleteToLocalCache(saleId);
+      // Network/offline error — queue for retry
+      final msg = e.toString();
+      if (msg.contains('SocketException') ||
+          msg.contains('TimeoutException') ||
+          msg.contains('Connection timeout') ||
+          msg.contains('Connection refused') ||
+          msg.contains('HandshakeException')) {
+        Logger.warning('Delete failed (offline?), queuing: $e');
+        await _offlineService.addPendingOperation({
+          'type': 'delete',
+          'sale_id': saleId,
+        });
+        _offlineService.applyDeleteToLocalCache(saleId);
+        return;
+      }
+
+      // Real error (foreign key, RPC error, etc.) — re-throw to UI
+      Logger.warning('Delete failed: $e');
+      rethrow;
     }
   }
 
@@ -527,7 +546,9 @@ class SaleService {
       }
 
       final sorted = productQty.values.toList()
-        ..sort((a, b) => (b['totalQty'] as int).compareTo(a['totalQty'] as int));
+        ..sort(
+          (a, b) => (b['totalQty'] as int).compareTo(a['totalQty'] as int),
+        );
 
       return sorted.take(limit).toList();
     } catch (e) {
@@ -568,19 +589,30 @@ class SaleService {
           final qty = (item['qty'] as num?)?.toInt() ?? 0;
           final price = (item['price'] as num?)?.toDouble() ?? 0;
 
-          stats.putIfAbsent(pid, () => {
-            'qtyToday': 0, 'qty7d': 0, 'qty30d': 0, 'qty60d': 0, 'qty90d': 0,
-            'totalValue30d': 0.0, 'lastSoldAt': saleDate,
-          });
+          stats.putIfAbsent(
+            pid,
+            () => {
+              'qtyToday': 0,
+              'qty7d': 0,
+              'qty30d': 0,
+              'qty60d': 0,
+              'qty90d': 0,
+              'totalValue30d': 0.0,
+              'lastSoldAt': saleDate,
+            },
+          );
 
           stats[pid]!['qty90d'] = (stats[pid]!['qty90d'] as int) + qty;
-          if (is60d) stats[pid]!['qty60d'] = (stats[pid]!['qty60d'] as int) + qty;
+          if (is60d)
+            stats[pid]!['qty60d'] = (stats[pid]!['qty60d'] as int) + qty;
           if (is30d) {
             stats[pid]!['qty30d'] = (stats[pid]!['qty30d'] as int) + qty;
-            stats[pid]!['totalValue30d'] = (stats[pid]!['totalValue30d'] as double) + qty * price;
+            stats[pid]!['totalValue30d'] =
+                (stats[pid]!['totalValue30d'] as double) + qty * price;
           }
           if (is7d) stats[pid]!['qty7d'] = (stats[pid]!['qty7d'] as int) + qty;
-          if (isToday) stats[pid]!['qtyToday'] = (stats[pid]!['qtyToday'] as int) + qty;
+          if (isToday)
+            stats[pid]!['qtyToday'] = (stats[pid]!['qtyToday'] as int) + qty;
 
           final last = stats[pid]!['lastSoldAt'] as DateTime;
           if (saleDate.isAfter(last)) stats[pid]!['lastSoldAt'] = saleDate;
