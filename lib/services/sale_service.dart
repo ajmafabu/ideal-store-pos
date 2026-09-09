@@ -328,9 +328,7 @@ class SaleService {
     }
   }
 
-  /// Delete sale atomically: stock + batches + sale deletion in one DB transaction.
-  /// Account reversal happens after the atomic RPC succeeds.
-  /// Credit reversal is handled by the DB trigger (on_sale_credit_update).
+  /// Delete sale: tries atomic RPC first, falls back to manual cleanup.
   Future<void> deleteSale(String saleId) async {
     // First check if this is an offline-created sale (never synced to Supabase)
     final pendingSale = _offlineService.pendingBox.get(saleId);
@@ -375,8 +373,7 @@ class SaleService {
 
       _offlineService.applyDeleteToLocalCache(saleId);
     } catch (e) {
-      // Check if the sale was already deleted (e.g., RPC succeeded but response was lost,
-      // or another device deleted it). If so, treat as success — no retry needed.
+      // Check if the sale was already deleted
       try {
         final exists = await _client
             .from('sales')
@@ -384,35 +381,76 @@ class SaleService {
             .eq('id', saleId)
             .maybeSingle();
         if (exists == null) {
-          // Sale already gone — RPC succeeded previously.
           Logger.info('Sale $saleId already deleted — cleaning up local state');
           _offlineService.applyDeleteToLocalCache(saleId);
           return;
         }
-      } catch (_) {
-        // Network error checking — fall through
-      }
+      } catch (_) {}
 
-      // Network/offline error — queue for retry
-      final msg = e.toString();
-      if (msg.contains('SocketException') ||
-          msg.contains('TimeoutException') ||
-          msg.contains('Connection timeout') ||
-          msg.contains('Connection refused') ||
-          msg.contains('HandshakeException')) {
-        Logger.warning('Delete failed (offline?), queuing: $e');
-        await _offlineService.addPendingOperation({
-          'type': 'delete',
-          'sale_id': saleId,
-        });
+      // Atomic RPC failed — try manual fallback delete
+      Logger.warning('Atomic delete failed, trying manual fallback: $e');
+      try {
+        await _deleteSaleManually(saleId);
         _offlineService.applyDeleteToLocalCache(saleId);
         return;
+      } catch (e2) {
+        Logger.error('Manual delete also failed', e2);
+        rethrow;
       }
-
-      // Real error (foreign key, RPC error, etc.) — re-throw to UI
-      Logger.warning('Delete failed: $e');
-      rethrow;
     }
+  }
+
+  /// Manual fallback: restore stock, delete returns, delete account entries, delete sale.
+  Future<void> _deleteSaleManually(String saleId) async {
+    // 1. Fetch sale data
+    final saleData = await _client
+        .from('sales')
+        .select(
+          'items, final_amount, payment_method, is_credit, cash_amount, digital_amount, customer_id',
+        )
+        .eq('id', saleId)
+        .single();
+
+    final items = saleData['items'] as List<dynamic>? ?? [];
+
+    // 2. Reverse account entry
+    await reverseAccountForSale(
+      _client,
+      saleId: saleId,
+      finalAmount: (saleData['final_amount'] as num?)?.toDouble() ?? 0,
+      paymentMethod: saleData['payment_method'] as String? ?? 'cash',
+      isCredit: saleData['is_credit'] as bool? ?? false,
+      cashAmount: (saleData['cash_amount'] as num?)?.toDouble() ?? 0,
+      digitalAmount: (saleData['digital_amount'] as num?)?.toDouble() ?? 0,
+    );
+
+    // 3. Restore stock for each item
+    for (final item in items) {
+      final productId = item['product_id'] as String?;
+      final qty = (item['qty'] as num?)?.toInt() ?? 0;
+      if (productId != null && qty > 0) {
+        try {
+          await _client.rpc(
+            'increment_stock',
+            params: {'p_product_id': productId, 'p_qty': qty},
+          );
+        } catch (e) {
+          Logger.warning('Failed to restore stock for $productId: $e');
+        }
+      }
+    }
+
+    // 4. Delete the sale (this also triggers on_sale_credit_update for credit reversal)
+    await _client.from('sales').delete().eq('id', saleId);
+
+    AuditService().log(
+      action: 'delete',
+      entityType: 'sale',
+      entityId: saleId,
+      oldData: {'items': items, 'final_amount': saleData['final_amount']},
+      description:
+          'Deleted sale Rs.${saleData['final_amount']} (manual fallback)',
+    );
   }
 
   Future<double> getTotalSales() async {
