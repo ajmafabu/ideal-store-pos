@@ -1103,21 +1103,20 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Purchases'),
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'New Purchase'),
-              Tab(text: 'History'),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Purchases'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'New Purchase'),
+            Tab(text: 'History'),
+          ],
         ),
-        body: TabBarView(
-          children: [
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
             // New Purchase
             Column(
               children: [
@@ -1515,11 +1514,10 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                   ),
               ],
             ),
-            // History
-            _PurchaseHistory(),
-          ],
-        ),
-      ),
+        // History
+        _PurchaseHistory(),
+      ],
+    ),
     );
   }
 }

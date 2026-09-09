@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
-import '../../services/account_service.dart';
 
 // ============================================
 // TRANSFER SHEET
@@ -18,11 +17,20 @@ class TransferSheet extends ConsumerStatefulWidget {
 }
 
 class _TransferSheetState extends ConsumerState<TransferSheet> {
-  String _fromAccount = 'cash';
-  String _toAccount = 'bank';
+  String? _fromAccountId;
+  String? _toAccountId;
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.accounts.isNotEmpty) {
+      _fromAccountId = widget.accounts.first.id;
+      _toAccountId = widget.accounts.length > 1 ? widget.accounts[1].id : widget.accounts.first.id;
+    }
+  }
 
   @override
   void dispose() {
@@ -58,26 +66,44 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
 
             const Text('From', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(child: _AccountChoice(
-                  label: 'Cash', icon: Icons.money,
-                  selected: _fromAccount == 'cash',
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.accounts.map((acc) {
+                final isSelected = _fromAccountId == acc.id;
+                final isCash = acc.accountType == 'cash';
+                return GestureDetector(
                   onTap: () => setState(() {
-                    _fromAccount = 'cash';
-                    if (_toAccount == 'cash') _toAccount = 'bank';
+                    _fromAccountId = acc.id;
+                    if (_toAccountId == acc.id) {
+                      _toAccountId = widget.accounts.firstWhere((a) => a.id != acc.id).id;
+                    }
                   }),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: _AccountChoice(
-                  label: 'Bank', icon: Icons.account_balance,
-                  selected: _fromAccount == 'bank',
-                  onTap: () => setState(() {
-                    _fromAccount = 'bank';
-                    if (_toAccount == 'bank') _toAccount = 'cash';
-                  }),
-                )),
-              ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF667eea).withValues(alpha: 0.1) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF667eea) : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isCash ? Icons.money : Icons.account_balance, size: 16, color: isSelected ? const Color(0xFF667eea) : Colors.grey),
+                        const SizedBox(width: 6),
+                        Text(acc.name, style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                          fontSize: 13,
+                        )),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 16),
 
@@ -86,26 +112,44 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
 
             const Text('To', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(child: _AccountChoice(
-                  label: 'Cash', icon: Icons.money,
-                  selected: _toAccount == 'cash',
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.accounts.map((acc) {
+                final isSelected = _toAccountId == acc.id;
+                final isCash = acc.accountType == 'cash';
+                return GestureDetector(
                   onTap: () => setState(() {
-                    _toAccount = 'cash';
-                    if (_fromAccount == 'cash') _fromAccount = 'bank';
+                    _toAccountId = acc.id;
+                    if (_fromAccountId == acc.id) {
+                      _fromAccountId = widget.accounts.firstWhere((a) => a.id != acc.id).id;
+                    }
                   }),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: _AccountChoice(
-                  label: 'Bank', icon: Icons.account_balance,
-                  selected: _toAccount == 'bank',
-                  onTap: () => setState(() {
-                    _toAccount = 'bank';
-                    if (_fromAccount == 'bank') _fromAccount = 'cash';
-                  }),
-                )),
-              ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected ? const Color(0xFF667eea).withValues(alpha: 0.1) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? const Color(0xFF667eea) : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isCash ? Icons.money : Icons.account_balance, size: 16, color: isSelected ? const Color(0xFF667eea) : Colors.grey),
+                        const SizedBox(width: 6),
+                        Text(acc.name, style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                          fontSize: 13,
+                        )),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
             const SizedBox(height: 16),
 
@@ -162,9 +206,9 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
     setState(() => _loading = true);
 
     try {
-      final service = AccountService();
-      final fromAcc = widget.accounts.firstWhere((a) => a.accountType == _fromAccount);
-      final toAcc = widget.accounts.firstWhere((a) => a.accountType == _toAccount);
+      final service = ref.watch(accountServiceProvider);
+      final fromAcc = widget.accounts.firstWhere((a) => a.id == _fromAccountId);
+      final toAcc = widget.accounts.firstWhere((a) => a.id == _toAccountId);
 
       await service.transferBetweenAccounts(
         fromAccountId: fromAcc.id,
@@ -206,17 +250,37 @@ class AddEntrySheet extends ConsumerStatefulWidget {
 }
 
 class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
-  String _selectedAccount = 'cash';
+  String? _selectedAccountId;
   String _selectedType = 'in';
   String _selectedCategory = 'sale';
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   bool _loading = false;
+  List<Account> _accounts = [];
 
   final _categories = {
     'in': ['sale', 'credit_collection', 'opening', 'other'],
     'out': ['purchase', 'expense', 'credit_payment', 'other'],
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccounts();
+  }
+
+  Future<void> _loadAccounts() async {
+    final service = ref.read(accountServiceProvider);
+    final accounts = await service.getAccounts();
+    if (mounted) {
+      setState(() {
+        _accounts = accounts;
+        if (accounts.isNotEmpty) {
+          _selectedAccountId = accounts.first.id;
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -250,21 +314,44 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
             const Text('Add Entry', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
 
-            Row(
-              children: [
-                Expanded(child: _AccountChoice(
-                  label: 'Cash', icon: Icons.money,
-                  selected: _selectedAccount == 'cash',
-                  onTap: () => setState(() => _selectedAccount = 'cash'),
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: _AccountChoice(
-                  label: 'Bank/UPI', icon: Icons.account_balance,
-                  selected: _selectedAccount == 'bank',
-                  onTap: () => setState(() => _selectedAccount = 'bank'),
-                )),
-              ],
-            ),
+            if (_accounts.isNotEmpty) ...[
+              const Text('Account', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _accounts.map((acc) {
+                  final isSelected = _selectedAccountId == acc.id;
+                  final isCash = acc.accountType == 'cash';
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedAccountId = acc.id),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF667eea).withValues(alpha: 0.1) : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFF667eea) : Colors.grey.shade300,
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(isCash ? Icons.money : Icons.account_balance, size: 16, color: isSelected ? const Color(0xFF667eea) : Colors.grey),
+                          const SizedBox(width: 6),
+                          Text(acc.name, style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                            fontSize: 13,
+                          )),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 12),
 
             Row(
@@ -369,15 +456,11 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
     setState(() => _loading = true);
 
     try {
-      final service = AccountService();
-      final accounts = await service.getAccounts();
-      final account = accounts.firstWhere(
-        (a) => a.accountType == _selectedAccount,
-        orElse: () => accounts.first,
-      );
+      final service = ref.watch(accountServiceProvider);
+      final accountId = _selectedAccountId ?? _accounts.first.id;
 
       await service.addTransaction(
-        accountId: account.id,
+        accountId: accountId,
         type: _selectedType,
         amount: amount,
         category: _selectedCategory,

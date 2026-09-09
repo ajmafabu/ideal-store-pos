@@ -9,7 +9,6 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
-import '../../services/account_service.dart';
 import '../../utils/app_timezone.dart';
 import '../../widgets/accounts/account_widgets.dart';
 import '../../widgets/accounts/account_sheets.dart';
@@ -29,6 +28,25 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   String _searchQuery = '';
   String _selectedPeriod = 'today';
   final _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _setPeriod('today');
+    // Merge duplicate accounts on first load
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final service = ref.read(accountServiceProvider);
+      final merged = await service.mergeDuplicateAccounts();
+      if (merged > 0 && mounted) {
+        ref.invalidate(accountsProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Merged $merged duplicate accounts'), backgroundColor: Colors.green),
+          );
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -64,6 +82,25 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
           break;
       }
     });
+  }
+
+  List<Account> _deduplicateAccounts(List<Account> accounts) {
+    final seen = <String, Account>{};
+    for (final a in accounts) {
+      final existing = seen[a.accountType];
+      if (existing == null) {
+        seen[a.accountType] = a;
+      } else {
+        // Create new account with summed balance
+        seen[a.accountType] = Account(
+          id: existing.id,
+          name: existing.name,
+          accountType: existing.accountType,
+          balance: existing.balance + a.balance,
+        );
+      }
+    }
+    return seen.values.toList();
   }
 
   @override
@@ -108,10 +145,10 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
               );
             }
             return ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               children: [
                 Row(
-                  children: accounts.map((account) {
+                  children: _deduplicateAccounts(accounts).map((account) {
                     final isCash = account.accountType == 'cash';
                     return Expanded(
                       child: BalanceCard(
@@ -247,14 +284,19 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.inventory_2, color: Colors.white.withValues(alpha: 0.8), size: 20),
                   const SizedBox(height: 8),
                   Text('Stock (Cost)', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11)),
                   const SizedBox(height: 2),
-                  Text(
-                    'Rs${_formatAmount(value)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Rs${_formatAmount(value)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -277,14 +319,19 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.sell, color: Colors.white.withValues(alpha: 0.8), size: 20),
                   const SizedBox(height: 8),
                   Text('Stock (Selling)', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 11)),
                   const SizedBox(height: 2),
-                  Text(
-                    'Rs${_formatAmount(value)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Rs${_formatAmount(value)}',
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -390,7 +437,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
 
   Future<void> _exportAsPdf() async {
     try {
-      final service = AccountService();
+      final service = ref.read(accountServiceProvider);
       final transactions = await service.getTransactions(
         startDate: _filterStart,
         endDate: _filterEnd,
@@ -454,7 +501,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
 
   Future<void> _exportAsCsv() async {
     try {
-      final service = AccountService();
+      final service = ref.read(accountServiceProvider);
       final transactions = await service.getTransactions(
         startDate: _filterStart,
         endDate: _filterEnd,

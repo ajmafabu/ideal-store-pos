@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
-import '../../services/account_service.dart';
 import '../../utils/app_timezone.dart';
 import 'account_widgets.dart';
 
@@ -133,8 +132,9 @@ class CategoryBreakdown extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final accountService = ref.watch(accountServiceProvider);
     return FutureBuilder<List<AccountTransaction>>(
-      future: AccountService().getTransactions(
+      future: accountService.getTransactions(
         startDate: filterStart,
         endDate: filterEnd,
       ),

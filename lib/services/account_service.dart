@@ -51,6 +51,16 @@ class AccountService {
       return Account.fromJson(res);
     } catch (e) {
       Logger.error('getAccountByType', e);
+      // Offline fallback
+      try {
+        final cached = _offlineService.getCachedAccounts();
+        final match = cached.where((a) => a['account_type'] == type);
+        if (match.isNotEmpty) {
+          return Account.fromJson(match.first);
+        }
+      } catch (e) {
+        Logger.warning('Failed to load account by type from offline cache: $e');
+      }
       return null;
     }
   }
@@ -76,10 +86,53 @@ class AccountService {
 
   Future<void> ensureAccountsExist() async {
     final accounts = await getAccounts();
-    if (accounts.isEmpty) {
-      await createAccount('Cash in Hand', 'cash');
-      await createAccount('Bank Account', 'bank');
+    final hasCash = accounts.any((a) => a.accountType == 'cash');
+    final hasBank = accounts.any((a) => a.accountType == 'bank');
+    if (!hasCash) await createAccount('Cash in Hand', 'cash');
+    if (!hasBank) await createAccount('Bank Account', 'bank');
+  }
+
+  /// Merge duplicate accounts of the same type into the first one.
+  /// Keeps the oldest account and transfers balances from duplicates.
+  Future<int> mergeDuplicateAccounts() async {
+    final accounts = await getAccounts();
+    int merged = 0;
+    for (final type in ['cash', 'bank']) {
+      final of_type = accounts.where((a) => a.accountType == type).toList();
+      if (of_type.length <= 1) continue;
+      // Keep the oldest (first), merge others into it
+      final keep = of_type.first;
+      for (int i = 1; i < of_type.length; i++) {
+        final dup = of_type[i];
+        if (dup.balance != 0) {
+          // Transfer balance from duplicate to keeper
+          try {
+            final user = _client.auth.currentUser;
+            await _client.rpc(
+              'add_account_transaction',
+              params: {
+                'p_account_id': keep.id,
+                'p_type': 'in',
+                'p_amount': dup.balance.abs(),
+                'p_category': 'opening',
+                'p_description': 'Merged from duplicate account',
+                'p_created_by': user?.id,
+              },
+            );
+          } catch (e) {
+            Logger.warning('Failed to transfer balance during merge: $e');
+          }
+        }
+        // Delete the duplicate account
+        try {
+          await _client.from('accounts').delete().eq('id', dup.id);
+          merged++;
+        } catch (e) {
+          Logger.warning('Failed to delete duplicate account: $e');
+        }
+      }
     }
+    return merged;
   }
 
   Future<List<AccountTransaction>> getTransactions({
@@ -108,25 +161,17 @@ class AccountService {
         query = query.lt('created_at', utcEnd.toIso8601String());
       }
 
+      // Server-side search
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        query = query.or('description.ilike.%$searchQuery%,category.ilike.%$searchQuery%');
+      }
+
       final res = await query
           .order('created_at', ascending: false)
           .limit(limit);
-      var transactions = (res as List)
+      return (res as List)
           .map((t) => AccountTransaction.fromJson(t))
           .toList();
-
-      if (searchQuery != null && searchQuery.isNotEmpty) {
-        final q = searchQuery.toLowerCase();
-        transactions = transactions
-            .where(
-              (t) =>
-                  (t.description?.toLowerCase().contains(q) ?? false) ||
-                  t.category.toLowerCase().contains(q),
-            )
-            .toList();
-      }
-
-      return transactions;
     } catch (e) {
       Logger.error('getTransactions', e);
       return [];
@@ -204,7 +249,25 @@ class AccountService {
     required double amount,
     String? description,
   }) async {
-    // Money out from source
+    // Try atomic transfer via RPC first
+    try {
+      final user = _client.auth.currentUser;
+      await _client.rpc(
+        'transfer_between_accounts',
+        params: {
+          'p_from_account_id': fromAccountId,
+          'p_to_account_id': toAccountId,
+          'p_amount': amount,
+          'p_description': description ?? 'Transfer',
+          'p_created_by': user?.id,
+        },
+      );
+      return;
+    } catch (e) {
+      Logger.warning('Atomic transfer RPC failed, falling back to two-step: $e');
+    }
+
+    // Fallback: two-step with rollback
     await addTransaction(
       accountId: fromAccountId,
       type: 'out',
@@ -213,7 +276,6 @@ class AccountService {
       description: description ?? 'Transfer out',
     );
 
-    // Money in to destination (with rollback on failure)
     try {
       await addTransaction(
         accountId: toAccountId,
@@ -223,13 +285,12 @@ class AccountService {
         description: description ?? 'Transfer in',
       );
     } catch (e) {
-      // Rollback: reverse the first transaction
       await addTransaction(
         accountId: fromAccountId,
         type: 'in',
         amount: amount,
         category: 'transfer',
-        description: 'Rollback: failed transfer to account',
+        description: 'Rollback: failed transfer',
       );
       rethrow;
     }

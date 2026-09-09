@@ -18,7 +18,7 @@ class GreetingHeader extends ConsumerWidget {
 
     return profileAsync.when(
       loading: () => Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
         child: Row(
           children: [
             Expanded(
@@ -78,7 +78,7 @@ class GreetingHeader extends ConsumerWidget {
         if (profile == null) return const SizedBox(height: 80);
 
         return Container(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
           child: Row(
             children: [
               Expanded(

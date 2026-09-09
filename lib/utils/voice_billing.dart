@@ -298,7 +298,7 @@ class VoiceBilling {
 
   bool get isListening => _speech.isListening;
 
-  Future<void> startListening({
+  Future<bool> startListening({
     required Function(String) onPartialResult,
     required Function(List<VoiceBillingResult>) onResults,
     required List<Product> products,
@@ -306,7 +306,7 @@ class VoiceBilling {
   }) async {
     if (!_initialized) {
       final ok = await initialize();
-      if (!ok) return;
+      if (!ok) return false;
     }
 
     final localeId = useTamil ? 'ta_IN' : 'en_IN';
@@ -333,6 +333,7 @@ class VoiceBilling {
         localeId: localeId,
       ),
     );
+    return true;
   }
 
   Future<void> stopListening() async {

@@ -28,7 +28,7 @@ class BalanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         gradient: gradient,
         borderRadius: BorderRadius.circular(16),
@@ -42,14 +42,24 @@ class BalanceCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white.withValues(alpha: 0.8), size: 24),
+          Icon(icon, color: Colors.white.withValues(alpha: 0.8), size: 22),
           const SizedBox(height: 8),
-          Text(title, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
-          const SizedBox(height: 4),
           Text(
-            'Rs${balance.toStringAsFixed(0)}',
-            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            title,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Rs${balance.toStringAsFixed(0)}',
+              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -72,14 +82,18 @@ class MiniStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: color, size: 16),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
-        Text(
-          'Rs${amount.toStringAsFixed(0)}',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'Rs${amount.toStringAsFixed(0)}',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+          ),
         ),
       ],
     );

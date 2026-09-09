@@ -31,6 +31,7 @@ import 'barcode_label_screen.dart';
 import 'printer_setup_screen.dart';
 import 'purchase_order_screen.dart';
 import 'analytics_screen.dart';
+import 'ai_insights_screen.dart';
 import 'backup_screen.dart';
 import 'gst_filing_screen.dart';
 import 'slow_moving_screen.dart';
@@ -639,6 +640,15 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         },
                       ),
                       _MoreMenuSection('REPORTS'),
+                      _MoreMenuItem(
+                        icon: Icons.auto_awesome,
+                        title: 'AI Insights',
+                        color: const Color(0xFF667eea),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AiInsightsScreen()));
+                        },
+                      ),
                       _MoreMenuItem(
                         icon: Icons.receipt_long_rounded,
                         title: 'Reports',

@@ -155,6 +155,15 @@ class CartScreenState extends ConsumerState<CartScreen>
             (p.tamilName?.toLowerCase().contains(q) ?? false) ||
             (p.category?.toLowerCase().contains(q) ?? false);
       }).toList();
+      _filteredProducts.sort((a, b) {
+        final aName = a.name.toLowerCase();
+        final bName = b.name.toLowerCase();
+        final aStarts = aName.startsWith(q);
+        final bStarts = bName.startsWith(q);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+        return aName.compareTo(bName);
+      });
     }
   }
 
@@ -828,14 +837,13 @@ class CartScreenState extends ConsumerState<CartScreen>
       _partialText = '';
     });
 
-    await _voiceBilling.startListening(
+    final ok = await _voiceBilling.startListening(
       useTamil: _useTamilVoice,
       onPartialResult: (text) {
         if (mounted) setState(() => _partialText = text);
       },
       onResults: (results) async {
         if (!mounted) return;
-        setState(() => _isListening = false);
 
         if (results.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -846,40 +854,39 @@ class CartScreenState extends ConsumerState<CartScreen>
                     : 'Could not recognize any product',
               ),
               backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 1),
             ),
           );
           return;
         }
 
         for (final result in results) {
-          if (result.alternatives.isNotEmpty) {
-            // Show product picker
-            final selected = await _showVoiceProductPicker(
-              spokenText: result.spokenText,
-              primary: result.product,
-              alternatives: result.alternatives,
-              qty: result.qty,
-            );
-            if (selected != null) {
-              _addVoiceItem(selected, result.qty);
-            }
-          } else {
-            _addVoiceItem(result.product, result.qty);
-          }
+          _addVoiceItem(result.product, result.qty);
         }
       },
       products: _allProducts,
     );
+
+    if (!ok && mounted) {
+      setState(() => _isListening = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Speech recognition not available on this device'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void _addVoiceItem(Product product, double qty) {
+    final intQty = qty <= 0 ? 1 : (qty < 1 ? 1 : qty.round());
     ref.read(cartProvider.notifier).addItem(
       CartItem(
         productId: product.id,
         name: product.name,
         tamilName: product.tamilName,
         price: product.sellingPrice,
-        qty: qty.toInt(),
+        qty: intQty,
         unit: product.unit,
         purchasePrice: _effectivePurchasePrice(product),
         gstRate: product.gstRate,
@@ -890,8 +897,8 @@ class CartScreenState extends ConsumerState<CartScreen>
       SnackBar(
         content: Text(
           _useTamilVoice
-              ? '${product.tamilName ?? product.name} × ${qty.toInt()} சேர்க்கப்பட்டது'
-              : '${product.name} × ${qty.toInt()} added',
+              ? '${product.tamilName ?? product.name} × $intQty சேர்க்கப்பட்டது'
+              : '${product.name} × $intQty added',
         ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 1),
@@ -1191,7 +1198,6 @@ class CartScreenState extends ConsumerState<CartScreen>
 
       final offlineService = ref.read(offlineServiceProvider);
       bool savedOffline = false;
-      final isOnline = await offlineService.isOnline();
       if (!isOnline) {
         savedOffline = true;
         final saleJson = sale.toInsertJson();
@@ -1199,14 +1205,15 @@ class CartScreenState extends ConsumerState<CartScreen>
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
-        // Queue stock deductions for each item
-        for (final item in sale.items) {
-          await offlineService.queuePendingWrite({
+        // Queue stock deductions for each item (parallel)
+        final writeFutures = sale.items.map((item) =>
+          offlineService.queuePendingWrite({
             'table': 'products',
             'operation': 'stock_deduct',
             'data': {'product_id': item.productId, 'qty': item.qty},
-          });
-        }
+          }),
+        ).toList();
+        await Future.wait(writeFutures);
         ref.invalidate(salesHistoryProvider);
         ref.invalidate(productsProvider);
       } else {
@@ -1220,14 +1227,15 @@ class CartScreenState extends ConsumerState<CartScreen>
               ? sale.id
               : DateTime.now().millisecondsSinceEpoch.toString();
           await offlineService.saveSaleOffline(saleJson);
-          // Queue stock deductions for each item
-          for (final item in sale.items) {
-            await offlineService.queuePendingWrite({
+          // Queue stock deductions for each item (parallel)
+          final writeFutures = sale.items.map((item) =>
+            offlineService.queuePendingWrite({
               'table': 'products',
               'operation': 'stock_deduct',
               'data': {'product_id': item.productId, 'qty': item.qty},
-            });
-          }
+            }),
+          ).toList();
+          await Future.wait(writeFutures);
           ref.invalidate(salesHistoryProvider);
           ref.invalidate(productsProvider);
         }

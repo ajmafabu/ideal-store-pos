@@ -47,7 +47,6 @@ dependencies:
   flutter_launcher_icons: ^0.14.4
   http: ^1.2.0
   share_plus: ^10.1.4
-  flutter_native_splash: ^2.4.4
   url_launcher: ^6.3.1
   crypto: ^3.0.3
   path_provider: ^2.1.0
@@ -127,14 +126,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-flutter_native_splash:
-  color: "#667eea"
-  image: assets/app_logo.png
-  android_12:
-    image: assets/app_logo.png
-    color: "#667eea"
-  android: true
-  ios: true
-  web: false
-  fullscreen: true

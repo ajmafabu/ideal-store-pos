@@ -34,15 +34,20 @@ class SaleService {
 
       final createdSale = Sale.fromJson(response);
 
-      // Deduct stock for each item
-      final productService = ProductService();
+      // Deduct stock for each item (parallel for performance)
+      final stockFutures = <Future>[];
       for (final item in sale.items) {
-        try {
-          await productService.deductStock(item.productId, item.qty);
-        } catch (e) {
-          Logger.error('Stock deduction failed for ${item.productId}', e);
-        }
+        stockFutures.add(
+          _client.rpc(
+            'increment_stock',
+            params: {'p_product_id': item.productId, 'p_qty': -item.qty},
+          ).catchError((e) => Logger.error('Stock deduction failed for ${item.productId}', e)),
+        );
       }
+      if (stockFutures.isNotEmpty) {
+        await Future.wait(stockFutures);
+      }
+      ProductService.invalidateCache();
 
       AuditService().log(
         action: 'create',

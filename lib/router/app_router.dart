@@ -10,6 +10,7 @@ import '../screens/auth/login_screen.dart';
 import '../screens/admin/admin_shell.dart';
 import '../screens/staff/staff_shell.dart';
 import '../screens/customer/customer_portal_screen.dart';
+import '../screens/splash/animated_splash_screen.dart';
 import '../config/providers.dart';
 import '../services/version_check_service.dart';
 import '../utils/logger.dart';
@@ -24,7 +25,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: routerNavigatorKey,
-    initialLocation: '/login',
+    initialLocation: '/splash',
     refreshListenable: GoRouterRefreshStream(auth.authStateChanges),
     redirect: (context, state) async {
       final user = auth.currentUser;
@@ -32,6 +33,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Allow public customer portal access
       if (path.startsWith('/customer/')) return null;
+
+      // Always allow splash
+      if (path == '/splash') return null;
 
       // Version check (only once per app session) — skip on Windows (handled by UpdateService)
       if (!_needsUpdate && user != null && path != '/login' && !Platform.isWindows) {
@@ -74,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const AnimatedSplashScreen(),
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),

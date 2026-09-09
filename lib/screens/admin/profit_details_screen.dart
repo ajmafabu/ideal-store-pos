@@ -53,22 +53,40 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
         case 'monthly':
           start = DateTime(now.year, now.month, 1);
           break;
+        case 'yearly':
+          start = DateTime(now.year, 1, 1);
+          break;
         default:
           start = DateTime(2020, 1, 1);
       }
 
-      final endExclusive = end.add(const Duration(days: 1));
-      final startUtc = start.toUtc().toIso8601String();
-      final endUtc = endExclusive.toUtc().toIso8601String();
+      // Convert IST dates to UTC correctly
+      final startUtc = DateTime.utc(start.year, start.month, start.day)
+          .subtract(AppTimezone.localOffset);
+      final endUtc = DateTime.utc(end.year, end.month, end.day + 1)
+          .subtract(AppTimezone.localOffset);
 
-      // Fetch sales with date filter
+      // Use SQL RPC for totals (same as dashboard)
+      final res = await client.rpc('get_monthly_profit', params: {
+        'p_start': startUtc.toIso8601String(),
+        'p_end': endUtc.toIso8601String(),
+      });
+
+      if (res != null && (res as List).isNotEmpty) {
+        final row = res.first;
+        _totalRevenue = (row['sales_total'] as num?)?.toDouble() ?? 0;
+        _totalCOGS = (row['purchase_cost'] as num?)?.toDouble() ?? 0;
+        _totalExpenses = (row['expenses_total'] as num?)?.toDouble() ?? 0;
+      }
+
+      // Still fetch sales for per-product breakdown
       final salesRes = await client
           .from('sales')
           .select('final_amount, items')
-          .gte('created_at', startUtc)
-          .lt('created_at', endUtc);
+          .gte('created_at', startUtc.toIso8601String())
+          .lt('created_at', endUtc.toIso8601String());
 
-      // Fetch products for COGS fallback (when purchase_price is 0 in sale items)
+      // Fetch products for COGS fallback
       final productsRes = await client
           .from('products')
           .select('id, purchase_price');
@@ -78,23 +96,10 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
             (p['purchase_price'] as num?)?.toDouble() ?? 0;
       }
 
-      // Fetch expenses with date filter
-      final expensesRes = await client
-          .from('expenses')
-          .select('amount')
-          .gte('created_at', startUtc)
-          .lt('created_at', endUtc);
-      _totalExpenses = 0;
-      for (final e in expensesRes as List) {
-        _totalExpenses += (e['amount'] as num?)?.toDouble() ?? 0;
-      }
-
       // Calculate profit per product from sale items
       final Map<String, Map<String, dynamic>> productData = {};
 
       for (final sale in salesRes as List) {
-        // Sum final_amount for revenue (matches Business Summary)
-        _totalRevenue += (sale['final_amount'] as num?)?.toDouble() ?? 0;
         final items = sale['items'] as List? ?? [];
         for (final item in items) {
           final name = item['name'] as String? ?? 'Unknown';
@@ -103,7 +108,6 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
           final qty = (item['qty'] as num?)?.toInt() ?? 0;
           final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
           var costPrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-          // Fallback: use products table if purchase_price is 0
           if (costPrice <= 0) {
             costPrice = productCostMap[productId] ?? 0;
           }
@@ -141,11 +145,6 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
       // Sort by profit (lowest first to show losses)
       _productProfits.sort(
         (a, b) => (a['profit'] as double).compareTo(b['profit'] as double),
-      );
-
-      _totalCOGS = _productProfits.fold(
-        0.0,
-        (sum, p) => sum + (p['totalCost'] as double),
       );
 
       if (mounted) setState(() => _loading = false);

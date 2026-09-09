@@ -666,6 +666,23 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
           ref.invalidate(returnsProvider);
           ref.invalidate(productsProvider);
         },
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'accounts',
+        callback: (payload) {
+          ref.invalidate(accountsProvider);
+        },
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'account_transactions',
+        callback: (payload) {
+          ref.invalidate(todayTransactionsProvider);
+          ref.invalidate(monthlySummaryProvider);
+        },
       );
 
   channel.subscribe((status, [error]) {
@@ -932,5 +949,92 @@ final weeklySalesSparkProvider = FutureProvider<List<double>>((ref) async {
     return daily.values.toList();
   } catch (e) {
     return List.filled(7, 0);
+  }
+});
+
+// ============================================
+// AI INSIGHTS — MONTHLY AGGREGATES
+// ============================================
+
+final monthlySalesOnlyProvider = FutureProvider<double>((ref) async {
+  try {
+    final start = AppTimezone.monthStartUtc();
+    final end = AppTimezone.monthEndUtc();
+    final res = await Supabase.instance.client.rpc(
+      'get_sales_total',
+      params: {
+        'p_start': start.toIso8601String(),
+        'p_end': end.toIso8601String(),
+      },
+    );
+    return (res as num?)?.toDouble() ?? 0;
+  } catch (e) {
+    return 0;
+  }
+});
+
+final monthlyExpensesProvider = FutureProvider<double>((ref) async {
+  try {
+    final start = AppTimezone.monthStartUtc();
+    final end = AppTimezone.monthEndUtc();
+    final res = await Supabase.instance.client.rpc(
+      'get_expenses_total',
+      params: {
+        'p_start': start.toIso8601String(),
+        'p_end': end.toIso8601String(),
+      },
+    );
+    return (res as num?)?.toDouble() ?? 0;
+  } catch (e) {
+    return 0;
+  }
+});
+
+final monthlyGstProvider = FutureProvider<double>((ref) async {
+  try {
+    final client = Supabase.instance.client;
+    final start = AppTimezone.monthStartUtc();
+    final end = AppTimezone.monthEndUtc();
+
+    final salesRes = await client
+        .from('sales')
+        .select('items')
+        .gte('created_at', start.toIso8601String())
+        .lt('created_at', end.toIso8601String());
+
+    double totalGst = 0;
+    for (final sale in salesRes as List) {
+      final items = sale['items'] as List? ?? [];
+      for (final item in items) {
+        final rate = (item['gst_rate'] as num?)?.toDouble() ?? 0;
+        final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
+        if (rate > 0) {
+          totalGst += itemTotal * rate / (100 + rate);
+        }
+      }
+    }
+    return totalGst;
+  } catch (e) {
+    return 0;
+  }
+});
+
+final monthlyPurchasesOnlyProvider = FutureProvider<double>((ref) async {
+  try {
+    final start = AppTimezone.monthStartUtc();
+    final end = AppTimezone.monthEndUtc();
+    final res = await Supabase.instance.client.rpc(
+      'get_monthly_profit',
+      params: {
+        'p_start': start.toIso8601String(),
+        'p_end': end.toIso8601String(),
+      },
+    );
+    if (res is List && res.isNotEmpty) {
+      return (res.first['purchase_cost'] as num?)?.toDouble() ?? 0;
+    }
+    return 0;
+  } catch (e) {
+    return 0;
   }
 });
