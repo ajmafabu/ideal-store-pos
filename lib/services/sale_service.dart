@@ -330,17 +330,19 @@ class SaleService {
 
   /// Delete sale: tries atomic RPC first, falls back to manual cleanup.
   Future<void> deleteSale(String saleId) async {
+    print('[DELETE] deleteSale called for $saleId');
     // First check if this is an offline-created sale (never synced to Supabase)
     final pendingSale = _offlineService.pendingBox.get(saleId);
     if (pendingSale != null) {
       await _offlineService.removePendingSale(saleId);
       _offlineService.applyDeleteToLocalCache(saleId);
-      Logger.info('Deleted offline sale $saleId from pending queue');
+      print('[DELETE] Deleted offline sale from pending queue');
       return;
     }
 
     try {
-      // Step 1: Call atomic RPC — restores stock, batches, and deletes sale in one transaction
+      print('[DELETE] Trying atomic RPC...');
+      // Step 1: Call atomic RPC
       final result = await _client
           .rpc('delete_sale_atomic', params: {'p_sale_id': saleId})
           .single()
@@ -349,7 +351,8 @@ class SaleService {
             onTimeout: () => throw Exception('Connection timeout'),
           );
 
-      // Step 2: Reverse account entry (shared helper, idempotent)
+      print('[DELETE] Atomic RPC succeeded');
+      // Step 2: Reverse account entry
       await reverseAccountForSale(
         _client,
         saleId: saleId,
@@ -372,7 +375,9 @@ class SaleService {
       );
 
       _offlineService.applyDeleteToLocalCache(saleId);
+      print('[DELETE] Delete complete via atomic RPC');
     } catch (e) {
+      print('[DELETE] Atomic RPC failed: $e');
       // Check if the sale was already deleted
       try {
         final exists = await _client
@@ -381,20 +386,24 @@ class SaleService {
             .eq('id', saleId)
             .maybeSingle();
         if (exists == null) {
-          Logger.info('Sale $saleId already deleted — cleaning up local state');
+          print('[DELETE] Sale already deleted in Supabase');
           _offlineService.applyDeleteToLocalCache(saleId);
           return;
         }
-      } catch (_) {}
+        print('[DELETE] Sale still exists in Supabase');
+      } catch (e2) {
+        print('[DELETE] Error checking sale existence: $e2');
+      }
 
       // Atomic RPC failed — try manual fallback delete
-      Logger.warning('Atomic delete failed, trying manual fallback: $e');
+      print('[DELETE] Trying manual fallback...');
       try {
         await _deleteSaleManually(saleId);
         _offlineService.applyDeleteToLocalCache(saleId);
+        print('[DELETE] Manual delete succeeded');
         return;
       } catch (e2) {
-        Logger.error('Manual delete also failed', e2);
+        print('[DELETE] Manual delete ALSO FAILED: $e2');
         rethrow;
       }
     }

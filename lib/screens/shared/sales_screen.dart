@@ -37,7 +37,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
   @override
   Widget build(BuildContext context) {
     final salesAsync = ref.watch(salesHistoryProvider);
-    final bgColor = Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.primary;
+    final bgColor =
+        Theme.of(context).appBarTheme.backgroundColor ??
+        Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       body: Column(
@@ -106,7 +108,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? Colors.white.withValues(alpha: 0.2) : Colors.transparent,
+          color: isActive
+              ? Colors.white.withValues(alpha: 0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
@@ -202,14 +206,19 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           // Apply filters
           var filtered = sales.where((s) {
             // Payment method filter
-            if (_paymentFilters.isNotEmpty && !_paymentFilters.contains(s.paymentMethod)) return false;
+            if (_paymentFilters.isNotEmpty &&
+                !_paymentFilters.contains(s.paymentMethod))
+              return false;
             // Status filter
             if (_statusFilters.contains('credit') && !s.isCredit) return false;
             if (_statusFilters.contains('paid') && s.isCredit) return false;
             // Date filter
             final now = DateTime.now();
             if (_dateFilter == 'today') {
-              if (s.createdAt.day != now.day || s.createdAt.month != now.month || s.createdAt.year != now.year) return false;
+              if (s.createdAt.day != now.day ||
+                  s.createdAt.month != now.month ||
+                  s.createdAt.year != now.year)
+                return false;
             } else if (_dateFilter == '7d') {
               if (now.difference(s.createdAt).inDays > 7) return false;
             } else if (_dateFilter == '30d') {
@@ -218,7 +227,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
             // Search
             if (_searchQuery.isNotEmpty) {
               final q = _searchQuery.toLowerCase();
-              final matchesName = s.customerName?.toLowerCase().contains(q) == true;
+              final matchesName =
+                  s.customerName?.toLowerCase().contains(q) == true;
               final matchesAmt = s.finalAmount.toString().contains(q);
               if (!matchesName && !matchesAmt) return false;
             }
@@ -229,13 +239,21 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
             children: [
               // Search bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search by customer or amount...',
                     prefixIcon: const Icon(Icons.search, size: 20),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     isDense: true,
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v),
@@ -246,14 +264,62 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 height: 40,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 2,
+                  ),
                   children: [
-                    _buildSalesFilterChip('All', '', _paymentFilters, () => setState(() => _paymentFilters.clear())),
-                    _buildSalesFilterChip('Cash', 'cash', _paymentFilters, () => setState(() { _paymentFilters.clear(); _paymentFilters.add('cash'); })),
-                    _buildSalesFilterChip('Credit', 'credit', _paymentFilters, () => setState(() { _paymentFilters.clear(); _paymentFilters.add('credit'); })),
-                    _buildSalesFilterChip('Digital', 'digital', _paymentFilters, () => setState(() { _paymentFilters.clear(); _paymentFilters.add('digital'); })),
-                    _buildSalesFilterChip('UPI', 'upi', _paymentFilters, () => setState(() { _paymentFilters.clear(); _paymentFilters.add('upi'); })),
-                    _buildSalesFilterChip('Split', 'split', _paymentFilters, () => setState(() { _paymentFilters.clear(); _paymentFilters.add('split'); })),
+                    _buildSalesFilterChip(
+                      'All',
+                      '',
+                      _paymentFilters,
+                      () => setState(() => _paymentFilters.clear()),
+                    ),
+                    _buildSalesFilterChip(
+                      'Cash',
+                      'cash',
+                      _paymentFilters,
+                      () => setState(() {
+                        _paymentFilters.clear();
+                        _paymentFilters.add('cash');
+                      }),
+                    ),
+                    _buildSalesFilterChip(
+                      'Credit',
+                      'credit',
+                      _paymentFilters,
+                      () => setState(() {
+                        _paymentFilters.clear();
+                        _paymentFilters.add('credit');
+                      }),
+                    ),
+                    _buildSalesFilterChip(
+                      'Digital',
+                      'digital',
+                      _paymentFilters,
+                      () => setState(() {
+                        _paymentFilters.clear();
+                        _paymentFilters.add('digital');
+                      }),
+                    ),
+                    _buildSalesFilterChip(
+                      'UPI',
+                      'upi',
+                      _paymentFilters,
+                      () => setState(() {
+                        _paymentFilters.clear();
+                        _paymentFilters.add('upi');
+                      }),
+                    ),
+                    _buildSalesFilterChip(
+                      'Split',
+                      'split',
+                      _paymentFilters,
+                      () => setState(() {
+                        _paymentFilters.clear();
+                        _paymentFilters.add('split');
+                      }),
+                    ),
                   ],
                 ),
               ),
@@ -262,7 +328,10 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 height: 40,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 2,
+                  ),
                   children: [
                     _buildStatusChip('Paid', 'paid'),
                     _buildStatusChip('Credit Due', 'credit'),
@@ -280,7 +349,10 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('${filtered.length} sales', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                  child: Text(
+                    '${filtered.length} sales',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
@@ -419,12 +491,14 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                                         .select('name')
                                         .eq('id', sale.customerId!)
                                         .maybeSingle();
-                              custName = custRes?['name'] as String?;
-                            } catch (e) {
-                              Logger.warning('Failed to fetch customer name for A4 receipt: $e');
-                            }
-                          }
-                          final receiptData = ThermalInvoice.generate(
+                                    custName = custRes?['name'] as String?;
+                                  } catch (e) {
+                                    Logger.warning(
+                                      'Failed to fetch customer name for A4 receipt: $e',
+                                    );
+                                  }
+                                }
+                                final receiptData = ThermalInvoice.generate(
                                   sale: sale,
                                   shopName: profile?.shopName ?? 'IDEAL STORE',
                                   shopTagline: 'Smart Store - Smart Business',
@@ -489,7 +563,9 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                                       .maybeSingle();
                                   custName = custRes?['name'] as String?;
                                 } catch (e) {
-                                  Logger.warning('Failed to fetch customer name for thermal receipt: $e');
+                                  Logger.warning(
+                                    'Failed to fetch customer name for thermal receipt: $e',
+                                  );
                                 }
                               }
                               final receiptData = ThermalInvoice.generate(
@@ -502,7 +578,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                               );
                               await thermalService.shareAsTextFile(
                                 receiptData.toText(),
-                                fileName: 'invoice_${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}',
+                                fileName:
+                                    'invoice_${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}',
                               );
                             } else if (value == 'whatsapp') {
                               await _shareWhatsApp(context, ref, sale);
@@ -915,8 +992,12 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              print('[DELETE-UI] Confirmed delete for sale ${sale.id}');
               try {
                 await ref.read(saleServiceProvider).deleteSale(sale.id);
+                print(
+                  '[DELETE-UI] deleteSale completed, invalidating provider',
+                );
                 ref.invalidate(salesHistoryProvider);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -927,8 +1008,6 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                         label: 'Undo',
                         textColor: Colors.white,
                         onPressed: () {
-                          // Note: Undo would require re-creating the sale
-                          // For now, just show message
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -943,6 +1022,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                   );
                 }
               } catch (e) {
+                print('[DELETE-UI] ERROR: $e');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -1093,12 +1173,25 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     );
   }
 
-  Widget _buildSalesFilterChip(String label, String value, Set<String> selected, VoidCallback onTap) {
-    final isSelected = value.isEmpty ? selected.isEmpty : selected.contains(value);
+  Widget _buildSalesFilterChip(
+    String label,
+    String value,
+    Set<String> selected,
+    VoidCallback onTap,
+  ) {
+    final isSelected = value.isEmpty
+        ? selected.isEmpty
+        : selected.contains(value);
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: isSelected ? Colors.white : Colors.black87,
+          ),
+        ),
         selected: isSelected,
         selectedColor: const Color(0xFF667eea),
         backgroundColor: Colors.grey.shade100,
@@ -1114,7 +1207,13 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: isSelected ? Colors.white : Colors.black87,
+          ),
+        ),
         selected: isSelected,
         selectedColor: Colors.orange,
         backgroundColor: Colors.grey.shade100,
@@ -1136,7 +1235,13 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : Colors.black87)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: isSelected ? Colors.white : Colors.black87,
+          ),
+        ),
         selected: isSelected,
         selectedColor: Colors.teal,
         backgroundColor: Colors.grey.shade100,
@@ -1201,7 +1306,8 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
 
   double _effectivePurchasePrice(Product product) {
     if (product.purchasePrice > 0) return product.purchasePrice;
-    if (product.variants.isNotEmpty) return product.variants.first.purchasePrice;
+    if (product.variants.isNotEmpty)
+      return product.variants.first.purchasePrice;
     return 0;
   }
 
