@@ -615,7 +615,7 @@ class OfflineService {
               );
               Logger.info('Synced return: ${data['id']}');
 
-              // Accounting (due_amount + refund transaction) — best-effort
+              // Accounting (sale amounts + refund transaction) — best-effort
               final saleId = data['original_sale_id'] as String?;
               final refundAmount =
                   (data['refund_amount'] as num?)?.toDouble() ?? 0;
@@ -623,19 +623,31 @@ class OfflineService {
                 try {
                   final saleData = await supabase
                       .from('sales')
-                      .select('is_credit, due_amount')
+                      .select('is_credit, final_amount, due_amount')
                       .eq('id', saleId)
                       .maybeSingle();
-                  if (saleData != null && saleData['is_credit'] == true) {
-                    final currentDue =
-                        (saleData['due_amount'] as num?)?.toDouble() ?? 0;
-                    final newDue = (currentDue - refundAmount).clamp(
+                  if (saleData != null) {
+                    final currentFinal =
+                        (saleData['final_amount'] as num?)?.toDouble() ?? 0;
+                    final newFinal = (currentFinal - refundAmount).clamp(
                       0.0,
                       double.infinity,
                     );
+                    final updateData = <String, dynamic>{
+                      'final_amount': newFinal,
+                    };
+                    if (saleData['is_credit'] == true) {
+                      final currentDue =
+                          (saleData['due_amount'] as num?)?.toDouble() ?? 0;
+                      final newDue = (currentDue - refundAmount).clamp(
+                        0.0,
+                        double.infinity,
+                      );
+                      updateData['due_amount'] = newDue;
+                    }
                     await supabase
                         .from('sales')
-                        .update({'due_amount': newDue})
+                        .update(updateData)
                         .eq('id', saleId);
                   }
                   final accounts = await supabase
@@ -875,6 +887,13 @@ class OfflineService {
 
     switch (operation) {
       case 'insert':
+        // Returns and damaged are handled by pending ops (atomic RPC) — skip direct insert
+        if (table == 'product_returns' || table == 'damaged_products') {
+          Logger.info(
+            'Skipping direct insert to $table (handled by pending ops atomic RPC)',
+          );
+          return;
+        }
         final insertData = Map<String, dynamic>.from(data);
         insertData.remove('id');
         // Check for duplicate before insert (only for valid UUIDs to avoid postgres crash)

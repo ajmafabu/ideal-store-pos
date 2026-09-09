@@ -44,29 +44,41 @@ class ReturnService {
 
       final created = ProductReturn.fromJson(response);
 
-      // Update original sale's due_amount if it was a credit sale
+      // Update sale amounts and credit after return
       if (created.originalSaleId != null && created.returnAmount > 0) {
         try {
           final saleData = await _client
               .from('sales')
-              .select('is_credit, due_amount')
+              .select('is_credit, final_amount, due_amount')
               .eq('id', created.originalSaleId!)
               .maybeSingle();
 
-          if (saleData != null && saleData['is_credit'] == true) {
-            final currentDue =
-                (saleData['due_amount'] as num?)?.toDouble() ?? 0;
-            final newDue = (currentDue - created.returnAmount).clamp(
+          if (saleData != null) {
+            final currentFinal =
+                (saleData['final_amount'] as num?)?.toDouble() ?? 0;
+            final newFinal = (currentFinal - created.returnAmount).clamp(
               0,
               double.infinity,
             );
+            final updateData = <String, dynamic>{'final_amount': newFinal};
+
+            if (saleData['is_credit'] == true) {
+              final currentDue =
+                  (saleData['due_amount'] as num?)?.toDouble() ?? 0;
+              final newDue = (currentDue - created.returnAmount).clamp(
+                0,
+                double.infinity,
+              );
+              updateData['due_amount'] = newDue;
+            }
+
             await _client
                 .from('sales')
-                .update({'due_amount': newDue})
+                .update(updateData)
                 .eq('id', created.originalSaleId!);
           }
         } catch (e) {
-          Logger.warning('Failed to update original sale due_amount: $e');
+          Logger.warning('Failed to update sale amounts after return: $e');
         }
       }
 
@@ -95,7 +107,16 @@ class ReturnService {
       return created;
     } catch (e) {
       Logger.error('createReturn', e);
-      // Queue for offline — atomic RPC handles inventory + batch on sync
+      // Re-throw validation/business errors — do NOT queue for offline
+      final msg = e.toString();
+      if (msg.contains('Cannot return') ||
+          msg.contains('not found') ||
+          msg.contains('Invalid') ||
+          msg.contains('must be positive') ||
+          msg.contains('Exceeded maximum')) {
+        rethrow;
+      }
+      // Network/offline error — queue for offline sync
       final id = const Uuid().v4();
       await _offlineService.queuePendingWrite({
         'table': 'product_returns',
