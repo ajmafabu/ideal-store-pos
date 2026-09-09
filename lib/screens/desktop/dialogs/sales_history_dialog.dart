@@ -469,12 +469,34 @@ class _DesktopSalesHistoryDialogState
                                     ),
                                   );
                                   if (confirm == true) {
-                                    await ref
-                                        .read(saleServiceProvider)
-                                        .deleteSale(sale.id);
-                                    ref.invalidate(salesHistoryProvider);
-                                    ref.invalidate(productsProvider);
-                                    _loadOfflineSales();
+                                    print('[DELETE-UI-DESKTOP] Confirmed delete for ${sale.id}');
+                                    try {
+                                      await ref
+                                          .read(saleServiceProvider)
+                                          .deleteSale(sale.id);
+                                      print('[DELETE-UI-DESKTOP] deleteSale completed');
+                                      ref.invalidate(salesHistoryProvider);
+                                      ref.invalidate(productsProvider);
+                                      _loadOfflineSales();
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Sale deleted'),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      print('[DELETE-UI-DESKTOP] ERROR: $e');
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Delete failed: $e'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    }
                                   }
                                 } else if (action == 'return_sale') {
                                   _processReturn(sale);
