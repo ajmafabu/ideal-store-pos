@@ -1205,15 +1205,7 @@ class CartScreenState extends ConsumerState<CartScreen>
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
-        // Queue stock deductions for each item (parallel)
-        final writeFutures = sale.items.map((item) =>
-          offlineService.queuePendingWrite({
-            'table': 'products',
-            'operation': 'stock_deduct',
-            'data': {'product_id': item.productId, 'qty': item.qty},
-          }),
-        ).toList();
-        await Future.wait(writeFutures);
+        // Stock deduction handled by DB trigger on_sale_created when sale syncs
         ref.invalidate(salesHistoryProvider);
         ref.invalidate(productsProvider);
       } else {
@@ -1227,15 +1219,7 @@ class CartScreenState extends ConsumerState<CartScreen>
               ? sale.id
               : DateTime.now().millisecondsSinceEpoch.toString();
           await offlineService.saveSaleOffline(saleJson);
-          // Queue stock deductions for each item (parallel)
-          final writeFutures = sale.items.map((item) =>
-            offlineService.queuePendingWrite({
-              'table': 'products',
-              'operation': 'stock_deduct',
-              'data': {'product_id': item.productId, 'qty': item.qty},
-            }),
-          ).toList();
-          await Future.wait(writeFutures);
+          // Stock deduction handled by DB trigger on_sale_created when sale syncs
           ref.invalidate(salesHistoryProvider);
           ref.invalidate(productsProvider);
         }

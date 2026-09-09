@@ -6,6 +6,7 @@ import '../config/hive_adapter.dart';
 import '../utils/logger.dart';
 import 'account_service.dart';
 import 'audit_service.dart';
+import 'sale_service.dart';
 
 import 'package:hive_ce/hive.dart';
 
@@ -32,19 +33,58 @@ class OfflineService {
   Future<void> init() async {
     if (_initialized) return;
     final cipher = HiveAdapter.cipher;
-    _pendingBox = await Hive.openBox<Map>(HiveAdapter.pendingSalesBox, encryptionCipher: cipher);
-    _salesBox = await Hive.openBox<Map>(HiveAdapter.cachedSalesBox, encryptionCipher: cipher);
-    _pendingOpsBox = await Hive.openBox<Map>(HiveAdapter.pendingOpsBox, encryptionCipher: cipher);
-    _productsBox = await Hive.openBox<Map>(HiveAdapter.cachedProductsBox, encryptionCipher: cipher);
-    _customersBox = await Hive.openBox<Map>(HiveAdapter.cachedCustomersBox, encryptionCipher: cipher);
-    _purchasesBox = await Hive.openBox<Map>(HiveAdapter.cachedPurchasesBox, encryptionCipher: cipher);
-    _expensesBox = await Hive.openBox<Map>(HiveAdapter.cachedExpensesBox, encryptionCipher: cipher);
-    _suppliersBox = await Hive.openBox<Map>(HiveAdapter.cachedSuppliersBox, encryptionCipher: cipher);
-    _returnsBox = await Hive.openBox<Map>(HiveAdapter.cachedReturnsBox, encryptionCipher: cipher);
-    _damagedBox = await Hive.openBox<Map>(HiveAdapter.cachedDamagedBox, encryptionCipher: cipher);
-    _accountsBox = await Hive.openBox<Map>(HiveAdapter.cachedAccountsBox, encryptionCipher: cipher);
-    _pendingWritesBox = await Hive.openBox<Map>(HiveAdapter.pendingWritesBox, encryptionCipher: cipher);
-    _heldBillsBox = await Hive.openBox<Map>(HiveAdapter.heldBillsBox, encryptionCipher: cipher);
+    _pendingBox = await Hive.openBox<Map>(
+      HiveAdapter.pendingSalesBox,
+      encryptionCipher: cipher,
+    );
+    _salesBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedSalesBox,
+      encryptionCipher: cipher,
+    );
+    _pendingOpsBox = await Hive.openBox<Map>(
+      HiveAdapter.pendingOpsBox,
+      encryptionCipher: cipher,
+    );
+    _productsBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedProductsBox,
+      encryptionCipher: cipher,
+    );
+    _customersBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedCustomersBox,
+      encryptionCipher: cipher,
+    );
+    _purchasesBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedPurchasesBox,
+      encryptionCipher: cipher,
+    );
+    _expensesBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedExpensesBox,
+      encryptionCipher: cipher,
+    );
+    _suppliersBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedSuppliersBox,
+      encryptionCipher: cipher,
+    );
+    _returnsBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedReturnsBox,
+      encryptionCipher: cipher,
+    );
+    _damagedBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedDamagedBox,
+      encryptionCipher: cipher,
+    );
+    _accountsBox = await Hive.openBox<Map>(
+      HiveAdapter.cachedAccountsBox,
+      encryptionCipher: cipher,
+    );
+    _pendingWritesBox = await Hive.openBox<Map>(
+      HiveAdapter.pendingWritesBox,
+      encryptionCipher: cipher,
+    );
+    _heldBillsBox = await Hive.openBox<Map>(
+      HiveAdapter.heldBillsBox,
+      encryptionCipher: cipher,
+    );
     _initialized = true;
   }
 
@@ -140,7 +180,9 @@ class OfflineService {
 
   Future<void> addCachedPurchase(Map<String, dynamic> purchase) async {
     await _ensureInitialized();
-    final id = purchase['id'] as String? ?? DateTime.now().microsecondsSinceEpoch.toString();
+    final id =
+        purchase['id'] as String? ??
+        DateTime.now().microsecondsSinceEpoch.toString();
     purchase['id'] = id;
     await _purchasesBox.put(id, purchase);
     await _purchasesBox.flush();
@@ -349,7 +391,9 @@ class OfflineService {
     await _pendingOpsBox.clear();
     await _pendingWritesBox.clear();
     lastSyncError = null;
-    print('[SYNC] Cleared $salesCount pending sales, $opsCount pending ops, $writesCount pending writes');
+    print(
+      '[SYNC] Cleared $salesCount pending sales, $opsCount pending ops, $writesCount pending writes',
+    );
   }
 
   Future<void> removePendingSale(String id) async {
@@ -431,7 +475,9 @@ class OfflineService {
       return true;
     }
 
-    print('[SYNC] Starting sync: ${sales.length} sales, ${ops.length} ops, ${writes.length} writes');
+    print(
+      '[SYNC] Starting sync: ${sales.length} sales, ${ops.length} ops, ${writes.length} writes',
+    );
     bool allSynced = true;
     final supabase = Supabase.instance.client;
     lastSyncError = null;
@@ -445,8 +491,10 @@ class OfflineService {
           _syncSingleWrite(write)
               .then((_) async {
                 // Remove offline-cached purchase after successful sync
-                if (write['table'] == 'purchases' && write['operation'] == 'insert') {
-                  final dataId = (write['data'] as Map<String, dynamic>)['id'] as String?;
+                if (write['table'] == 'purchases' &&
+                    write['operation'] == 'insert') {
+                  final dataId =
+                      (write['data'] as Map<String, dynamic>)['id'] as String?;
                   if (dataId != null) {
                     await removeCachedPurchase(dataId);
                   }
@@ -457,9 +505,15 @@ class OfflineService {
                 Logger.error("Failed to sync write: ${write['id']}", e);
                 final retryCount = (write['retry_count'] as int? ?? 0) + 1;
                 write['retry_count'] = retryCount;
-                write['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+                write['last_error'] = e.toString().substring(
+                  0,
+                  200.clamp(0, e.toString().length),
+                );
                 if (retryCount >= maxRetries) {
-                  Logger.error("Max retries ($maxRetries) exceeded for write ${write['id']}, removing pending write but keeping cached purchase", e);
+                  Logger.error(
+                    "Max retries ($maxRetries) exceeded for write ${write['id']}, removing pending write but keeping cached purchase",
+                    e,
+                  );
                   await removePendingWrite(write['id'] as String);
                   // Keep the cached purchase so it stays visible in history
                   // It will be retried on next app restart when sync timer picks it up again
@@ -484,8 +538,38 @@ class OfflineService {
             final saleId = op['sale_id'] as String;
 
             if (type == 'delete') {
-              await supabase.from('sales').delete().eq('id', saleId);
-              Logger.info('Synced delete: $saleId');
+              // Check if sale exists in Supabase before attempting atomic delete
+              final existing = await supabase
+                  .from('sales')
+                  .select('id')
+                  .eq('id', saleId)
+                  .maybeSingle();
+              if (existing == null) {
+                Logger.info(
+                  'Synced delete: $saleId (already deleted, skipped)',
+                );
+              } else {
+                final saleData = await supabase
+                    .rpc('delete_sale_atomic', params: {'p_sale_id': saleId})
+                    .single();
+                Logger.info('Synced delete: $saleId (atomic)');
+
+                // Reverse account entry (idempotent — shared with online path)
+                await SaleService.reverseAccountForSale(
+                  supabase,
+                  saleId: saleId,
+                  finalAmount:
+                      (saleData['final_amount'] as num?)?.toDouble() ?? 0,
+                  paymentMethod:
+                      saleData['payment_method'] as String? ?? 'cash',
+                  isCredit: saleData['is_credit'] as bool? ?? false,
+                  cashAmount:
+                      (saleData['cash_amount'] as num?)?.toDouble() ?? 0,
+                  digitalAmount:
+                      (saleData['digital_amount'] as num?)?.toDouble() ?? 0,
+                );
+                // Credit reversal: handled by DB trigger on_sale_credit_update
+              }
             } else if (type == 'edit') {
               final data = op['data'] as Map<String, dynamic>;
               final opTimestamp = op['timestamp'] as String?;
@@ -500,8 +584,11 @@ class OfflineService {
 
                 if (serverSale != null) {
                   final serverUpdated = serverSale['updated_at'] as String?;
-                  if (serverUpdated != null && serverUpdated.compareTo(opTimestamp) > 0) {
-                    Logger.warning('Conflict detected for sale $saleId — server version is newer, using server version');
+                  if (serverUpdated != null &&
+                      serverUpdated.compareTo(opTimestamp) > 0) {
+                    Logger.warning(
+                      'Conflict detected for sale $saleId — server version is newer, using server version',
+                    );
                     await removePendingOperation(op['id'] as String);
                     return; // Skip this edit, server version wins
                   }
@@ -510,6 +597,85 @@ class OfflineService {
 
               await supabase.from('sales').update(data).eq('id', saleId);
               Logger.info('Synced edit: $saleId');
+            } else if (type == 'return') {
+              final data = op['data'] as Map<String, dynamic>;
+              await supabase.rpc(
+                'create_return_atomic',
+                params: {
+                  'p_id': data['id'],
+                  'p_product_id': data['product_id'],
+                  'p_sale_id': data['original_sale_id'],
+                  'p_product_name': data['product_name'],
+                  'p_quantity': data['quantity'],
+                  'p_unit_price': data['unit_price'],
+                  'p_refund_amount': data['refund_amount'],
+                  'p_reason': data['reason'],
+                  'p_created_by': data['created_by'],
+                },
+              );
+              Logger.info('Synced return: ${data['id']}');
+
+              // Accounting (due_amount + refund transaction) — best-effort
+              final saleId = data['original_sale_id'] as String?;
+              final refundAmount =
+                  (data['refund_amount'] as num?)?.toDouble() ?? 0;
+              if (saleId != null && refundAmount > 0) {
+                try {
+                  final saleData = await supabase
+                      .from('sales')
+                      .select('is_credit, due_amount')
+                      .eq('id', saleId)
+                      .maybeSingle();
+                  if (saleData != null && saleData['is_credit'] == true) {
+                    final currentDue =
+                        (saleData['due_amount'] as num?)?.toDouble() ?? 0;
+                    final newDue = (currentDue - refundAmount).clamp(
+                      0.0,
+                      double.infinity,
+                    );
+                    await supabase
+                        .from('sales')
+                        .update({'due_amount': newDue})
+                        .eq('id', saleId);
+                  }
+                  final accounts = await supabase
+                      .from('accounts')
+                      .select('id')
+                      .eq('account_type', 'cash')
+                      .limit(1);
+                  if (accounts.isNotEmpty) {
+                    await supabase.rpc(
+                      'add_account_transaction',
+                      params: {
+                        'p_account_id': accounts[0]['id'],
+                        'p_type': 'out',
+                        'p_amount': refundAmount,
+                        'p_category': 'return_refund',
+                        'p_description':
+                            'Return: ${data['product_name']} (qty: ${data['quantity']})',
+                        'p_created_by': data['created_by'],
+                      },
+                    );
+                  }
+                } catch (e) {
+                  Logger.warning('Return accounting failed: $e');
+                }
+              }
+            } else if (type == 'damaged') {
+              final data = op['data'] as Map<String, dynamic>;
+              await supabase.rpc(
+                'create_damaged_atomic',
+                params: {
+                  'p_id': data['id'],
+                  'p_product_id': data['product_id'],
+                  'p_product_name': data['product_name'],
+                  'p_quantity': data['quantity'],
+                  'p_unit_price': data['unit_price'],
+                  'p_reason': data['reason'],
+                  'p_created_by': data['created_by'],
+                },
+              );
+              Logger.info('Synced damaged: ${data['id']}');
             }
 
             await removePendingOperation(op['id'] as String);
@@ -517,9 +683,14 @@ class OfflineService {
             Logger.error('Failed to sync operation: ${op['id']}', e);
             final retryCount = (op['retry_count'] as int? ?? 0) + 1;
             op['retry_count'] = retryCount;
-            op['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+            op['last_error'] = e.toString().substring(
+              0,
+              200.clamp(0, e.toString().length),
+            );
             if (retryCount >= maxRetries) {
-              Logger.error('Max retries exceeded for operation ${op["id"]}, removing');
+              Logger.error(
+                'Max retries exceeded for operation ${op["id"]}, removing',
+              );
               await removePendingOperation(op['id'] as String);
             } else {
               await _pendingOpsBox.put(op['id'] as String, op);
@@ -544,7 +715,10 @@ class OfflineService {
             // Duplicate check: only check if saleId is a valid UUID
             // (offline saves use timestamp IDs like "1788097623037" which crash
             // the UUID column comparison with 22P02)
-            final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+            final uuidPattern = RegExp(
+              r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+              caseSensitive: false,
+            );
             if (uuidPattern.hasMatch(saleId)) {
               final existing = await supabase
                   .from('sales')
@@ -552,7 +726,9 @@ class OfflineService {
                   .eq('id', saleId)
                   .maybeSingle();
               if (existing != null) {
-                print('[SYNC] Sale $saleId already exists — removing from pending');
+                print(
+                  '[SYNC] Sale $saleId already exists — removing from pending',
+                );
                 await removePendingSale(saleId);
                 return;
               }
@@ -580,12 +756,29 @@ class OfflineService {
             }
 
             // Ensure created_at is present (DB needs it for proper ordering)
-            if (insertData['created_at'] == null || insertData['created_at'] == '') {
-              insertData['created_at'] = DateTime.now().toUtc().toIso8601String();
+            if (insertData['created_at'] == null ||
+                insertData['created_at'] == '') {
+              insertData['created_at'] = DateTime.now()
+                  .toUtc()
+                  .toIso8601String();
             }
 
             // Ensure numeric fields are actually numbers
-            for (final key in ['extra_charges', 'round_off', 'igst_amount', 'cgst_amount', 'sgst_amount', 'cash_amount', 'digital_amount', 'amount_paid', 'due_amount', 'total_amount', 'discount', 'total_discount', 'final_amount']) {
+            for (final key in [
+              'extra_charges',
+              'round_off',
+              'igst_amount',
+              'cgst_amount',
+              'sgst_amount',
+              'cash_amount',
+              'digital_amount',
+              'amount_paid',
+              'due_amount',
+              'total_amount',
+              'discount',
+              'total_discount',
+              'final_amount',
+            ]) {
               final val = insertData[key];
               if (val is String) {
                 insertData[key] = double.tryParse(val) ?? 0;
@@ -604,8 +797,12 @@ class OfflineService {
               insertData['items'] = items;
             }
 
-            print('[SYNC] Inserting sale $saleId with ${insertData.keys.length} fields: ${insertData.keys.join(', ')}');
-            print('[SYNC] Data preview: ${insertData.entries.map((e) => '${e.key}=${e.value.runtimeType}:${e.value}').join(', ')}');
+            print(
+              '[SYNC] Inserting sale $saleId with ${insertData.keys.length} fields: ${insertData.keys.join(', ')}',
+            );
+            print(
+              '[SYNC] Data preview: ${insertData.entries.map((e) => '${e.key}=${e.value.runtimeType}:${e.value}').join(', ')}',
+            );
 
             final inserted = await supabase
                 .from('sales')
@@ -617,7 +814,9 @@ class OfflineService {
             try {
               await _createAccountEntries(sale, inserted['id'] as String);
             } catch (ae) {
-              print('[SYNC WARNING] Account entries failed for $saleId, but sale is in Supabase: $ae');
+              print(
+                '[SYNC WARNING] Account entries failed for $saleId, but sale is in Supabase: $ae',
+              );
             }
             await removePendingSale(saleId);
             // Also remove from local cache (the sale now exists in Supabase with its real UUID)
@@ -630,9 +829,14 @@ class OfflineService {
             lastSyncError = msg;
             final retryCount = (sale['retry_count'] as int? ?? 0) + 1;
             sale['retry_count'] = retryCount;
-            sale['last_error'] = e.toString().substring(0, 200.clamp(0, e.toString().length));
+            sale['last_error'] = e.toString().substring(
+              0,
+              200.clamp(0, e.toString().length),
+            );
             if (retryCount >= maxRetries) {
-              Logger.error('Max retries exceeded for sale ${sale["id"]}, removing');
+              Logger.error(
+                'Max retries exceeded for sale ${sale["id"]}, removing',
+              );
               await removePendingSale(sale['id'] as String);
             } else {
               await _pendingBox.put(sale['id'] as String, sale);
@@ -674,7 +878,10 @@ class OfflineService {
         final insertData = Map<String, dynamic>.from(data);
         insertData.remove('id');
         // Check for duplicate before insert (only for valid UUIDs to avoid postgres crash)
-        final uuidPattern = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', caseSensitive: false);
+        final uuidPattern = RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+          caseSensitive: false,
+        );
         if (data['id'] != null && uuidPattern.hasMatch(data['id'] as String)) {
           final existing = await supabase
               .from(table)
@@ -682,7 +889,9 @@ class OfflineService {
               .eq('id', data['id'] as String)
               .maybeSingle();
           if (existing != null) {
-            Logger.warning('Record ${data['id']} already exists in $table — skipping duplicate');
+            Logger.warning(
+              'Record ${data['id']} already exists in $table — skipping duplicate',
+            );
             return;
           }
         }
@@ -709,12 +918,11 @@ class OfflineService {
         Logger.info('Synced stock add: ${data['product_id']} +${data['qty']}');
         break;
       case 'stock_deduct':
-        await supabase.rpc(
-          'decrement_stock',
-          params: {'p_product_id': data['product_id'], 'p_qty': data['qty']},
-        );
+        // Skip: the on_sale_created DB trigger handles stock deduction
+        // when the sale is INSERTed during sync. This pending write is
+        // redundant and would cause double deduction.
         Logger.info(
-          'Synced stock deduct: ${data['product_id']} -${data['qty']}',
+          'Skipping stock_deduct (handled by DB trigger): ${data['product_id']} -${data['qty']}',
         );
         break;
     }

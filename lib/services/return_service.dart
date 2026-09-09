@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/product_return.dart';
 import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
@@ -21,29 +22,27 @@ class ReturnService {
   Future<ProductReturn> createReturn(ProductReturn productReturn) async {
     try {
       final user = _client.auth.currentUser;
+      final id = const Uuid().v4();
 
       final response = await _client
-          .from('product_returns')
-          .insert(productReturn.toInsertJson()..['created_by'] = user?.id)
+          .rpc(
+            'create_return_atomic',
+            params: {
+              'p_id': id,
+              'p_product_id': productReturn.productId,
+              'p_sale_id': productReturn.originalSaleId,
+              'p_product_name': productReturn.productName,
+              'p_quantity': productReturn.quantity,
+              'p_unit_price': productReturn.unitPrice,
+              'p_refund_amount': productReturn.returnAmount,
+              'p_reason': productReturn.reason,
+              'p_created_by': user?.id,
+            },
+          )
           .select()
           .single();
 
       final created = ProductReturn.fromJson(response);
-
-      // Increase stock back
-      if (created.productId != null) {
-        try {
-          await _client.rpc(
-            'increment_stock',
-            params: {
-              'p_product_id': created.productId,
-              'p_qty': created.quantity,
-            },
-          );
-        } catch (e) {
-          Logger.warning('Failed to increment stock for return: $e');
-        }
-      }
 
       // Update original sale's due_amount if it was a credit sale
       if (created.originalSaleId != null && created.returnAmount > 0) {
@@ -96,25 +95,23 @@ class ReturnService {
       return created;
     } catch (e) {
       Logger.error('createReturn', e);
-      // Queue for offline
+      // Queue for offline — atomic RPC handles inventory + batch on sync
+      final id = const Uuid().v4();
       await _offlineService.queuePendingWrite({
         'table': 'product_returns',
         'operation': 'insert',
-        'data': productReturn.toInsertJson(),
+        'data': {
+          'id': id,
+          'product_id': productReturn.productId,
+          'original_sale_id': productReturn.originalSaleId,
+          'product_name': productReturn.productName,
+          'quantity': productReturn.quantity,
+          'unit_price': productReturn.unitPrice,
+          'refund_amount': productReturn.returnAmount,
+          'reason': productReturn.reason,
+          'created_by': _client.auth.currentUser?.id,
+        },
       });
-      // Queue stock increment for returned product
-      if (productReturn.productId != null &&
-          productReturn.productId!.isNotEmpty &&
-          productReturn.quantity > 0) {
-        await _offlineService.queuePendingWrite({
-          'table': 'products',
-          'operation': 'stock_add',
-          'data': {
-            'product_id': productReturn.productId,
-            'qty': productReturn.quantity,
-          },
-        });
-      }
       return productReturn;
     }
   }

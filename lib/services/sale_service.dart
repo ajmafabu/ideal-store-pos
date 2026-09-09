@@ -34,19 +34,9 @@ class SaleService {
 
       final createdSale = Sale.fromJson(response);
 
-      // Deduct stock for each item (parallel for performance)
-      final stockFutures = <Future>[];
-      for (final item in sale.items) {
-        stockFutures.add(
-          _client.rpc(
-            'increment_stock',
-            params: {'p_product_id': item.productId, 'p_qty': -item.qty},
-          ).catchError((e) => Logger.error('Stock deduction failed for ${item.productId}', e)),
-        );
-      }
-      if (stockFutures.isNotEmpty) {
-        await Future.wait(stockFutures);
-      }
+      // Stock deduction is handled by the DB trigger `on_sale_created`
+      // → deduct_stock_on_sale() which atomically deducts products.stock
+      // AND inventory_batches.remaining (FIFO). No app-side RPC needed.
       ProductService.invalidateCache();
 
       AuditService().log(
@@ -254,12 +244,91 @@ class SaleService {
     }
   }
 
-  /// Delete sale - queues if offline
+  /// Reverse account entry for a deleted sale.
+  /// Shared by online deleteSale() and offline sync delete path.
+  /// Checks for existing reversal before creating (idempotent).
+  ///
+  /// Credit reversal is NOT needed here — the DB trigger
+  /// on_sale_credit_update recalculates customers.total_credit on DELETE.
+  static Future<void> reverseAccountForSale(
+    SupabaseClient client, {
+    required String saleId,
+    required double finalAmount,
+    required String paymentMethod,
+    required bool isCredit,
+    required double cashAmount,
+    required double digitalAmount,
+  }) async {
+    if (isCredit || finalAmount <= 0) return;
+
+    // Idempotency: check if reversal already exists
+    final existingReversal = await client
+        .from('account_transactions')
+        .select('id')
+        .eq('category', 'sale_reversal')
+        .like('description', '%sale #$saleId%')
+        .maybeSingle();
+    if (existingReversal != null) {
+      Logger.info('Account reversal already exists for sale $saleId — skipping');
+      return;
+    }
+
+    final accountService = AccountService();
+    final accounts = await accountService.getAccounts();
+
+    if (cashAmount > 0 && digitalAmount > 0) {
+      if (cashAmount > 0) {
+        final cashAccount = accounts.firstWhere(
+          (a) => a.accountType == 'cash',
+          orElse: () => accounts.first,
+        );
+        await accountService.addTransaction(
+          accountId: cashAccount.id,
+          type: 'out',
+          amount: cashAmount,
+          category: 'sale_reversal',
+          description: 'Reversed sale #$saleId (Cash)',
+        );
+      }
+      if (digitalAmount > 0) {
+        final bankAccount = accounts.firstWhere(
+          (a) => a.accountType == 'bank',
+          orElse: () => accounts.last,
+        );
+        await accountService.addTransaction(
+          accountId: bankAccount.id,
+          type: 'out',
+          amount: digitalAmount,
+          category: 'sale_reversal',
+          description: 'Reversed sale #$saleId (UPI)',
+        );
+      }
+    } else {
+      String accountType =
+          (paymentMethod == 'upi' || paymentMethod == 'digital')
+          ? 'bank'
+          : 'cash';
+      final account = accounts.firstWhere(
+        (a) => a.accountType == accountType,
+        orElse: () => accounts.first,
+      );
+      await accountService.addTransaction(
+        accountId: account.id,
+        type: 'out',
+        amount: finalAmount,
+        category: 'sale_reversal',
+        description: 'Reversed sale #$saleId',
+      );
+    }
+  }
+
+  /// Delete sale atomically: stock + batches + sale deletion in one DB transaction.
+  /// Account reversal happens after the atomic RPC succeeds.
+  /// Credit reversal is handled by the DB trigger (on_sale_credit_update).
   Future<void> deleteSale(String saleId) async {
     // First check if this is an offline-created sale (never synced to Supabase)
     final pendingSale = _offlineService.pendingBox.get(saleId);
     if (pendingSale != null) {
-      // Offline-created sale: remove from pending box and local cache directly
       await _offlineService.removePendingSale(saleId);
       _offlineService.applyDeleteToLocalCache(saleId);
       Logger.info('Deleted offline sale $saleId from pending queue');
@@ -267,137 +336,62 @@ class SaleService {
     }
 
     try {
-      final saleData = await _client
-          .from('sales')
-          .select(
-            'items, final_amount, payment_method, is_credit, cash_amount, digital_amount, customer_id, due_amount',
-          )
-          .eq('id', saleId)
-          .single();
-      final items = saleData['items'] as List? ?? [];
-      final finalAmount = (saleData['final_amount'] as num?)?.toDouble() ?? 0;
-      final paymentMethod = saleData['payment_method'] as String? ?? 'cash';
-      final isCredit = saleData['is_credit'] as bool? ?? false;
-      final cashAmount = (saleData['cash_amount'] as num?)?.toDouble() ?? 0;
-      final digitalAmount =
-          (saleData['digital_amount'] as num?)?.toDouble() ?? 0;
-      final customerId = saleData['customer_id'] as String?;
-      final dueAmount = (saleData['due_amount'] as num?)?.toDouble() ?? 0;
-
-      // Restore stock per item (batched for performance)
-      final stockFutures = <Future>[];
-      for (final item in items) {
-        final productId = item['product_id'] as String?;
-        final qty = (item['qty'] as num?)?.toInt() ?? 0;
-        if (productId != null && qty > 0) {
-          stockFutures.add(
-            _client.rpc(
-              'increment_stock',
-              params: {'p_product_id': productId, 'p_qty': qty},
-            ).catchError((e) => Logger.error('Failed to restore stock for $productId', e)),
+      // Step 1: Call atomic RPC — restores stock, batches, and deletes sale in one transaction
+      final result = await _client
+          .rpc('delete_sale_atomic', params: {'p_sale_id': saleId})
+          .single()
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () => throw Exception('Connection timeout'),
           );
-        }
-      }
-      if (stockFutures.isNotEmpty) {
-        await Future.wait(stockFutures);
-      }
 
-      // Reverse account entry (non-credit only)
-      if (!isCredit && finalAmount > 0) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          if (cashAmount > 0 && digitalAmount > 0) {
-            if (cashAmount > 0) {
-              final cashAccount = accounts.firstWhere(
-                (a) => a.accountType == 'cash',
-                orElse: () => accounts.first,
-              );
-              await _accountService.addTransaction(
-                accountId: cashAccount.id,
-                type: 'out',
-                amount: cashAmount,
-                category: 'sale_reversal',
-                description: 'Reversed sale #$saleId (Cash)',
-              );
-            }
-            if (digitalAmount > 0) {
-              final bankAccount = accounts.firstWhere(
-                (a) => a.accountType == 'bank',
-                orElse: () => accounts.last,
-              );
-              await _accountService.addTransaction(
-                accountId: bankAccount.id,
-                type: 'out',
-                amount: digitalAmount,
-                category: 'sale_reversal',
-                description: 'Reversed sale #$saleId (UPI)',
-              );
-            }
-          } else {
-            String accountType =
-                (paymentMethod == 'upi' || paymentMethod == 'digital')
-                ? 'bank'
-                : 'cash';
-            final account = accounts.firstWhere(
-              (a) => a.accountType == accountType,
-              orElse: () => accounts.first,
-            );
-            await _accountService.addTransaction(
-              accountId: account.id,
-              type: 'out',
-              amount: finalAmount,
-              category: 'sale_reversal',
-              description: 'Reversed sale #$saleId',
-            );
-          }
-        } catch (e) {
-          Logger.error('Failed to reverse account entry for sale', e);
-        }
-      }
-
-      // Reverse customer credit if this was a credit sale
-      if (isCredit && customerId != null && dueAmount > 0) {
-        try {
-          // Recalculate customer total_credit from remaining sales
-          final remainingSales = await _client
-              .from('sales')
-              .select('due_amount')
-              .eq('customer_id', customerId)
-              .gt('due_amount', 0);
-          double totalCredit = 0;
-          for (final sale in remainingSales) {
-            totalCredit += (sale['due_amount'] as num?)?.toDouble() ?? 0;
-          }
-          await _client
-              .from('customers')
-              .update({'total_credit': totalCredit})
-              .eq('id', customerId);
-          Logger.info('Reversed credit for customer $customerId: -$dueAmount (new total: $totalCredit)');
-        } catch (e) {
-          Logger.error('Failed to reverse customer credit for sale', e);
-        }
-      }
-
-      await _client.from('sales').delete().eq('id', saleId);
+      // Step 2: Reverse account entry (shared helper, idempotent)
+      await reverseAccountForSale(
+        _client,
+        saleId: saleId,
+        finalAmount: (result['final_amount'] as num?)?.toDouble() ?? 0,
+        paymentMethod: result['payment_method'] as String? ?? 'cash',
+        isCredit: result['is_credit'] as bool? ?? false,
+        cashAmount: (result['cash_amount'] as num?)?.toDouble() ?? 0,
+        digitalAmount: (result['digital_amount'] as num?)?.toDouble() ?? 0,
+      );
 
       AuditService().log(
         action: 'delete',
         entityType: 'sale',
         entityId: saleId,
-        oldData: saleData,
-        description: 'Deleted sale Rs.$finalAmount',
+        oldData: {'items': result['items'], 'final_amount': result['final_amount']},
+        description: 'Deleted sale Rs.${result['final_amount']}',
       );
 
-      // Update local cache
       _offlineService.applyDeleteToLocalCache(saleId);
     } catch (e) {
+      // Check if the sale was already deleted (e.g., RPC succeeded but response was lost,
+      // or another device deleted it). If so, treat as success — no retry needed.
+      try {
+        final exists = await _client
+            .from('sales')
+            .select('id')
+            .eq('id', saleId)
+            .maybeSingle();
+        if (exists == null) {
+          // Sale already gone — RPC succeeded previously.
+          // Credit reversal: handled by DB trigger (on_sale_credit_update).
+          // Account reversal: best-effort check via idempotent helper.
+          Logger.info('Sale $saleId already deleted — cleaning up local state');
+          _offlineService.applyDeleteToLocalCache(saleId);
+          return;
+        }
+      } catch (_) {
+        // Network error checking — fall through to offline queue
+      }
+
+      // Sale still exists in Supabase — queue for retry
       Logger.warning('Delete failed (offline?), queuing: $e');
-      // Queue for later sync
       await _offlineService.addPendingOperation({
         'type': 'delete',
         'sale_id': saleId,
       });
-      // Remove from local cache immediately
       _offlineService.applyDeleteToLocalCache(saleId);
     }
   }

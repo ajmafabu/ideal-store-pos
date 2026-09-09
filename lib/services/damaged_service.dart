@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/damaged_product.dart';
 import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
@@ -14,72 +15,44 @@ class DamagedService {
   Future<DamagedProduct> createDamaged(DamagedProduct damaged) async {
     try {
       final user = _client.auth.currentUser;
-
-      // Validate stock before decrementing
-      if (damaged.productId != null) {
-        try {
-          final product = await _client
-              .from('products')
-              .select('stock')
-              .eq('id', damaged.productId!)
-              .maybeSingle();
-          if (product != null) {
-            final currentStock = (product['stock'] as num?)?.toInt() ?? 0;
-            if (damaged.quantity > currentStock) {
-              throw Exception(
-                'Insufficient stock: available $currentStock, damaged ${damaged.quantity}',
-              );
-            }
-          }
-        } catch (e) {
-          if (e.toString().contains('Insufficient stock')) rethrow;
-          // Don't proceed if we couldn't validate stock
-          rethrow;
-        }
-      }
+      final id = const Uuid().v4();
 
       final response = await _client
-          .from('damaged_products')
-          .insert(damaged.toInsertJson()..['created_by'] = user?.id)
+          .rpc(
+            'create_damaged_atomic',
+            params: {
+              'p_id': id,
+              'p_product_id': damaged.productId,
+              'p_product_name': damaged.productName,
+              'p_quantity': damaged.quantity,
+              'p_unit_price': damaged.unitPrice,
+              'p_reason': damaged.reason,
+              'p_created_by': user?.id,
+            },
+          )
           .select()
           .single();
 
       final created = DamagedProduct.fromJson(response);
 
-      // Decrease stock (damaged items removed from inventory)
-      if (created.productId != null) {
-        try {
-          await _client.rpc(
-            'decrement_stock',
-            params: {
-              'p_product_id': created.productId,
-              'p_qty': created.quantity,
-            },
-          );
-        } catch (e) {
-          Logger.warning('Failed to decrement stock for damaged: $e');
-        }
-      }
-
       return created;
     } catch (e) {
       Logger.error('createDamaged', e);
-      // Queue for offline
+      // Queue for offline — atomic RPC handles inventory + batch on sync
+      final id = const Uuid().v4();
       await _offlineService.queuePendingWrite({
         'table': 'damaged_products',
         'operation': 'insert',
-        'data': damaged.toInsertJson(),
+        'data': {
+          'id': id,
+          'product_id': damaged.productId,
+          'product_name': damaged.productName,
+          'quantity': damaged.quantity,
+          'unit_price': damaged.unitPrice,
+          'reason': damaged.reason,
+          'created_by': _client.auth.currentUser?.id,
+        },
       });
-      // Queue stock deduction for damaged product
-      if (damaged.productId != null &&
-          damaged.productId!.isNotEmpty &&
-          damaged.quantity > 0) {
-        await _offlineService.queuePendingWrite({
-          'table': 'products',
-          'operation': 'stock_deduct',
-          'data': {'product_id': damaged.productId, 'qty': damaged.quantity},
-        });
-      }
       return damaged;
     }
   }
@@ -115,7 +88,9 @@ class DamagedService {
           return cached.map((e) => DamagedProduct.fromJson(e)).toList();
         }
       } catch (e) {
-        Logger.warning('Failed to load damaged products from offline cache: $e');
+        Logger.warning(
+          'Failed to load damaged products from offline cache: $e',
+        );
       }
       return [];
     }

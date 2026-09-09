@@ -1660,14 +1660,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
-        // Queue stock deductions for each item
-        for (final item in sale.items) {
-          await offlineService.queuePendingWrite({
-            'table': 'products',
-            'operation': 'stock_deduct',
-            'data': {'product_id': item.productId, 'qty': item.qty},
-          });
-        }
+        // Stock deduction handled by DB trigger on_sale_created when sale syncs
         ref.invalidate(salesHistoryProvider);
         ref.invalidate(productsProvider);
         ref.read(desktopBillingProvider.notifier).resetAfterSale(sessionIndex);
@@ -1703,14 +1696,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             ? sale.id
             : DateTime.now().millisecondsSinceEpoch.toString();
         await offlineService.saveSaleOffline(saleJson);
-        // Queue stock deductions for each item
-        for (final item in sale.items) {
-          await offlineService.queuePendingWrite({
-            'table': 'products',
-            'operation': 'stock_deduct',
-            'data': {'product_id': item.productId, 'qty': item.qty},
-          });
-        }
+        // Stock deduction handled by DB trigger on_sale_created when sale syncs
         ref.invalidate(salesHistoryProvider);
         ref.invalidate(productsProvider);
       } catch (e) {
