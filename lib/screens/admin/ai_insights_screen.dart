@@ -39,7 +39,11 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -72,9 +76,16 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
           ref.invalidate(monthlyExpensesProvider);
           ref.invalidate(monthlyGstProvider);
           ref.invalidate(monthlyPurchasesOnlyProvider);
+          ref.invalidate(customerInsightsProvider);
+          ref.invalidate(productInsightsProvider);
+          ref.invalidate(inventoryHealthProvider);
+          ref.invalidate(financialSummaryProvider);
+          ref.invalidate(salesForecastProvider);
         },
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,10 +161,21 @@ class _BusinessHealthScore extends ConsumerWidget {
         children: [
           const Text(
             'Business Health Score',
-            style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 16),
-          _buildScore(context, todaySales, yesterdaySales, monthlyProfit, lowStock, products),
+          _buildScore(
+            context,
+            todaySales,
+            yesterdaySales,
+            monthlyProfit,
+            lowStock,
+            products,
+          ),
           const SizedBox(height: 16),
           _buildMiniStats(todaySales, yesterdaySales, monthlyProfit),
         ],
@@ -247,7 +269,11 @@ class _BusinessHealthScore extends ConsumerWidget {
                   ),
                   Text(
                     label,
-                    style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -277,10 +303,26 @@ class _BusinessHealthScore extends ConsumerWidget {
     return Row(
       children: [
         _MiniStat('Today', '₹${sales.toStringAsFixed(0)}', Colors.white),
-        Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 0.2)),
-        _MiniStat('Trend', '${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%', trend >= 0 ? Colors.green.shade300 : Colors.red.shade300),
-        Container(width: 1, height: 30, color: Colors.white.withValues(alpha: 0.2)),
-        _MiniStat('Profit', '₹${profit.toStringAsFixed(0)}', profit >= 0 ? Colors.green.shade300 : Colors.red.shade300),
+        Container(
+          width: 1,
+          height: 30,
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+        _MiniStat(
+          'Trend',
+          '${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%',
+          trend >= 0 ? Colors.green.shade300 : Colors.red.shade300,
+        ),
+        Container(
+          width: 1,
+          height: 30,
+          color: Colors.white.withValues(alpha: 0.2),
+        ),
+        _MiniStat(
+          'Profit',
+          '₹${profit.toStringAsFixed(0)}',
+          profit >= 0 ? Colors.green.shade300 : Colors.red.shade300,
+        ),
       ],
     );
   }
@@ -297,9 +339,19 @@ class _MiniStat extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white60, fontSize: 11),
+          ),
         ],
       ),
     );
@@ -322,62 +374,87 @@ class _SmartAlerts extends ConsumerWidget {
     final alerts = <_Alert>[];
     final now = AppTimezone.nowIst();
 
-    final expired = expiring.value?.where((p) => p.expiryDate?.isBefore(now) ?? false).toList() ?? [];
+    final expired =
+        expiring.value
+            ?.where((p) => p.expiryDate?.isBefore(now) ?? false)
+            .toList() ??
+        [];
     if (expired.isNotEmpty) {
-      alerts.add(_Alert(
-        'Products Expired',
-        '${expired.length} products have expired and should be removed from shelf',
-        Icons.event_busy_rounded,
-        const Color(0xFFEF4444),
-        1,
-      ));
+      alerts.add(
+        _Alert(
+          'Products Expired',
+          '${expired.length} products have expired and should be removed from shelf',
+          Icons.event_busy_rounded,
+          const Color(0xFFEF4444),
+          1,
+        ),
+      );
     }
 
-    final expiringSoon = expiring.value?.where((p) {
-      final diff = p.expiryDate?.difference(now).inDays ?? 999;
-      return diff >= 0 && diff <= 30;
-    }).toList() ?? [];
+    final expiringSoon =
+        expiring.value?.where((p) {
+          final diff = p.expiryDate?.difference(now).inDays ?? 999;
+          return diff >= 0 && diff <= 30;
+        }).toList() ??
+        [];
     if (expiringSoon.isNotEmpty) {
-      alerts.add(_Alert(
-        'Expiring Within 30 Days',
-        '${expiringSoon.length} products expiring soon — consider discounts',
-        Icons.schedule_rounded,
-        const Color(0xFFF97316),
-        1,
-      ));
+      alerts.add(
+        _Alert(
+          'Expiring Within 30 Days',
+          '${expiringSoon.length} products expiring soon — consider discounts',
+          Icons.schedule_rounded,
+          const Color(0xFFF97316),
+          1,
+        ),
+      );
     }
 
-    final critical = lowStock.value?.where((p) => p.stock > 0 && p.stock <= (p.lowStockAlert ~/ 2).clamp(1, 999)).toList() ?? [];
+    final critical =
+        lowStock.value
+            ?.where(
+              (p) =>
+                  p.stock > 0 &&
+                  p.stock <= (p.lowStockAlert ~/ 2).clamp(1, 999),
+            )
+            .toList() ??
+        [];
     if (critical.isNotEmpty) {
-      alerts.add(_Alert(
-        'Critically Low Stock',
-        '${critical.length} products may run out today',
-        Icons.warning_amber_rounded,
-        const Color(0xFFEF4444),
-        1,
-      ));
+      alerts.add(
+        _Alert(
+          'Critically Low Stock',
+          '${critical.length} products may run out today',
+          Icons.warning_amber_rounded,
+          const Color(0xFFEF4444),
+          1,
+        ),
+      );
     }
 
-    final missingCost = products.value?.where((p) => p.purchasePrice <= 0).toList() ?? [];
+    final missingCost =
+        products.value?.where((p) => p.purchasePrice <= 0).toList() ?? [];
     if (missingCost.isNotEmpty) {
-      alerts.add(_Alert(
-        'Missing Cost Price',
-        '${missingCost.length} products have no cost price — profits may be inaccurate',
-        Icons.info_outline_rounded,
-        const Color(0xFF8B5CF6),
-        1,
-      ));
+      alerts.add(
+        _Alert(
+          'Missing Cost Price',
+          '${missingCost.length} products have no cost price — profits may be inaccurate',
+          Icons.info_outline_rounded,
+          const Color(0xFF8B5CF6),
+          1,
+        ),
+      );
     }
 
     final dues = customerDues.value ?? 0;
     if (dues > 10000) {
-      alerts.add(_Alert(
-        'High Receivables',
-        '₹${dues.toStringAsFixed(0)} pending from customers — follow up recommended',
-        Icons.payments_rounded,
-        const Color(0xFFF59E0B),
-        2,
-      ));
+      alerts.add(
+        _Alert(
+          'High Receivables',
+          '₹${dues.toStringAsFixed(0)} pending from customers — follow up recommended',
+          Icons.payments_rounded,
+          const Color(0xFFF59E0B),
+          2,
+        ),
+      );
     }
 
     if (alerts.isEmpty) {
@@ -389,11 +466,19 @@ class _SmartAlerts extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.notifications_active_rounded, size: 20, color: Color(0xFFF59E0B)),
+            const Icon(
+              Icons.notifications_active_rounded,
+              size: 20,
+              color: Color(0xFFF59E0B),
+            ),
             const SizedBox(width: 8),
             Text(
               'Smart Alerts',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
             const Spacer(),
             Container(
@@ -404,7 +489,11 @@ class _SmartAlerts extends ConsumerWidget {
               ),
               child: Text(
                 '${alerts.length}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFEF4444)),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFEF4444),
+                ),
               ),
             ),
           ],
@@ -439,7 +528,11 @@ class _AlertCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: alert.color.withValues(alpha: 0.2)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -459,7 +552,10 @@ class _AlertCard extends StatelessWidget {
               children: [
                 Text(
                   alert.title,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -469,7 +565,11 @@ class _AlertCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400, size: 20),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: Colors.grey.shade400,
+            size: 20,
+          ),
         ],
       ),
     );
@@ -494,17 +594,28 @@ class _SalesIntelligence extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.insights_rounded, size: 20, color: Color(0xFF3B82F6)),
+            const Icon(
+              Icons.insights_rounded,
+              size: 20,
+              color: Color(0xFF3B82F6),
+            ),
             const SizedBox(width: 8),
             Text(
               'Sales Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         weeklySales.when(
-          loading: () => const SizedBox(height: 100, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 100,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (days) {
             final totals = days.map((d) => d['total'] as double).toList();
@@ -512,18 +623,26 @@ class _SalesIntelligence extends ConsumerWidget {
               return const SizedBox.shrink();
             }
 
-            final avg = totals.isNotEmpty ? totals.reduce((a, b) => a + b) / totals.length : 0.0;
+            final avg = totals.isNotEmpty
+                ? totals.reduce((a, b) => a + b) / totals.length
+                : 0.0;
             final maxDay = totals.reduce(max);
             final today = todaySales.value ?? 0;
             final yesterday = yesterdaySales.value ?? 0;
 
             final bestDayIdx = totals.indexOf(maxDay);
             final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-            final bestDay = bestDayIdx < dayNames.length ? dayNames[bestDayIdx] : 'N/A';
+            final bestDay = bestDayIdx < dayNames.length
+                ? dayNames[bestDayIdx]
+                : 'N/A';
 
-            final weekendTotal = totals.length >= 7 ? totals[5] + totals[6] : 0.0;
+            final weekendTotal = totals.length >= 7
+                ? totals[5] + totals[6]
+                : 0.0;
             final weekdayTotal = totals.take(5).fold(0.0, (a, b) => a + b);
-            final weekendRatio = weekdayTotal > 0 ? weekendTotal / weekdayTotal : 0;
+            final weekendRatio = weekdayTotal > 0
+                ? weekendTotal / weekdayTotal
+                : 0;
 
             return Column(
               children: [
@@ -532,7 +651,9 @@ class _SalesIntelligence extends ConsumerWidget {
                   color: const Color(0xFF10B981),
                   title: 'Weekly Average',
                   value: '₹${avg.toStringAsFixed(0)}/day',
-                  subtitle: today > avg ? 'Today is above average' : 'Today is below average',
+                  subtitle: today > avg
+                      ? 'Today is above average'
+                      : 'Today is below average',
                 ),
                 const SizedBox(height: 8),
                 _InsightCard(
@@ -548,16 +669,22 @@ class _SalesIntelligence extends ConsumerWidget {
                     icon: Icons.weekend_rounded,
                     color: const Color(0xFF8B5CF6),
                     title: 'Weekend Pattern',
-                    value: '+${((weekendRatio - 1) * 100).round()}% on weekends',
+                    value:
+                        '+${((weekendRatio - 1) * 100).round()}% on weekends',
                     subtitle: 'Consider stocking more for weekend rush',
                   ),
                 if (yesterday > 0)
                   _InsightCard(
                     icon: Icons.compare_arrows_rounded,
-                    color: today > yesterday ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    color: today > yesterday
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFEF4444),
                     title: 'Day-over-Day',
-                    value: '${today > yesterday ? '+' : ''}${((today - yesterday) / yesterday * 100).toStringAsFixed(0)}%',
-                    subtitle: today > yesterday ? 'Sales improved from yesterday' : 'Sales dropped from yesterday',
+                    value:
+                        '${today > yesterday ? '+' : ''}${((today - yesterday) / yesterday * 100).toStringAsFixed(0)}%',
+                    subtitle: today > yesterday
+                        ? 'Sales improved from yesterday'
+                        : 'Sales dropped from yesterday',
                   ),
               ],
             );
@@ -576,37 +703,49 @@ class _InventoryIntelligence extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final products = ref.watch(productsProvider);
+    final health = ref.watch(inventoryHealthProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.inventory_2_rounded, size: 20, color: Color(0xFF6366F1)),
+            const Icon(
+              Icons.inventory_2_rounded,
+              size: 20,
+              color: Color(0xFF6366F1),
+            ),
             const SizedBox(width: 8),
             Text(
               'Inventory Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        products.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        health.when(
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
-          data: (allProducts) {
-            if (allProducts.isEmpty) return const SizedBox.shrink();
+          data: (data) {
+            if (data.isEmpty) return const SizedBox.shrink();
 
-            final total = allProducts.length;
-            final outOfStock = allProducts.where((p) => p.stock <= 0).length;
-            final healthy = allProducts.where((p) => p.stock > p.lowStockAlert).length;
-            final lowStock = allProducts.where((p) => p.stock > 0 && p.stock <= p.lowStockAlert).length;
-            final zeroMoving = allProducts.where((p) => p.stock > 0).length;
-
-            final deadStockValue = allProducts
-                .where((p) => p.stock > 0)
-                .fold(0.0, (sum, p) => sum + (p.purchasePrice * p.stock));
+            final total = (data['total_products'] as num?)?.toInt() ?? 0;
+            final healthy = (data['healthy_count'] as num?)?.toInt() ?? 0;
+            final lowStock = (data['low_stock_count'] as num?)?.toInt() ?? 0;
+            final outOfStock =
+                (data['out_of_stock_count'] as num?)?.toInt() ?? 0;
+            final slowMoving =
+                (data['slow_moving_count'] as num?)?.toInt() ?? 0;
+            final deadStock = (data['dead_stock_count'] as num?)?.toInt() ?? 0;
+            final stockValue =
+                (data['total_stock_value'] as num?)?.toDouble() ?? 0;
 
             return Column(
               children: [
@@ -616,13 +755,23 @@ class _InventoryIntelligence extends ConsumerWidget {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Inventory Health', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                      Text(
+                        'Inventory Health ($total products)',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
@@ -631,17 +780,26 @@ class _InventoryIntelligence extends ConsumerWidget {
                             if (healthy > 0)
                               Expanded(
                                 flex: healthy,
-                                child: Container(height: 24, color: const Color(0xFF10B981)),
+                                child: Container(
+                                  height: 24,
+                                  color: const Color(0xFF10B981),
+                                ),
                               ),
                             if (lowStock > 0)
                               Expanded(
                                 flex: lowStock,
-                                child: Container(height: 24, color: const Color(0xFFF59E0B)),
+                                child: Container(
+                                  height: 24,
+                                  color: const Color(0xFFF59E0B),
+                                ),
                               ),
                             if (outOfStock > 0)
                               Expanded(
                                 flex: outOfStock,
-                                child: Container(height: 24, color: const Color(0xFFEF4444)),
+                                child: Container(
+                                  height: 24,
+                                  color: const Color(0xFFEF4444),
+                                ),
                               ),
                           ],
                         ),
@@ -649,26 +807,43 @@ class _InventoryIntelligence extends ConsumerWidget {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          _LegendDot(const Color(0xFF10B981), 'Healthy ($healthy)'),
+                          _LegendDot(
+                            const Color(0xFF10B981),
+                            'Healthy ($healthy)',
+                          ),
                           const SizedBox(width: 12),
-                          _LegendDot(const Color(0xFFF59E0B), 'Low ($lowStock)'),
+                          _LegendDot(
+                            const Color(0xFFF59E0B),
+                            'Low ($lowStock)',
+                          ),
                           const SizedBox(width: 12),
-                          _LegendDot(const Color(0xFFEF4444), 'Out ($outOfStock)'),
+                          _LegendDot(
+                            const Color(0xFFEF4444),
+                            'Out ($outOfStock)',
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (zeroMoving > 0)
+                if (slowMoving > 0)
                   _InsightCard(
                     icon: Icons.pause_circle_outline_rounded,
                     color: const Color(0xFF8B5CF6),
                     title: 'Slow Moving Stock',
-                    value: '$zeroMoving products',
-                    subtitle: deadStockValue > 0 ? '₹${deadStockValue.toStringAsFixed(0)} tied up in slow movers' : 'No sales in 30+ days',
+                    value: '$slowMoving products',
+                    subtitle: 'No sales in 90+ days',
                   ),
-                if (outOfStock > 0 && outOfStock <= 5)
+                if (deadStock > 0)
+                  _InsightCard(
+                    icon: Icons.delete_sweep_rounded,
+                    color: const Color(0xFF6B7280),
+                    title: 'Dead Stock',
+                    value: '$deadStock products',
+                    subtitle: 'No sales in 180+ days — consider clearance',
+                  ),
+                if (outOfStock > 0)
                   _InsightCard(
                     icon: Icons.remove_shopping_cart_rounded,
                     color: const Color(0xFFEF4444),
@@ -695,9 +870,16 @@ class _LegendDot extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
       ],
     );
   }
@@ -717,103 +899,102 @@ class _FinancialInsights extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final monthlyProfit = ref.watch(monthlyProfitProvider);
-    final stockValue = ref.watch(stockValueProvider);
-    final customerDues = ref.watch(totalCustomerDuesProvider);
-    final supplierDues = ref.watch(totalSupplierDuesProvider);
+    final financial = ref.watch(financialSummaryProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.account_balance_rounded, size: 20, color: Color(0xFF10B981)),
+            const Icon(
+              Icons.account_balance_rounded,
+              size: 20,
+              color: Color(0xFF10B981),
+            ),
             const SizedBox(width: 8),
             Text(
               'Financial Insights',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        monthlyProfit.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        financial.when(
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (data) {
-            final sales = data['sales'] ?? 0;
-            final purchases = data['purchases'] ?? 0;
-            final expenses = data['expenses'] ?? 0;
-            final profit = data['profit'] ?? 0;
-            final margin = sales > 0 ? (profit / sales * 100) : 0;
+            if (data.isEmpty) return const SizedBox.shrink();
+
+            final margin = (data['gross_margin_pct'] as num?)?.toDouble() ?? 0;
+            final expenseRatio =
+                (data['expense_ratio_pct'] as num?)?.toDouble() ?? 0;
+            final receivables =
+                (data['total_receivables'] as num?)?.toDouble() ?? 0;
+            final payables = (data['total_payables'] as num?)?.toDouble() ?? 0;
+            final cashRunway =
+                (data['cash_runway_days'] as num?)?.toDouble() ?? 999;
 
             return Column(
               children: [
                 _InsightCard(
                   icon: Icons.receipt_long_rounded,
                   color: const Color(0xFF3B82F6),
-                  title: 'Monthly Margin',
+                  title: 'Gross Margin',
                   value: '${margin.toStringAsFixed(1)}%',
-                  subtitle: margin > 20 ? 'Healthy profit margin' : margin > 10 ? 'Average margin' : 'Low margin — review pricing',
+                  subtitle: margin > 20
+                      ? 'Healthy profit margin'
+                      : margin > 10
+                      ? 'Average margin'
+                      : 'Low margin — review pricing',
                 ),
                 const SizedBox(height: 8),
-                if (purchases > 0 && sales > 0)
-                  _InsightCard(
-                    icon: Icons.speed_rounded,
-                    color: const Color(0xFF6366F1),
-                    title: 'Purchase-to-Sales Ratio',
-                    value: '${(purchases / sales * 100).toStringAsFixed(0)}%',
-                    subtitle: purchases > sales ? 'Spending more than earning' : 'Spending within means',
-                  ),
-                const SizedBox(height: 8),
-                stockValue.when(
-                  loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
-                  data: (sv) {
-                    final turnover = purchases > 0 ? (purchases / sv * 100) : 0;
-                    if (sv <= 0) return const SizedBox.shrink();
-                    return Column(
-                      children: [
-                        _InsightCard(
-                          icon: Icons.warehouse_rounded,
-                          color: const Color(0xFFF59E0B),
-                          title: 'Stock Turnover',
-                          value: '${turnover.toStringAsFixed(0)}%',
-                          subtitle: turnover > 50 ? 'Good inventory turnover' : 'Slow turnover — consider promotions',
-                        ),
-                      ],
-                    );
-                  },
+                _InsightCard(
+                  icon: Icons.speed_rounded,
+                  color: const Color(0xFF6366F1),
+                  title: 'Expense Ratio',
+                  value: '${expenseRatio.toStringAsFixed(1)}%',
+                  subtitle: expenseRatio < 15
+                      ? 'Expenses well controlled'
+                      : 'High expenses — review overhead',
                 ),
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        customerDues.when(
-          loading: () => const SizedBox(),
-          error: (_, __) => const SizedBox(),
-          data: (cd) {
-            final sd = supplierDues.value ?? 0;
-            if (cd <= 0 && sd <= 0) return const SizedBox.shrink();
-            return Column(
-              children: [
-                if (cd > 0)
+                if (receivables > 0) ...[
+                  const SizedBox(height: 8),
                   _InsightCard(
                     icon: Icons.people_alt_rounded,
                     color: const Color(0xFF3B82F6),
                     title: 'Customer Dues',
-                    value: _fmt(cd),
+                    value: _fmt(receivables),
                     subtitle: 'Follow up with customers to collect payments',
                   ),
-                if (cd > 0 && sd > 0) const SizedBox(height: 8),
-                if (sd > 0)
+                ],
+                if (payables > 0) ...[
+                  const SizedBox(height: 8),
                   _InsightCard(
                     icon: Icons.local_shipping_rounded,
                     color: const Color(0xFFEF4444),
                     title: 'Supplier Dues',
-                    value: _fmt(sd),
+                    value: _fmt(payables),
                     subtitle: 'Schedule payments to maintain good relations',
                   ),
+                ],
+                if (cashRunway < 30 && cashRunway < 999) ...[
+                  const SizedBox(height: 8),
+                  _InsightCard(
+                    icon: Icons.timer_off_rounded,
+                    color: const Color(0xFFEF4444),
+                    title: 'Cash Runway',
+                    value: '${cashRunway.toStringAsFixed(0)} days',
+                    subtitle:
+                        'Cash may run out within a month at current burn rate',
+                  ),
+                ],
               ],
             );
           },
@@ -831,120 +1012,85 @@ class _CustomerIntelligence extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customers = ref.watch(customersProvider);
-    final salesHistory = ref.watch(salesHistoryProvider);
-    final customerDues = ref.watch(totalCustomerDuesProvider);
+    final insights = ref.watch(customerInsightsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.people_rounded, size: 20, color: Color(0xFFEC4899)),
+            const Icon(
+              Icons.people_rounded,
+              size: 20,
+              color: Color(0xFFEC4899),
+            ),
             const SizedBox(width: 8),
             Text(
               'Customer Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        customers.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        insights.when(
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
-          data: (allCustomers) {
-            if (allCustomers.isEmpty) return const SizedBox.shrink();
+          data: (data) {
+            if (data.isEmpty) return const SizedBox.shrink();
 
-            return salesHistory.when(
-              loading: () => const SizedBox(),
-              error: (_, __) => const SizedBox(),
-              data: (sales) {
-                final now = AppTimezone.nowIst();
-                final thirtyDaysAgo = now.subtract(const Duration(days: 30));
-                final ninetyDaysAgo = now.subtract(const Duration(days: 90));
+            final top5 = data.take(5).toList();
+            final atRisk = data
+                .where(
+                  (c) =>
+                      c['churn_risk'] == 'high' || c['churn_risk'] == 'medium',
+                )
+                .toList();
+            final totalCustomers = data.length;
+            final totalDues = data.fold(
+              0.0,
+              (sum, c) =>
+                  sum + ((c['total_purchases'] as num?)?.toDouble() ?? 0),
+            );
 
-                // Customer spend map
-                final customerSpend = <String, double>{};
-                final customerOrders = <String, int>{};
-                final customerLastPurchase = <String, DateTime>{};
-
-                for (final sale in sales) {
-                  final cid = sale.customerId ?? '';
-                  if (cid.isEmpty) continue;
-                  customerSpend[cid] = (customerSpend[cid] ?? 0) + sale.finalAmount;
-                  customerOrders[cid] = (customerOrders[cid] ?? 0) + 1;
-                  final saleDate = AppTimezone.toIst(sale.createdAt);
-                  if (customerLastPurchase[cid] == null || saleDate.isAfter(customerLastPurchase[cid]!)) {
-                    customerLastPurchase[cid] = saleDate;
-                  }
-                }
-
-                // Top 5 customers by spend
-                final sorted = customerSpend.entries.toList()
-                  ..sort((a, b) => b.value.compareTo(a.value));
-                final top5 = sorted.take(5).toList();
-
-                // At-risk customers (haven't purchased in 30+ days but have history)
-                final atRisk = <MapEntry<String, double>>[];
-                for (final entry in customerSpend.entries) {
-                  final last = customerLastPurchase[entry.key];
-                  if (last != null && last.isBefore(thirtyDaysAgo) && entry.value > 1000) {
-                    atRisk.add(entry);
-                  }
-                }
-                atRisk.sort((a, b) => b.value.compareTo(a.value));
-
-                // New customers this month
-                final newThisMonth = allCustomers.where((c) {
-                  final created = AppTimezone.toIst(c.createdAt);
-                  return created.isAfter(thirtyDaysAgo);
-                }).length;
-
-                final totalCustomers = allCustomers.length;
-
-                // Credit risk
-                final dues = customerDues.value ?? 0;
-
-                return Column(
-                  children: [
-                    if (top5.isNotEmpty)
-                      _InsightCard(
-                        icon: Icons.star_rounded,
-                        color: const Color(0xFFEC4899),
-                        title: 'Top 5 Customers',
-                        value: '₹${top5.first.value.toStringAsFixed(0)}',
-                        subtitle: '${top5.first.key} leads with ${customerOrders[top5.first.key] ?? 0} orders',
-                      ),
-                    const SizedBox(height: 8),
-                    if (atRisk.isNotEmpty)
-                      _InsightCard(
-                        icon: Icons.person_off_rounded,
-                        color: const Color(0xFFF97316),
-                        title: 'At-Risk Customers',
-                        value: '${atRisk.length} customers',
-                        subtitle: 'Haven\'t purchased in 30+ days — send promotions',
-                      ),
-                    const SizedBox(height: 8),
-                    _InsightCard(
-                      icon: Icons.person_add_rounded,
-                      color: const Color(0xFF3B82F6),
-                      title: 'New Customer Acquisition',
-                      value: '$newThisMonth new',
-                      subtitle: '$totalCustomers total customers this month',
-                    ),
-                    if (dues > 5000) ...[
-                      const SizedBox(height: 8),
-                      _InsightCard(
-                        icon: Icons.credit_score_rounded,
-                        color: const Color(0xFFEF4444),
-                        title: 'Credit Risk',
-                        value: '₹${dues.toStringAsFixed(0)}',
-                        subtitle: 'Total outstanding — consider tightening credit terms',
-                      ),
-                    ],
-                  ],
-                );
-              },
+            return Column(
+              children: [
+                if (top5.isNotEmpty)
+                  _InsightCard(
+                    icon: Icons.star_rounded,
+                    color: const Color(0xFFEC4899),
+                    title: 'Top 5 Customers',
+                    value:
+                        '₹${(top5.first['total_purchases'] as num?)?.toStringAsFixed(0) ?? '0'}',
+                    subtitle:
+                        '${top5.first['customer_name'] ?? ''} leads with ${top5.first['total_orders'] ?? 0} orders',
+                  ),
+                const SizedBox(height: 8),
+                if (atRisk.isNotEmpty)
+                  _InsightCard(
+                    icon: Icons.person_off_rounded,
+                    color: const Color(0xFFF97316),
+                    title: 'At-Risk Customers',
+                    value: '${atRisk.length} customers',
+                    subtitle:
+                        'Haven\'t purchased in 30+ days — send promotions',
+                  ),
+                const SizedBox(height: 8),
+                _InsightCard(
+                  icon: Icons.person_add_rounded,
+                  color: const Color(0xFF3B82F6),
+                  title: 'Customer Segments',
+                  value: '$totalCustomers total',
+                  subtitle:
+                      'Platinum: ${data.where((c) => c['segment'] == 'platinum').length} | Gold: ${data.where((c) => c['segment'] == 'gold').length} | Silver: ${data.where((c) => c['segment'] == 'silver').length}',
+                ),
+              ],
             );
           },
         ),
@@ -969,24 +1115,36 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.analytics_rounded, size: 20, color: Color(0xFF10B981)),
+            const Icon(
+              Icons.analytics_rounded,
+              size: 20,
+              color: Color(0xFF10B981),
+            ),
             const SizedBox(width: 8),
             Text(
               'Profitability Deep Dive',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         products.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (allProducts) {
             return salesHistory.when(
               loading: () => const SizedBox(),
               error: (_, __) => const SizedBox(),
               data: (sales) {
-                if (allProducts.isEmpty || sales.isEmpty) return const SizedBox.shrink();
+                if (allProducts.isEmpty || sales.isEmpty)
+                  return const SizedBox.shrink();
 
                 // Category margin analysis
                 final categoryRevenue = <String, double>{};
@@ -994,13 +1152,16 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
                 final categoryCount = <String, int>{};
                 for (final sale in sales) {
                   for (final item in sale.items) {
-                    final cat = allProducts
-                        .where((p) => p.id == item.productId)
-                        .map((p) => p.category ?? 'Other')
-                        .firstOrNull ?? 'Other';
+                    final cat =
+                        allProducts
+                            .where((p) => p.id == item.productId)
+                            .map((p) => p.category ?? 'Other')
+                            .firstOrNull ??
+                        'Other';
                     final revenue = item.price * item.qty;
                     final profit = (item.price - item.purchasePrice) * item.qty;
-                    categoryRevenue[cat] = (categoryRevenue[cat] ?? 0) + revenue;
+                    categoryRevenue[cat] =
+                        (categoryRevenue[cat] ?? 0) + revenue;
                     categoryProfit[cat] = (categoryProfit[cat] ?? 0) + profit;
                     categoryCount[cat] = (categoryCount[cat] ?? 0) + 1;
                   }
@@ -1008,22 +1169,39 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
 
                 final sortedCats = categoryProfit.entries.toList()
                   ..sort((a, b) => b.value.compareTo(a.value));
-                final topCategory = sortedCats.isNotEmpty ? sortedCats.first : null;
+                final topCategory = sortedCats.isNotEmpty
+                    ? sortedCats.first
+                    : null;
 
                 // Loss-making products
-                final lossMaking = allProducts.where((p) =>
-                    p.sellingPrice > 0 && p.purchasePrice > 0 &&
-                    p.purchasePrice >= p.sellingPrice).length;
+                final lossMaking = allProducts
+                    .where(
+                      (p) =>
+                          p.sellingPrice > 0 &&
+                          p.purchasePrice > 0 &&
+                          p.purchasePrice >= p.sellingPrice,
+                    )
+                    .length;
 
                 // Margin distribution
-                final marginBuckets = {'0-5%': 0, '5-10%': 0, '10-20%': 0, '20%+': 0};
+                final marginBuckets = {
+                  '0-5%': 0,
+                  '5-10%': 0,
+                  '10-20%': 0,
+                  '20%+': 0,
+                };
                 for (final p in allProducts) {
                   if (p.sellingPrice <= 0 || p.purchasePrice <= 0) continue;
-                  final margin = (p.sellingPrice - p.purchasePrice) / p.sellingPrice * 100;
-                  if (margin < 5) marginBuckets['0-5%'] = marginBuckets['0-5%']! + 1;
-                  else if (margin < 10) marginBuckets['5-10%'] = marginBuckets['5-10%']! + 1;
-                  else if (margin < 20) marginBuckets['10-20%'] = marginBuckets['10-20%']! + 1;
-                  else marginBuckets['20%+'] = marginBuckets['20%+']! + 1;
+                  final margin =
+                      (p.sellingPrice - p.purchasePrice) / p.sellingPrice * 100;
+                  if (margin < 5)
+                    marginBuckets['0-5%'] = marginBuckets['0-5%']! + 1;
+                  else if (margin < 10)
+                    marginBuckets['5-10%'] = marginBuckets['5-10%']! + 1;
+                  else if (margin < 20)
+                    marginBuckets['10-20%'] = marginBuckets['10-20%']! + 1;
+                  else
+                    marginBuckets['20%+'] = marginBuckets['20%+']! + 1;
                 }
 
                 return Column(
@@ -1034,7 +1212,8 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
                         color: const Color(0xFF10B981),
                         title: 'Most Profitable Category',
                         value: topCategory.key,
-                        subtitle: '₹${topCategory.value.toStringAsFixed(0)} profit from ${categoryCount[topCategory.key] ?? 0} sales',
+                        subtitle:
+                            '₹${topCategory.value.toStringAsFixed(0)} profit from ${categoryCount[topCategory.key] ?? 0} sales',
                       ),
                     const SizedBox(height: 8),
                     if (lossMaking > 0)
@@ -1043,7 +1222,8 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
                         color: const Color(0xFFEF4444),
                         title: 'Loss-Making Products',
                         value: '$lossMaking products',
-                        subtitle: 'Selling below cost — review pricing immediately',
+                        subtitle:
+                            'Selling below cost — review pricing immediately',
                       ),
                     const SizedBox(height: 8),
                     Container(
@@ -1052,29 +1232,51 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Margin Distribution', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                          const Text(
+                            'Margin Distribution',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           const SizedBox(height: 12),
                           ...marginBuckets.entries.map((e) {
-                            final total = marginBuckets.values.fold(0, (a, b) => a + b);
+                            final total = marginBuckets.values.fold(
+                              0,
+                              (a, b) => a + b,
+                            );
                             final pct = total > 0 ? e.value / total : 0.0;
                             final color = e.key == '0-5%'
                                 ? const Color(0xFFEF4444)
                                 : e.key == '5-10%'
-                                    ? const Color(0xFFF59E0B)
-                                    : e.key == '10-20%'
-                                        ? const Color(0xFF3B82F6)
-                                        : const Color(0xFF10B981);
+                                ? const Color(0xFFF59E0B)
+                                : e.key == '10-20%'
+                                ? const Color(0xFF3B82F6)
+                                : const Color(0xFF10B981);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Row(
                                 children: [
-                                  SizedBox(width: 50, child: Text(e.key, style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
+                                  SizedBox(
+                                    width: 50,
+                                    child: Text(
+                                      e.key,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: ClipRRect(
@@ -1082,13 +1284,21 @@ class _ProfitabilityDeepDive extends ConsumerWidget {
                                       child: LinearProgressIndicator(
                                         value: pct,
                                         backgroundColor: Colors.grey.shade100,
-                                        valueColor: AlwaysStoppedAnimation(color),
+                                        valueColor: AlwaysStoppedAnimation(
+                                          color,
+                                        ),
                                         minHeight: 8,
                                       ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  Text('${e.value}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  Text(
+                                    '${e.value}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ],
                               ),
                             );
@@ -1124,34 +1334,49 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.assignment_return_rounded, size: 20, color: Color(0xFFF97316)),
+            const Icon(
+              Icons.assignment_return_rounded,
+              size: 20,
+              color: Color(0xFFF97316),
+            ),
             const SizedBox(width: 8),
             Text(
               'Returns & Damaged',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         returns.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (returnList) {
             return damaged.when(
               loading: () => const SizedBox(),
               error: (_, __) => const SizedBox(),
               data: (damagedList) {
-                if (returnList.isEmpty && damagedList.isEmpty) return const SizedBox.shrink();
+                if (returnList.isEmpty && damagedList.isEmpty)
+                  return const SizedBox.shrink();
 
                 // Return stats
                 double totalReturnRefund = 0;
                 int totalReturnQty = 0;
                 final returnProducts = <String, int>{};
                 for (final r in returnList) {
-                  totalReturnRefund += (r['refund_amount'] as num?)?.toDouble() ?? 0;
+                  totalReturnRefund +=
+                      (r['refund_amount'] as num?)?.toDouble() ?? 0;
                   totalReturnQty += (r['quantity'] as num?)?.toInt() ?? 0;
                   final name = r['product_name'] as String? ?? 'Unknown';
-                  returnProducts[name] = (returnProducts[name] ?? 0) + ((r['quantity'] as num?)?.toInt() ?? 0);
+                  returnProducts[name] =
+                      (returnProducts[name] ?? 0) +
+                      ((r['quantity'] as num?)?.toInt() ?? 0);
                 }
 
                 // Damaged stats
@@ -1168,8 +1393,16 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                 }
 
                 // Return rate
-                final totalSold = salesHistory.value?.fold(0, (sum, s) => sum + s.items.fold(0, (isum, i) => isum + i.qty)) ?? 0;
-                final returnRate = totalSold > 0 ? (totalReturnQty / totalSold * 100) : 0.0;
+                final totalSold =
+                    salesHistory.value?.fold(
+                      0,
+                      (sum, s) =>
+                          sum + s.items.fold(0, (isum, i) => isum + i.qty),
+                    ) ??
+                    0;
+                final returnRate = totalSold > 0
+                    ? (totalReturnQty / totalSold * 100)
+                    : 0.0;
 
                 final topReturns = returnProducts.entries.toList()
                   ..sort((a, b) => b.value.compareTo(a.value));
@@ -1180,10 +1413,14 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                   children: [
                     _InsightCard(
                       icon: Icons.replay_rounded,
-                      color: returnRate > 5 ? const Color(0xFFEF4444) : const Color(0xFF3B82F6),
+                      color: returnRate > 5
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFF3B82F6),
                       title: 'Return Rate',
                       value: '${returnRate.toStringAsFixed(1)}%',
-                      subtitle: returnRate > 5 ? 'High — investigate quality issues' : 'Within normal range',
+                      subtitle: returnRate > 5
+                          ? 'High — investigate quality issues'
+                          : 'Within normal range',
                     ),
                     const SizedBox(height: 8),
                     if (topReturns.isNotEmpty)
@@ -1192,7 +1429,8 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                         color: const Color(0xFFF97316),
                         title: 'Top Returned Product',
                         value: topReturns.first.key,
-                        subtitle: '${topReturns.first.value} units returned — ₹${totalReturnRefund.toStringAsFixed(0)} refunded',
+                        subtitle:
+                            '${topReturns.first.value} units returned — ₹${totalReturnRefund.toStringAsFixed(0)} refunded',
                       ),
                     const SizedBox(height: 8),
                     if (totalDamagedQty > 0)
@@ -1201,7 +1439,8 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                         color: const Color(0xFFEF4444),
                         title: 'Damaged Goods',
                         value: '$totalDamagedQty units',
-                        subtitle: '₹${totalDamagedValue.toStringAsFixed(0)} value lost to damage',
+                        subtitle:
+                            '₹${totalDamagedValue.toStringAsFixed(0)} value lost to damage',
                       ),
                     if (topDamaged.isNotEmpty) ...[
                       const SizedBox(height: 8),
@@ -1210,7 +1449,8 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                         color: const Color(0xFF8B5CF6),
                         title: 'Most Damaged Product',
                         value: topDamaged.first.key,
-                        subtitle: '${topDamaged.first.value} units damaged — review handling',
+                        subtitle:
+                            '${topDamaged.first.value} units damaged — review handling',
                       ),
                     ],
                   ],
@@ -1241,17 +1481,28 @@ class _SupplierPerformance extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.local_shipping_rounded, size: 20, color: const Color(0xFF6366F1)),
+            const Icon(
+              Icons.local_shipping_rounded,
+              size: 20,
+              color: const Color(0xFF6366F1),
+            ),
             const SizedBox(width: 8),
             Text(
               'Supplier Performance',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         suppliers.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (allSuppliers) {
             if (allSuppliers.isEmpty) return const SizedBox.shrink();
@@ -1264,19 +1515,35 @@ class _SupplierPerformance extends ConsumerWidget {
                 final supplierSpend = <String, double>{};
                 for (final p in allPurchases) {
                   final name = p.supplierName ?? 'Unknown';
-                  supplierSpend[name] = (supplierSpend[name] ?? 0) + p.totalAmount;
+                  supplierSpend[name] =
+                      (supplierSpend[name] ?? 0) + p.totalAmount;
                 }
                 final sorted = supplierSpend.entries.toList()
                   ..sort((a, b) => b.value.compareTo(a.value));
                 final topSupplier = sorted.isNotEmpty ? sorted.first : null;
 
                 // Pending POs
-                final pendingPOs = purchaseOrders.value?.where((po) => po.status != 'completed' && po.status != 'cancelled').toList() ?? [];
-                final pendingPOValue = pendingPOs.fold(0.0, (sum, po) => sum + po.totalAmount);
+                final pendingPOs =
+                    purchaseOrders.value
+                        ?.where(
+                          (po) =>
+                              po.status != 'completed' &&
+                              po.status != 'cancelled',
+                        )
+                        .toList() ??
+                    [];
+                final pendingPOValue = pendingPOs.fold(
+                  0.0,
+                  (sum, po) => sum + po.totalAmount,
+                );
 
                 // Supplier concentration risk
-                final totalSpend = supplierSpend.values.fold(0.0, (a, b) => a + b);
-                final topSupplierConcentration = topSupplier != null && totalSpend > 0
+                final totalSpend = supplierSpend.values.fold(
+                  0.0,
+                  (a, b) => a + b,
+                );
+                final topSupplierConcentration =
+                    topSupplier != null && totalSpend > 0
                     ? (topSupplier.value / totalSpend * 100)
                     : 0.0;
 
@@ -1288,7 +1555,8 @@ class _SupplierPerformance extends ConsumerWidget {
                         color: const Color(0xFF6366F1),
                         title: 'Top Supplier by Spend',
                         value: topSupplier.key,
-                        subtitle: '₹${topSupplier.value.toStringAsFixed(0)} total purchases',
+                        subtitle:
+                            '₹${topSupplier.value.toStringAsFixed(0)} total purchases',
                       ),
                     if (topSupplierConcentration > 50) ...[
                       const SizedBox(height: 8),
@@ -1296,8 +1564,10 @@ class _SupplierPerformance extends ConsumerWidget {
                         icon: Icons.warning_amber_rounded,
                         color: const Color(0xFFF59E0B),
                         title: 'Supplier Concentration Risk',
-                        value: '${topSupplierConcentration.toStringAsFixed(0)}%',
-                        subtitle: 'Over half your purchases from one supplier — diversify',
+                        value:
+                            '${topSupplierConcentration.toStringAsFixed(0)}%',
+                        subtitle:
+                            'Over half your purchases from one supplier — diversify',
                       ),
                     ],
                     if (pendingPOs.isNotEmpty) ...[
@@ -1307,7 +1577,8 @@ class _SupplierPerformance extends ConsumerWidget {
                         color: const Color(0xFF3B82F6),
                         title: 'Pending Purchase Orders',
                         value: '${pendingPOs.length} orders',
-                        subtitle: '₹${pendingPOValue.toStringAsFixed(0)} total value pending',
+                        subtitle:
+                            '₹${pendingPOValue.toStringAsFixed(0)} total value pending',
                       ),
                     ],
                   ],
@@ -1329,42 +1600,48 @@ class _CashFlowIntelligence extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final accounts = ref.watch(accountsProvider);
+    final financial = ref.watch(financialSummaryProvider);
     final todaySales = ref.watch(todaySalesProvider);
     final todayExpenses = ref.watch(todayExpensesProvider);
-    final customerDues = ref.watch(totalCustomerDuesProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.account_balance_wallet_rounded, size: 20, color: Color(0xFF14B8A6)),
+            const Icon(
+              Icons.account_balance_wallet_rounded,
+              size: 20,
+              color: Color(0xFF14B8A6),
+            ),
             const SizedBox(width: 8),
             Text(
               'Cash Flow Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        accounts.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        financial.when(
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
-          data: (allAccounts) {
-            final cashAccount = allAccounts.where((a) => a.accountType == 'cash').firstOrNull;
-            final bankAccount = allAccounts.where((a) => a.accountType == 'bank').firstOrNull;
-            final cashBalance = cashAccount?.balance ?? 0;
-            final bankBalance = bankAccount?.balance ?? 0;
-            final totalCash = cashBalance + bankBalance;
+          data: (data) {
+            final cashPos = (data['cash_position'] as num?)?.toDouble() ?? 0;
+            final bankPos = (data['bank_position'] as num?)?.toDouble() ?? 0;
+            final totalCash = cashPos + bankPos;
+            final cashRunway =
+                (data['cash_runway_days'] as num?)?.toDouble() ?? 999;
 
             final sales = todaySales.value ?? 0;
             final expenses = todayExpenses.value ?? 0;
             final netFlow = sales - expenses;
-
-            // Cash health warning
-            final avgDailyExpenses = expenses > 0 ? expenses : 0;
-            final cashRunway = avgDailyExpenses > 0 ? (totalCash / avgDailyExpenses) : 999;
 
             return Column(
               children: [
@@ -1373,24 +1650,30 @@ class _CashFlowIntelligence extends ConsumerWidget {
                   color: const Color(0xFF14B8A6),
                   title: 'Cash Position',
                   value: '₹${totalCash.toStringAsFixed(0)}',
-                  subtitle: 'Cash: ₹${cashBalance.toStringAsFixed(0)} | Bank: ₹${bankBalance.toStringAsFixed(0)}',
+                  subtitle:
+                      'Cash: ₹${cashPos.toStringAsFixed(0)} | Bank: ₹${bankPos.toStringAsFixed(0)}',
                 ),
                 const SizedBox(height: 8),
                 _InsightCard(
                   icon: Icons.swap_horiz_rounded,
-                  color: netFlow >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                  color: netFlow >= 0
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFEF4444),
                   title: "Today's Net Cash Flow",
-                  value: '${netFlow >= 0 ? '+' : ''}₹${netFlow.toStringAsFixed(0)}',
-                  subtitle: 'In: ₹${sales.toStringAsFixed(0)} | Out: ₹${expenses.toStringAsFixed(0)}',
+                  value:
+                      '${netFlow >= 0 ? '+' : ''}₹${netFlow.toStringAsFixed(0)}',
+                  subtitle:
+                      'In: ₹${sales.toStringAsFixed(0)} | Out: ₹${expenses.toStringAsFixed(0)}',
                 ),
-                if (cashRunway < 7 && avgDailyExpenses > 0) ...[
+                if (cashRunway < 30 && cashRunway < 999) ...[
                   const SizedBox(height: 8),
                   _InsightCard(
                     icon: Icons.timer_off_rounded,
                     color: const Color(0xFFEF4444),
                     title: 'Cash Health Warning',
                     value: '${cashRunway.toStringAsFixed(0)} days runway',
-                    subtitle: 'Cash may run out within a week at current burn rate',
+                    subtitle:
+                        'Cash may run out within a month at current burn rate',
                   ),
                 ],
               ],
@@ -1410,35 +1693,49 @@ class _TimeSeriesForecast extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final weeklySales = ref.watch(weeklySalesProvider);
-    final monthlyProfit = ref.watch(monthlyProfitProvider);
-    final products = ref.watch(productsProvider);
+    final forecast = ref.watch(salesForecastProvider);
+    final inventoryHealth = ref.watch(inventoryHealthProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.auto_graph_rounded, size: 20, color: const Color(0xFF8B5CF6)),
+            const Icon(
+              Icons.auto_graph_rounded,
+              size: 20,
+              color: Color(0xFF8B5CF6),
+            ),
             const SizedBox(width: 8),
             Text(
               'Time-Series Forecast',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        monthlyProfit.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+        forecast.when(
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (data) {
-            final sales = data['sales'] ?? 0;
-            final now = AppTimezone.nowIst();
-            final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-            final dayOfMonth = now.day;
+            if (data.isEmpty) return const SizedBox.shrink();
 
-            // Monthly revenue projection
-            final projected = dayOfMonth > 0 ? (sales / dayOfMonth * daysInMonth) : 0.0;
+            final projected =
+                (data['projected_monthly_sales'] as num?)?.toDouble() ?? 0;
+            final dailyAvg = (data['daily_average'] as num?)?.toDouble() ?? 0;
+            final trend = (data['trend_direction'] as String?) ?? 'stable';
+            final confidence =
+                (data['forecast_confidence'] as String?) ?? 'low';
+            final daysElapsed = (data['days_elapsed'] as num?)?.toInt() ?? 0;
+            final momPct =
+                (data['month_over_month_pct'] as num?)?.toDouble() ?? 0;
 
             return Column(
               children: [
@@ -1447,72 +1744,98 @@ class _TimeSeriesForecast extends ConsumerWidget {
                   color: const Color(0xFF8B5CF6),
                   title: 'Projected Monthly Revenue',
                   value: '₹${projected.toStringAsFixed(0)}',
-                  subtitle: 'Based on ${dayOfMonth} days of data (${daysInMonth} day month)',
+                  subtitle:
+                      '₹${dailyAvg.toStringAsFixed(0)}/day avg | $daysElapsed days data | $confidence confidence',
                 ),
                 const SizedBox(height: 8),
-                weeklySales.when(
-                  loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
-                  data: (days) {
-                    final totals = days.map((d) => d['total'] as double).toList();
-                    if (totals.isEmpty || totals.every((t) => t == 0)) return const SizedBox.shrink();
-
-                    final avg = totals.reduce((a, b) => a + b) / totals.length;
-                    final maxDay = totals.reduce(max);
-
-                    // Stockout prediction for low-stock products
-                    final lowStockProducts = products.value?.where((p) => p.isLowStock && p.stock > 0).toList() ?? [];
-                    final fastestSellers = lowStockProducts.take(3).toList();
-
-                    return Column(
-                      children: [
-                        _InsightCard(
-                          icon: Icons.speed_rounded,
-                          color: const Color(0xFF3B82F6),
-                          title: 'Sales Velocity',
-                          value: '₹${avg.toStringAsFixed(0)}/day avg',
-                          subtitle: 'Peak: ₹${maxDay.toStringAsFixed(0)} | Consistency: ${(avg / max(maxDay, 1) * 100).toStringAsFixed(0)}%',
-                        ),
-                        if (fastestSellers.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.timer_rounded, color: Color(0xFFEF4444), size: 18),
-                                    const SizedBox(width: 6),
-                                    const Text('Stockout Risk', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                ...fastestSellers.map((p) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    children: [
-                                      Expanded(child: Text(p.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
-                                      Text('${p.stock} left', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: p.stock <= 3 ? const Color(0xFFEF4444) : Colors.grey.shade700)),
-                                    ],
-                                  ),
-                                )),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
+                _InsightCard(
+                  icon: Icons.trending_up_rounded,
+                  color: trend == 'growing'
+                      ? const Color(0xFF10B981)
+                      : trend == 'declining'
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFF3B82F6),
+                  title: 'Sales Trend',
+                  value: '${trend[0].toUpperCase()}${trend.substring(1)}',
+                  subtitle: momPct > 0
+                      ? '+${momPct.toStringAsFixed(1)}% vs last month'
+                      : '${momPct.toStringAsFixed(1)}% vs last month',
                 ),
               ],
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        inventoryHealth.when(
+          loading: () => const SizedBox(),
+          error: (_, __) => const SizedBox(),
+          data: (data) {
+            if (data.isEmpty) return const SizedBox.shrink();
+            final reorderItems = (data['top_reorder_items'] as List?) ?? [];
+            if (reorderItems.isEmpty) return const SizedBox.shrink();
+
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.timer_rounded,
+                        color: Color(0xFFEF4444),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Needs Reorder',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...reorderItems
+                      .take(5)
+                      .map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${item['name'] ?? ''}',
+                                  style: const TextStyle(fontSize: 12),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                '${item['stock'] ?? 0} left (need ${item['alert'] ?? 0})',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFEF4444),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                ],
+              ),
             );
           },
         ),
@@ -1538,17 +1861,28 @@ class _GstTaxIntelligence extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.receipt_rounded, size: 20, color: const Color(0xFF0EA5E9)),
+            const Icon(
+              Icons.receipt_rounded,
+              size: 20,
+              color: const Color(0xFF0EA5E9),
+            ),
             const SizedBox(width: 8),
             Text(
               'GST & Tax Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         monthlyGst.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (gst) {
             return products.when(
@@ -1562,14 +1896,17 @@ class _GstTaxIntelligence extends ConsumerWidget {
                     // Tax exempt sales
                     int totalSalesCount = sales.length;
                     int taxExemptCount = sales.where((s) => s.taxExempt).length;
-                    final exemptRatio = totalSalesCount > 0 ? (taxExemptCount / totalSalesCount * 100) : 0.0;
+                    final exemptRatio = totalSalesCount > 0
+                        ? (taxExemptCount / totalSalesCount * 100)
+                        : 0.0;
 
                     // HSN distribution
                     final hsnMap = <String, double>{};
                     for (final sale in sales) {
                       for (final item in sale.items) {
                         final hsn = item.hsnCode ?? 'N/A';
-                        hsnMap[hsn] = (hsnMap[hsn] ?? 0) + (item.price * item.qty);
+                        hsnMap[hsn] =
+                            (hsnMap[hsn] ?? 0) + (item.price * item.qty);
                       }
                     }
                     final sortedHSN = hsnMap.entries.toList()
@@ -1577,8 +1914,12 @@ class _GstTaxIntelligence extends ConsumerWidget {
                     final topHSN = sortedHSN.take(3).toList();
 
                     // Products with GST
-                    final withGst = allProducts.where((p) => p.gstRate > 0).length;
-                    final withoutGst = allProducts.where((p) => p.gstRate <= 0).length;
+                    final withGst = allProducts
+                        .where((p) => p.gstRate > 0)
+                        .length;
+                    final withoutGst = allProducts
+                        .where((p) => p.gstRate <= 0)
+                        .length;
 
                     return Column(
                       children: [
@@ -1592,10 +1933,13 @@ class _GstTaxIntelligence extends ConsumerWidget {
                         const SizedBox(height: 8),
                         _InsightCard(
                           icon: Icons.gavel_rounded,
-                          color: exemptRatio > 10 ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                          color: exemptRatio > 10
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
                           title: 'Tax-Exempt Sales',
                           value: '${exemptRatio.toStringAsFixed(1)}%',
-                          subtitle: '$taxExemptCount of $totalSalesCount sales are tax-exempt',
+                          subtitle:
+                              '$taxExemptCount of $totalSalesCount sales are tax-exempt',
                         ),
                         if (topHSN.isNotEmpty) ...[
                           const SizedBox(height: 8),
@@ -1605,31 +1949,65 @@ class _GstTaxIntelligence extends ConsumerWidget {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: [
-                                BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
                               ],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Top HSN Codes by Revenue', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 8),
-                                ...topHSN.map((e) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0EA5E9))),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: Text('₹${e.value.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
-                                    ],
+                                const Text(
+                                  'Top HSN Codes by Revenue',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                )),
+                                ),
+                                const SizedBox(height: 8),
+                                ...topHSN.map(
+                                  (e) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 4),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(
+                                              0xFF0EA5E9,
+                                            ).withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            e.key,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF0EA5E9),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '₹${e.value.toStringAsFixed(0)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1664,17 +2042,28 @@ class _ExpenseIntelligence extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.money_off_rounded, size: 20, color: const Color(0xFFEF4444)),
+            const Icon(
+              Icons.money_off_rounded,
+              size: 20,
+              color: const Color(0xFFEF4444),
+            ),
             const SizedBox(width: 8),
             Text(
               'Expense Intelligence',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         monthlyExpenses.when(
-          loading: () => const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+          loading: () => const SizedBox(
+            height: 80,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          ),
           error: (_, __) => const SizedBox(),
           data: (mExpenses) {
             return monthlyProfit.when(
@@ -1682,16 +2071,22 @@ class _ExpenseIntelligence extends ConsumerWidget {
               error: (_, __) => const SizedBox(),
               data: (profitData) {
                 final sales = profitData['sales'] ?? 0;
-                final expenseRatio = sales > 0 ? (mExpenses / sales * 100) : 0.0;
+                final expenseRatio = sales > 0
+                    ? (mExpenses / sales * 100)
+                    : 0.0;
 
                 return Column(
                   children: [
                     _InsightCard(
                       icon: Icons.pie_chart_rounded,
-                      color: expenseRatio > 15 ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                      color: expenseRatio > 15
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFF10B981),
                       title: 'Expense-to-Sales Ratio',
                       value: '${expenseRatio.toStringAsFixed(1)}%',
-                      subtitle: expenseRatio > 15 ? 'High — expenses consuming too much revenue' : 'Healthy expense level',
+                      subtitle: expenseRatio > 15
+                          ? 'High — expenses consuming too much revenue'
+                          : 'Healthy expense level',
                     ),
                     const SizedBox(height: 8),
                     expenses.when(
@@ -1703,12 +2098,16 @@ class _ExpenseIntelligence extends ConsumerWidget {
                         // Category breakdown
                         final categories = <String, double>{};
                         for (final e in expList) {
-                          categories[e.category] = (categories[e.category] ?? 0) + e.amount;
+                          categories[e.category] =
+                              (categories[e.category] ?? 0) + e.amount;
                         }
                         final sorted = categories.entries.toList()
                           ..sort((a, b) => b.value.compareTo(a.value));
                         final top3 = sorted.take(3).toList();
-                        final totalExp = sorted.fold(0.0, (sum, e) => sum + e.value);
+                        final totalExp = sorted.fold(
+                          0.0,
+                          (sum, e) => sum + e.value,
+                        );
 
                         return Column(
                           children: [
@@ -1718,24 +2117,56 @@ class _ExpenseIntelligence extends ConsumerWidget {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: [
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.04),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
                                 ],
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Top Expense Categories', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                  const Text(
+                                    'Top Expense Categories',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                   const SizedBox(height: 8),
                                   ...top3.map((e) {
-                                    final pct = totalExp > 0 ? (e.value / totalExp * 100) : 0;
+                                    final pct = totalExp > 0
+                                        ? (e.value / totalExp * 100)
+                                        : 0;
                                     return Padding(
                                       padding: const EdgeInsets.only(bottom: 6),
                                       child: Row(
                                         children: [
-                                          Expanded(child: Text(e.key, style: const TextStyle(fontSize: 12))),
-                                          Text('₹${e.value.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                                          Expanded(
+                                            child: Text(
+                                              e.key,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            '₹${e.value.toStringAsFixed(0)}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
                                           const SizedBox(width: 8),
-                                          Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                          Text(
+                                            '${pct.toStringAsFixed(0)}%',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     );
@@ -1780,56 +2211,77 @@ class _ActionRecommendations extends ConsumerWidget {
       final top = topSelling.first;
       final name = top['name'] ?? 'Top product';
       final count = top['total'] ?? 0;
-      actions.add(_Action(
-        'Reorder Best Seller',
-        '"$name" is your top seller ($count sold). Ensure it never runs out.',
-        Icons.shopping_cart_checkout_rounded,
-        const Color(0xFF10B981),
-      ));
+      actions.add(
+        _Action(
+          'Reorder Best Seller',
+          '"$name" is your top seller ($count sold). Ensure it never runs out.',
+          Icons.shopping_cart_checkout_rounded,
+          const Color(0xFF10B981),
+        ),
+      );
     }
 
-    final expiringSoon = expiring.value?.where((p) {
-      final diff = p.expiryDate?.difference(now).inDays ?? 999;
-      return diff >= 0 && diff <= 14;
-    }).toList() ?? [];
+    final expiringSoon =
+        expiring.value?.where((p) {
+          final diff = p.expiryDate?.difference(now).inDays ?? 999;
+          return diff >= 0 && diff <= 14;
+        }).toList() ??
+        [];
     if (expiringSoon.isNotEmpty) {
-      actions.add(_Action(
-        'Run Expiry Discount',
-        '${expiringSoon.length} products expire within 14 days. Offer 20-30% off to recover cost.',
-        Icons.local_offer_rounded,
-        const Color(0xFFF97316),
-      ));
+      actions.add(
+        _Action(
+          'Run Expiry Discount',
+          '${expiringSoon.length} products expire within 14 days. Offer 20-30% off to recover cost.',
+          Icons.local_offer_rounded,
+          const Color(0xFFF97316),
+        ),
+      );
     }
 
     final productsList = products.value ?? [];
-    final lowMargin = productsList.where((p) => p.sellingPrice > 0 && p.purchasePrice > 0 && ((p.sellingPrice - p.purchasePrice) / p.sellingPrice) < 0.1).length;
+    final lowMargin = productsList
+        .where(
+          (p) =>
+              p.sellingPrice > 0 &&
+              p.purchasePrice > 0 &&
+              ((p.sellingPrice - p.purchasePrice) / p.sellingPrice) < 0.1,
+        )
+        .length;
     if (lowMargin > 0) {
-      actions.add(_Action(
-        'Review Pricing',
-        '$lowMargin products have less than 10% margin. Consider price adjustments.',
-        Icons.price_change_rounded,
-        const Color(0xFF8B5CF6),
-      ));
+      actions.add(
+        _Action(
+          'Review Pricing',
+          '$lowMargin products have less than 10% margin. Consider price adjustments.',
+          Icons.price_change_rounded,
+          const Color(0xFF8B5CF6),
+        ),
+      );
     }
 
-    final criticalStock = lowStock.value?.where((p) => p.stock > 0 && p.stock <= 5).toList() ?? [];
+    final criticalStock =
+        lowStock.value?.where((p) => p.stock > 0 && p.stock <= 5).toList() ??
+        [];
     if (criticalStock.isNotEmpty) {
-      actions.add(_Action(
-        'Emergency Restock',
-        '${criticalStock.length} products have 5 or fewer units left.',
-        Icons.build_rounded,
-        const Color(0xFFEF4444),
-      ));
+      actions.add(
+        _Action(
+          'Emergency Restock',
+          '${criticalStock.length} products have 5 or fewer units left.',
+          Icons.build_rounded,
+          const Color(0xFFEF4444),
+        ),
+      );
     }
 
     final sales = todaySales.value ?? 0;
     if (sales == 0 && now.hour > 10) {
-      actions.add(_Action(
-        'Boost Today\'s Sales',
-        'No sales recorded yet. Consider running a flash deal or promotion.',
-        Icons.campaign_rounded,
-        const Color(0xFF3B82F6),
-      ));
+      actions.add(
+        _Action(
+          'Boost Today\'s Sales',
+          'No sales recorded yet. Consider running a flash deal or promotion.',
+          Icons.campaign_rounded,
+          const Color(0xFF3B82F6),
+        ),
+      );
     }
 
     if (actions.isEmpty) {
@@ -1841,51 +2293,77 @@ class _ActionRecommendations extends ConsumerWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.auto_awesome_rounded, size: 20, color: Color(0xFF667eea)),
+            const Icon(
+              Icons.auto_awesome_rounded,
+              size: 20,
+              color: Color(0xFF667eea),
+            ),
             const SizedBox(width: 8),
             Text(
               'Recommended Actions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        ...actions.map((a) => Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: a.color.withValues(alpha: 0.15)),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6, offset: const Offset(0, 2)),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: a.color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+        ...actions.map(
+          (a) => Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: a.color.withValues(alpha: 0.15)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-                child: Icon(a.icon, color: a.color, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(a.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text(a.message, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                  ],
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: a.color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(a.icon, color: a.color, size: 20),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        a.title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        a.message,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        )),
+        ),
       ],
     );
   }
@@ -1925,7 +2403,11 @@ class _InsightCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -1943,9 +2425,19 @@ class _InsightCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
                 const SizedBox(height: 2),
-                Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
               ],
             ),
           ),

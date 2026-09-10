@@ -921,10 +921,14 @@ final weeklySalesSparkProvider = FutureProvider<List<double>>((ref) async {
     final now = AppTimezone.nowIst();
     final start = now.subtract(const Duration(days: 6));
     final dayStartUtc = DateTime.utc(
-      start.year, start.month, start.day,
+      start.year,
+      start.month,
+      start.day,
     ).subtract(AppTimezone.localOffset);
     final endUtc = DateTime.utc(
-      now.year, now.month, now.day + 1,
+      now.year,
+      now.month,
+      now.day + 1,
     ).subtract(AppTimezone.localOffset);
 
     final response = await Supabase.instance.client
@@ -1036,5 +1040,81 @@ final monthlyPurchasesOnlyProvider = FutureProvider<double>((ref) async {
     return 0;
   } catch (e) {
     return 0;
+  }
+});
+
+// ============================================
+// PHASE 1: SERVER-SIDE ANALYTICS PROVIDERS
+// ============================================
+
+final customerInsightsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  try {
+    final res = await Supabase.instance.client.rpc('get_customer_insights');
+    if (res is List) {
+      return res
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+});
+
+final productInsightsProvider = FutureProvider<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  try {
+    final res = await Supabase.instance.client.rpc('get_product_insights');
+    if (res is List) {
+      return res
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+});
+
+final inventoryHealthProvider = FutureProvider<Map<String, dynamic>>((
+  ref,
+) async {
+  try {
+    final res = await Supabase.instance.client.rpc('get_inventory_health');
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first);
+    }
+    return {};
+  } catch (e) {
+    return {};
+  }
+});
+
+final financialSummaryProvider = FutureProvider<Map<String, dynamic>>((
+  ref,
+) async {
+  try {
+    final res = await Supabase.instance.client.rpc('get_financial_summary');
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first);
+    }
+    return {};
+  } catch (e) {
+    return {};
+  }
+});
+
+final salesForecastProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    final res = await Supabase.instance.client.rpc('get_sales_forecast');
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first);
+    }
+    return {};
+  } catch (e) {
+    return {};
   }
 });
