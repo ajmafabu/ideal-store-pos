@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../config/providers.dart';
 import '../../models/product.dart';
 import '../../utils/app_timezone.dart';
@@ -15,6 +16,57 @@ class AiInsightsScreen extends ConsumerStatefulWidget {
 }
 
 class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
+  int _selectedRange = 30; // Default 30 days
+
+  DateTimeRange? _customRange;
+
+  DateTimeRange get _dateRange {
+    final now = DateTime.now();
+    if (_customRange != null) return _customRange!;
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: _selectedRange));
+    return DateTimeRange(start: start, end: now);
+  }
+
+  void _showCustomDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _customRange,
+    );
+    if (picked != null) {
+      setState(() {
+        _customRange = picked;
+        _selectedRange = -1; // Custom
+      });
+    }
+  }
+
+  void _selectRange(int days) {
+    setState(() {
+      _selectedRange = days;
+      _customRange = null;
+    });
+  }
+
+  void _exportPdf() async {
+    // TODO: Generate PDF
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('PDF export coming soon')));
+  }
+
+  void _exportCsv() async {
+    // TODO: Generate CSV
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('CSV export coming soon')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -52,6 +104,39 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (v) {
+              if (v == 'pdf')
+                _exportPdf();
+              else if (v == 'csv')
+                _exportCsv();
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'pdf',
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Export PDF'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'csv',
+                child: Row(
+                  children: [
+                    Icon(Icons.table_chart, size: 18, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Export CSV'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -90,6 +175,20 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Date range filter
+              _DateRangeFilter(
+                selectedRange: _selectedRange,
+                onSelect: _selectRange,
+                onCustom: _showCustomDateRange,
+              ),
+              const SizedBox(height: 16),
+              // Charts
+              _SalesChart(dateRange: _dateRange),
+              const SizedBox(height: 16),
+              _CategoryPieChart(dateRange: _dateRange),
+              const SizedBox(height: 16),
+              _TopProductsChart(dateRange: _dateRange),
+              const SizedBox(height: 16),
               const _BusinessHealthScore(),
               const SizedBox(height: 16),
               const _SmartAlerts(),
@@ -2447,6 +2546,545 @@ class _InsightCard extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
               textAlign: TextAlign.end,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════
+// DATE RANGE FILTER
+// ═══════════════════════════════════════════
+class _DateRangeFilter extends StatelessWidget {
+  final int selectedRange;
+  final Function(int) onSelect;
+  final Function() onCustom;
+
+  const _DateRangeFilter({
+    required this.selectedRange,
+    required this.onSelect,
+    required this.onCustom,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _buildChip('Today', 1),
+          _buildChip('7 Days', 7),
+          _buildChip('30 Days', 30),
+          _buildChip('90 Days', 90),
+          _buildChip('Custom', -1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChip(String label, int days) {
+    final isSelected = selectedRange == days;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          if (days == -1) {
+            onCustom();
+          } else {
+            onSelect(days);
+          }
+        },
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF667eea) : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected ? Colors.white : Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════
+// SALES TREND LINE CHART
+// ═══════════════════════════════════════════
+class _SalesChart extends ConsumerWidget {
+  final DateTimeRange dateRange;
+  const _SalesChart({required this.dateRange});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trend = ref.watch(dailySalesTrendProvider(dateRange));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.show_chart_rounded,
+                size: 20,
+                color: Color(0xFF667eea),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Sales Trend',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          trend.when(
+            loading: () => const SizedBox(
+              height: 150,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            error: (_, __) => const SizedBox(
+              height: 150,
+              child: Center(child: Text('Failed to load')),
+            ),
+            data: (data) {
+              if (data.isEmpty)
+                return const SizedBox(
+                  height: 150,
+                  child: Center(child: Text('No data')),
+                );
+
+              final spots = <FlSpot>[];
+              for (int i = 0; i < data.length && i < 30; i++) {
+                spots.add(
+                  FlSpot(
+                    i.toDouble(),
+                    (data[i]['total_sales'] as num?)?.toDouble() ?? 0,
+                  ),
+                );
+              }
+
+              final maxY = spots.isEmpty
+                  ? 0.0
+                  : spots.map((s) => s.y).reduce(max);
+
+              return SizedBox(
+                height: 150,
+                child: LineChart(
+                  LineChartData(
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      horizontalInterval: maxY > 0 ? maxY / 4 : 1,
+                      getDrawingHorizontalLine: (v) =>
+                          FlLine(color: Colors.grey.shade100, strokeWidth: 1),
+                    ),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 40,
+                          getTitlesWidget: (v, _) => Text(
+                            '₹${_abbrev(v)}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 20,
+                          interval: data.length > 7
+                              ? (data.length / 7).ceilToDouble()
+                              : 1,
+                          getTitlesWidget: (v, _) {
+                            final idx = v.toInt();
+                            if (idx >= 0 && idx < data.length) {
+                              final day =
+                                  data[idx]['day']?.toString()?.substring(5) ??
+                                  '';
+                              return Text(
+                                day,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey.shade500,
+                                ),
+                              );
+                            }
+                            return const Text('');
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: spots,
+                        isCurved: true,
+                        color: const Color(0xFF667eea),
+                        barWidth: 2,
+                        isStrokeCapRound: true,
+                        dotData: FlDotData(show: spots.length < 15),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: const Color(0xFF667eea).withValues(alpha: 0.1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _abbrev(double v) {
+    if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
+    return v.toStringAsFixed(0);
+  }
+}
+
+// ═══════════════════════════════════════════
+// CATEGORY PIE CHART
+// ═══════════════════════════════════════════
+class _CategoryPieChart extends ConsumerWidget {
+  final DateTimeRange dateRange;
+  const _CategoryPieChart({required this.dateRange});
+
+  static const _colors = [
+    Color(0xFF667eea),
+    Color(0xFFEC4899),
+    Color(0xFFF59E0B),
+    Color(0xFF10B981),
+    Color(0xFFEF4444),
+    Color(0xFF8B5CF6),
+    Color(0xFF14B8A6),
+    Color(0xFFF97316),
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categorySales = ref.watch(categorySalesProvider(dateRange));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.pie_chart_rounded,
+                size: 20,
+                color: Color(0xFFEC4899),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Category Sales',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          categorySales.when(
+            loading: () => const SizedBox(
+              height: 150,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            error: (_, __) => const SizedBox(
+              height: 150,
+              child: Center(child: Text('Failed to load')),
+            ),
+            data: (data) {
+              if (data.isEmpty)
+                return const SizedBox(
+                  height: 150,
+                  child: Center(child: Text('No data')),
+                );
+
+              final total = data.fold<double>(
+                0,
+                (s, d) => s + ((d['total_revenue'] as num?)?.toDouble() ?? 0),
+              );
+              if (total <= 0)
+                return const SizedBox(
+                  height: 150,
+                  child: Center(child: Text('No sales data')),
+                );
+
+              final sections = <PieChartSectionData>[];
+              final legends = <Widget>[];
+              for (int i = 0; i < data.length && i < 8; i++) {
+                final cat = data[i];
+                final revenue = (cat['total_revenue'] as num?)?.toDouble() ?? 0;
+                final pct = (revenue / total * 100);
+                final color = _colors[i % _colors.length];
+                sections.add(
+                  PieChartSectionData(
+                    value: revenue,
+                    color: color,
+                    title: pct > 5 ? '${pct.toStringAsFixed(0)}%' : '',
+                    titleStyle: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    radius: 50,
+                  ),
+                );
+                legends.add(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            cat['category'] ?? 'Other',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '₹${revenue.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 120,
+                    height: 120,
+                    child: PieChart(
+                      PieChartData(
+                        sections: sections,
+                        centerSpaceRadius: 20,
+                        sectionsSpace: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: legends,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════
+// TOP PRODUCTS BAR CHART
+// ═══════════════════════════════════════════
+class _TopProductsChart extends ConsumerWidget {
+  final DateTimeRange dateRange;
+  const _TopProductsChart({required this.dateRange});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final topProducts = ref.watch(topProductsProvider);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.bar_chart_rounded,
+                size: 20,
+                color: Color(0xFFF59E0B),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Top Products',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          topProducts.when(
+            loading: () => const SizedBox(
+              height: 120,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            error: (_, __) => const SizedBox(
+              height: 120,
+              child: Center(child: Text('Failed to load')),
+            ),
+            data: (data) {
+              if (data.isEmpty)
+                return const SizedBox(
+                  height: 120,
+                  child: Center(child: Text('No data')),
+                );
+
+              final maxVal = data.isEmpty
+                  ? 0.0
+                  : data.map((d) => d['total'] as double).reduce(max);
+
+              return Column(
+                children: data.take(5).toList().asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final item = entry.value;
+                  final name = item['name'] as String? ?? '';
+                  final total = (item['total'] as num?)?.toDouble() ?? 0;
+                  final pct = maxVal > 0 ? total / maxVal : 0.0;
+                  final colors = [
+                    const Color(0xFF667eea),
+                    const Color(0xFFEC4899),
+                    const Color(0xFFF59E0B),
+                    const Color(0xFF10B981),
+                    const Color(0xFFEF4444),
+                  ];
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          child: Text(
+                            '${i + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            name,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 5,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              backgroundColor: Colors.grey.shade100,
+                              valueColor: AlwaysStoppedAnimation(
+                                colors[i % colors.length],
+                              ),
+                              minHeight: 10,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            '₹${total.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
         ],
       ),
