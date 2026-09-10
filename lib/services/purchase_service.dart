@@ -219,7 +219,11 @@ class PurchaseService {
             return p;
           }).toList();
 
-          final merged = await _mergeOfflinePurchases(result, rawList, supabaseIds);
+          final merged = await _mergeOfflinePurchases(
+            result,
+            rawList,
+            supabaseIds,
+          );
           return merged;
         }
 
@@ -250,7 +254,9 @@ class PurchaseService {
       if (id.isNotEmpty) allOffline[id] = p;
     }
     final merged = allOffline.values.toList()
-      ..sort((a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''));
+      ..sort(
+        (a, b) => (b['created_at'] ?? '').compareTo(a['created_at'] ?? ''),
+      );
     final purchases = <Purchase>[];
     for (final e in merged.take(limit)) {
       try {
@@ -259,7 +265,9 @@ class PurchaseService {
         Logger.warning('Failed to parse cached purchase: $ex');
       }
     }
-    Logger.info('Loaded ${purchases.length} purchases from offline cache+pending');
+    Logger.info(
+      'Loaded ${purchases.length} purchases from offline cache+pending',
+    );
     return purchases;
   }
 
@@ -322,7 +330,9 @@ class PurchaseService {
         await _offlineService.cachePurchases(mergedRaw);
       } catch (_) {}
 
-      Logger.info('Merged ${pendingPurchases.length} pending/offline purchases');
+      Logger.info(
+        'Merged ${pendingPurchases.length} pending/offline purchases',
+      );
       return mergedList;
     } catch (e) {
       Logger.warning('Failed to merge offline purchases: $e');
@@ -350,8 +360,13 @@ class PurchaseService {
 
       // Everything else runs in background (fire-and-forget)
       // Delete inventory batches
-      _client.from('inventory_batches').delete().eq('purchase_id', purchaseId)
-          .catchError((e) => Logger.warning('Failed to delete inventory batches: $e'));
+      _client
+          .from('inventory_batches')
+          .delete()
+          .eq('purchase_id', purchaseId)
+          .catchError(
+            (e) => Logger.warning('Failed to delete inventory batches: $e'),
+          );
 
       // Decrement stock per item
       for (final item in items) {
@@ -373,33 +388,47 @@ class PurchaseService {
                     })
                     .eq('id', productId);
               })
-              .catchError((e) => Logger.warning('Failed to decrement stock for $productId: $e'));
+              .catchError(
+                (e) => Logger.warning(
+                  'Failed to decrement stock for $productId: $e',
+                ),
+              );
         }
       }
 
       // Reverse account entry
       if (!isCredit && totalAmount > 0) {
-        _accountService.getAccounts().then((accounts) {
-          if (accounts.isNotEmpty) {
-            final account = accounts.firstWhere(
-              (a) => a.accountType == 'cash',
-              orElse: () => accounts.first,
+        _accountService
+            .getAccounts()
+            .then((accounts) {
+              if (accounts.isNotEmpty) {
+                final account = accounts.firstWhere(
+                  (a) => a.accountType == 'cash',
+                  orElse: () => accounts.first,
+                );
+                _accountService.addTransaction(
+                  accountId: account.id,
+                  type: 'in',
+                  amount: totalAmount,
+                  category: 'purchase_reversal',
+                  description: 'Reversed purchase',
+                );
+              }
+            })
+            .catchError(
+              (e) => Logger.error('Failed to reverse account entry', e),
             );
-            _accountService.addTransaction(
-              accountId: account.id,
-              type: 'in',
-              amount: totalAmount,
-              category: 'purchase_reversal',
-              description: 'Reversed purchase',
-            );
-          }
-        }).catchError((e) => Logger.error('Failed to reverse account entry', e));
       }
 
       // Delete supplier payment
       if (isCredit && supplierId != null) {
-        _client.from('supplier_payments').delete().eq('purchase_id', purchaseId)
-            .catchError((e) => Logger.warning('Failed to delete supplier payment: $e'));
+        _client
+            .from('supplier_payments')
+            .delete()
+            .eq('purchase_id', purchaseId)
+            .catchError(
+              (e) => Logger.warning('Failed to delete supplier payment: $e'),
+            );
       }
     } catch (e) {
       Logger.warning('Delete purchase failed (offline?), queuing: $e');
@@ -476,32 +505,12 @@ class PurchaseService {
         },
       );
 
-      // Handle stock + batches for newly added products (RPC may not cover these)
+      // Update purchase_price for newly added products
+      // (RPC handles stock + batches, but not product purchase_price)
       if (addedItems.isNotEmpty) {
-        final stockFutures = <Future>[];
+        final futures = <Future>[];
         for (final item in addedItems) {
-          stockFutures.add(_productService.addStock(item.productId, item.qty));
-          stockFutures.add(
-            _client
-                .rpc(
-                  'add_inventory_batch',
-                  params: {
-                    'p_product_id': item.productId,
-                    'p_purchase_id': purchaseId,
-                    'p_quantity': item.qty,
-                    'p_purchase_price': item.price,
-                    'p_batch_number': item.batchNumber,
-                    'p_expiry_date': item.expiryDate
-                        ?.toIso8601String()
-                        .split('T')
-                        .first,
-                  },
-                )
-                .catchError((e) {
-                  Logger.warning('Failed to add inventory batch: $e');
-                }),
-          );
-          stockFutures.add(
+          futures.add(
             _client
                 .from('products')
                 .update({'purchase_price': item.price})
@@ -511,7 +520,7 @@ class PurchaseService {
                 }),
           );
         }
-        await Future.wait(stockFutures);
+        await Future.wait(futures);
       }
     } catch (e) {
       Logger.warning('Edit purchase failed (offline?), queuing: $e');

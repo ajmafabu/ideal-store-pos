@@ -336,20 +336,20 @@ class ProductService {
 
   Future<void> addStock(String productId, int quantity) async {
     try {
-      // Use direct UPDATE instead of RPC to trigger Supabase Realtime events
+      // Get current stock, then use reconcile RPC to sync batches
       final current = await _client
           .from('products')
           .select('stock')
           .eq('id', productId)
           .single();
       final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-      await _client
-          .from('products')
-          .update({
-            'stock': currentStock + quantity,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', productId);
+      await _client.rpc(
+        'reconcile_stock_with_batches',
+        params: {
+          'p_product_id': productId,
+          'p_physical_qty': currentStock + quantity,
+        },
+      );
       ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('addStock', e, stackTrace);
@@ -363,20 +363,20 @@ class ProductService {
 
   Future<void> deductStock(String productId, int quantity) async {
     try {
-      // Use direct UPDATE instead of RPC to trigger Supabase Realtime events
+      // Get current stock, then use reconcile RPC to sync batches
       final current = await _client
           .from('products')
           .select('stock')
           .eq('id', productId)
           .single();
       final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-      await _client
-          .from('products')
-          .update({
-            'stock': currentStock - quantity,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', productId);
+      await _client.rpc(
+        'reconcile_stock_with_batches',
+        params: {
+          'p_product_id': productId,
+          'p_physical_qty': (currentStock - quantity).clamp(0, 999999),
+        },
+      );
       ProductService.invalidateCache();
     } catch (e, stackTrace) {
       Logger.error('deductStock', e, stackTrace);
@@ -400,7 +400,6 @@ class ProductService {
       if (product == null) return false;
 
       final systemQty = product.stock;
-      final stockUpdated = systemQty != physicalQty;
 
       await _client.from('stock_reconciliation').insert({
         'product_id': productId,
@@ -409,18 +408,17 @@ class ProductService {
         'notes': notes,
       });
 
-      if (stockUpdated) {
+      if (systemQty != physicalQty) {
         try {
-          // Set stock directly to physical count instead of computing diff
-          // to avoid TOCTOU race with concurrent stock changes
-          await _client
-              .from('products')
-              .update({'stock': physicalQty})
-              .eq('id', productId);
+          // Atomic: updates both products.stock AND inventory_batches.remaining
+          await _client.rpc(
+            'reconcile_stock_with_batches',
+            params: {'p_product_id': productId, 'p_physical_qty': physicalQty},
+          );
         } catch (e) {
           Logger.error('reconcileStock: stock update failed', e);
           ProductService.invalidateCache();
-          return false; // Record saved but stock not updated
+          return false;
         }
       }
 
