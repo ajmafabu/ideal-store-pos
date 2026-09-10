@@ -530,7 +530,17 @@ final categorySalesProvider =
       dateRange,
     ) async {
       try {
-        final res = await Supabase.instance.client.rpc('get_category_sales');
+        final params = <String, dynamic>{};
+        if (dateRange != null) {
+          final startUtc = AppTimezone.toUtc(dateRange.start);
+          final endUtc = AppTimezone.toUtc(dateRange.end);
+          params['p_start'] = startUtc.toIso8601String();
+          params['p_end'] = endUtc.toIso8601String();
+        }
+        final res = await Supabase.instance.client.rpc(
+          'get_category_sales',
+          params: params,
+        );
         if (res is List) {
           return res
               .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
@@ -548,22 +558,21 @@ final dailySalesTrendProvider =
       dateRange,
     ) async {
       try {
-        final res = await Supabase.instance.client.rpc('get_daily_sales_trend');
+        final params = <String, dynamic>{};
+        if (dateRange != null) {
+          final startUtc = AppTimezone.toUtc(dateRange.start);
+          final endUtc = AppTimezone.toUtc(dateRange.end);
+          params['p_start'] = startUtc.toIso8601String();
+          params['p_end'] = endUtc.toIso8601String();
+        }
+        final res = await Supabase.instance.client.rpc(
+          'get_daily_sales_trend',
+          params: params,
+        );
         if (res is List) {
-          var data = res
+          return res
               .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
               .toList();
-          if (dateRange != null) {
-            final startUtc = AppTimezone.toUtc(dateRange.start);
-            final endUtc = AppTimezone.toUtc(dateRange.end);
-            data = data.where((row) {
-              final dayStr = row['day'] as String? ?? '';
-              final dayDate = DateTime.tryParse(dayStr);
-              if (dayDate == null) return true;
-              return !dayDate.isBefore(startUtc) && !dayDate.isAfter(endUtc);
-            }).toList();
-          }
-          return data;
         }
         return [];
       } catch (e) {
