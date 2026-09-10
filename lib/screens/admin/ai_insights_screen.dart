@@ -168,9 +168,6 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
           ref.invalidate(salesForecastProvider);
         },
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics(),
-          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
