@@ -74,7 +74,7 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: const Color(0xFFF1F5F9),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
@@ -214,6 +214,13 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
               const SizedBox(height: 16),
               const _ActionRecommendations(),
               const SizedBox(height: 32),
+              // Fill remaining space so gray background doesn't show
+              Container(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height * 0.3,
+                ),
+                color: Colors.white,
+              ),
             ],
           ),
         ),
