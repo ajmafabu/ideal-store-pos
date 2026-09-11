@@ -1316,7 +1316,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         .elementAt(
           ref.read(desktopBillingProvider.notifier).activeSessionIndex,
         );
-    if (session.items.isEmpty) return;
+    if (session.items.isEmpty || _isProcessing) return;
+    setState(() => _isProcessing = true);
 
     // Check connectivity before attempting sale
     final offlineService = ref.read(offlineServiceProvider);

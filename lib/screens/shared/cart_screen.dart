@@ -1033,6 +1033,7 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   Future<void> _completeSale() async {
     if (_cart.isEmpty || _isProcessing) return;
+    setState(() => _isProcessing = true);
 
     // Check connectivity before attempting sale
     final offlineService = ref.read(offlineServiceProvider);
@@ -1145,9 +1146,11 @@ class CartScreenState extends ConsumerState<CartScreen>
       ),
     );
 
-    if (confirm != true || !mounted) return;
+    if (confirm != true || !mounted) {
+      setState(() => _isProcessing = false);
+      return;
+    }
 
-    setState(() => _isProcessing = true);
     try {
       final auth = ref.read(authServiceProvider);
       final user = auth.currentUser;
