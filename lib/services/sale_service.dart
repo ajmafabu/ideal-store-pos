@@ -664,71 +664,80 @@ class SaleService {
   }
 
   /// Returns per-product sales summary: {productId: {qty7d, qty30d, qty60d, qty90d, qtyToday, totalValue30d, lastSoldAt}}
+  /// Returns per-product sales summary with daysSinceLastSale for flexible filtering.
+  /// Throws on network/DB errors instead of silently returning empty.
   Future<Map<String, Map<String, dynamic>>> getProductSalesStats() async {
-    try {
-      final now = AppTimezone.nowUtc();
-      final since90 = now.subtract(const Duration(days: 90));
-      final since60 = now.subtract(const Duration(days: 60));
-      final since30 = now.subtract(const Duration(days: 30));
-      final since7 = now.subtract(const Duration(days: 7));
-      final sinceToday = DateTime(now.year, now.month, now.day);
+    final now = AppTimezone.nowUtc();
+    final since90 = now.subtract(const Duration(days: 90));
+    final since60 = now.subtract(const Duration(days: 60));
+    final since30 = now.subtract(const Duration(days: 30));
+    final since15 = now.subtract(const Duration(days: 15));
+    final since7 = now.subtract(const Duration(days: 7));
+    final sinceToday = DateTime(now.year, now.month, now.day);
 
-      final response = await _client
-          .from('sales')
-          .select('items, created_at')
-          .gte('created_at', since90.toIso8601String());
+    final response = await _client
+        .from('sales')
+        .select('items, created_at')
+        .gte('created_at', since90.toIso8601String())
+        .timeout(const Duration(seconds: 15));
 
-      final sales = response as List;
-      final Map<String, Map<String, dynamic>> stats = {};
+    final sales = response as List;
+    final Map<String, Map<String, dynamic>> stats = {};
 
-      for (final sale in sales) {
-        final saleDate = DateTime.parse(sale['created_at'] as String);
-        final items = (sale['items'] as List?) ?? [];
-        final isToday = saleDate.isAfter(sinceToday);
-        final is7d = saleDate.isAfter(since7);
-        final is30d = saleDate.isAfter(since30);
-        final is60d = saleDate.isAfter(since60);
+    for (final sale in sales) {
+      final saleDate = DateTime.parse(sale['created_at'] as String);
+      final items = (sale['items'] as List?) ?? [];
+      final isToday = saleDate.isAfter(sinceToday);
+      final is7d = saleDate.isAfter(since7);
+      final is15d = saleDate.isAfter(since15);
+      final is30d = saleDate.isAfter(since30);
+      final is60d = saleDate.isAfter(since60);
 
-        for (final item in items) {
-          final pid = item['product_id'] as String?;
-          if (pid == null) continue;
-          final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final price = (item['price'] as num?)?.toDouble() ?? 0;
+      for (final item in items) {
+        final pid = item['product_id'] as String?;
+        if (pid == null) continue;
+        final qty = (item['qty'] as num?)?.toInt() ?? 0;
+        final price = (item['price'] as num?)?.toDouble() ?? 0;
 
-          stats.putIfAbsent(
-            pid,
-            () => {
-              'qtyToday': 0,
-              'qty7d': 0,
-              'qty30d': 0,
-              'qty60d': 0,
-              'qty90d': 0,
-              'totalValue30d': 0.0,
-              'lastSoldAt': saleDate,
-            },
-          );
+        stats.putIfAbsent(
+          pid,
+          () => {
+            'qtyToday': 0,
+            'qty7d': 0,
+            'qty15d': 0,
+            'qty30d': 0,
+            'qty60d': 0,
+            'qty90d': 0,
+            'totalValue30d': 0.0,
+            'lastSoldAt': saleDate,
+          },
+        );
 
-          stats[pid]!['qty90d'] = (stats[pid]!['qty90d'] as int) + qty;
-          if (is60d)
-            stats[pid]!['qty60d'] = (stats[pid]!['qty60d'] as int) + qty;
-          if (is30d) {
-            stats[pid]!['qty30d'] = (stats[pid]!['qty30d'] as int) + qty;
-            stats[pid]!['totalValue30d'] =
-                (stats[pid]!['totalValue30d'] as double) + qty * price;
-          }
-          if (is7d) stats[pid]!['qty7d'] = (stats[pid]!['qty7d'] as int) + qty;
-          if (isToday)
-            stats[pid]!['qtyToday'] = (stats[pid]!['qtyToday'] as int) + qty;
-
-          final last = stats[pid]!['lastSoldAt'] as DateTime;
-          if (saleDate.isAfter(last)) stats[pid]!['lastSoldAt'] = saleDate;
+        stats[pid]!['qty90d'] = (stats[pid]!['qty90d'] as int) + qty;
+        if (is60d)
+          stats[pid]!['qty60d'] = (stats[pid]!['qty60d'] as int) + qty;
+        if (is30d) {
+          stats[pid]!['qty30d'] = (stats[pid]!['qty30d'] as int) + qty;
+          stats[pid]!['totalValue30d'] =
+              (stats[pid]!['totalValue30d'] as double) + qty * price;
         }
-      }
+        if (is15d)
+          stats[pid]!['qty15d'] = (stats[pid]!['qty15d'] as int) + qty;
+        if (is7d) stats[pid]!['qty7d'] = (stats[pid]!['qty7d'] as int) + qty;
+        if (isToday)
+          stats[pid]!['qtyToday'] = (stats[pid]!['qtyToday'] as int) + qty;
 
-      return stats;
-    } catch (e) {
-      Logger.warning('getProductSalesStats failed: $e');
-      return {};
+        final last = stats[pid]!['lastSoldAt'] as DateTime;
+        if (saleDate.isAfter(last)) stats[pid]!['lastSoldAt'] = saleDate;
+      }
     }
+
+    // Compute daysSinceLastSale for each product
+    for (final entry in stats.entries) {
+      final lastSold = entry.value['lastSoldAt'] as DateTime;
+      entry.value['daysSinceLastSale'] = now.difference(lastSold).inDays;
+    }
+
+    return stats;
   }
 }

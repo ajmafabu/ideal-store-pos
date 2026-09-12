@@ -37,7 +37,6 @@ class GstExportService {
       for (final sale in sales) {
         final customer = sale['customers'] as Map<String, dynamic>?;
         final customerGstin = customer?['gst_number'] as String? ?? '';
-        final customerName = customer?['name'] as String? ?? 'Walk-in';
         final items = sale['items'] as List? ?? [];
         
         // Only include sales to GST-registered customers (B2B)

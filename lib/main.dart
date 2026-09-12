@@ -86,8 +86,7 @@ void main() async {
       }
 
       // Auto-sync when connectivity is restored
-      final connectivitySubscription =
-          connectivityService.connectionStream.listen((isConnected) {
+      connectivityService.connectionStream.listen((isConnected) {
         if (isConnected) {
           Logger.info('Connectivity restored - syncing pending sales');
           offlineService
@@ -102,7 +101,7 @@ void main() async {
       });
 
       // Periodic retry: sync every 30s if pending items exist
-      final syncTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      Timer.periodic(const Duration(seconds: 30), (_) async {
         final hasPending = offlineService.pendingCount > 0 ||
             offlineService.pendingOpsCount > 0 ||
             offlineService.pendingWritesCount > 0;

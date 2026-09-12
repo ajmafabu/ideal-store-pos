@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -98,7 +97,6 @@ void main() async {
     'grapes': 'திராட்சை',
     'mango': 'மாம்பழம்',
     'potato': 'உருளைக்கிழங்கு',
-    'curd': 'தயிர்',
     'butter': 'வெண்ணெய்',
     'ghee': 'நெய்',
     'paneer': 'பன்னீர்',
@@ -162,7 +160,6 @@ void main() async {
     'gulab jamun': 'குலாப் ஜாமுன்',
     'rasmalai': 'ரஸ்மலாய்',
     'kulfi': 'குல்பி',
-    'lassi': 'லஸ்ஸி',
     'buttermilk': 'மோர்',
     'curd': 'தயிர்',
     'yogurt': 'தயிர்',
@@ -185,7 +182,6 @@ void main() async {
     'incense': 'ஊதுவத்தி',
     'agarbatti': 'அகர்பத்தி',
     'sambrani': 'சாம்பிராணி',
-    'camphor': 'கற்பூரம்',
     'kumkumam': 'குங்குமம்',
     'turmeric powder': 'மஞ்சள் பொடி',
     'chilli powder': 'மிளகாய் தூள்',
@@ -202,7 +198,6 @@ void main() async {
     'knife': 'கத்தி',
     'plate': 'தட்டு',
     'cup': 'கோப்பை',
-    'glass': 'கிளாஸ்',
     'bowl': 'கிண்ண்',
     'spoon': 'கரண்டி',
     'fork': 'முள்கரண்டி',
@@ -235,7 +230,6 @@ void main() async {
     'shoe': 'ஷூ',
     'slipper': 'செருப்பு',
     'chappal': 'சப்பல்',
-    'sandal': 'சாண்டல்',
     'body wash': 'உடல் கழுவு',
     'hand wash': 'கை கழுவு',
     'face wash': 'முகம் கழுவு',

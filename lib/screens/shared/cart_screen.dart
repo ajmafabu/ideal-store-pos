@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,7 +43,6 @@ class CartScreenState extends ConsumerState<CartScreen>
   bool _isCredit = false;
   bool _isSplitPayment = false;
   bool _isProcessing = false;
-  bool _showPaymentOptions = false;
   List<Customer> _customers = [];
   List<Customer> _filteredCustomers = [];
   bool _showCustomerSearch = false;
@@ -534,80 +532,6 @@ class CartScreenState extends ConsumerState<CartScreen>
     setState(() {});
   }
 
-  Widget _buildProductChip(Product product) {
-    final inCart = _cart.where((c) => c.productId == product.id).length;
-    return InkWell(
-      onTap: () => _showQtyPopup(product),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: inCart > 0
-              ? Colors.green.withValues(alpha: 0.1)
-              : Colors.grey.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: inCart > 0
-                ? Colors.green.shade300
-                : (Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade700
-                    : Colors.grey.shade200),
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    product.name,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: inCart > 0 ? Colors.green.shade700 : null,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (inCart > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$inCart',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            Text(
-              '₹${product.sellingPrice.toStringAsFixed(0)}',
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade400
-                    : Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildProductChipHorizontal(Product product) {
     final inCart = _cart.where((c) => c.productId == product.id).length;
     return Padding(
@@ -902,74 +826,6 @@ class CartScreenState extends ConsumerState<CartScreen>
         ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 1),
-      ),
-    );
-  }
-
-  Future<Product?> _showVoiceProductPicker({
-    required String spokenText,
-    required Product primary,
-    required List<Product> alternatives,
-    required double qty,
-  }) async {
-    final all = [primary, ...alternatives];
-    return showDialog<Product>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _useTamilVoice ? 'பொருளைத் தேர்ந்தெடுக்கவும்' : 'Select Product',
-              style: const TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '"$spokenText"',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: all.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (ctx, i) {
-              final p = all[i];
-              final displayName = _useTamilVoice && p.tamilName != null && p.tamilName!.isNotEmpty
-                  ? '${p.tamilName} (${p.name})'
-                  : p.name;
-              return ListTile(
-                dense: true,
-                leading: CircleAvatar(
-                  backgroundColor: i == 0 ? Colors.green.shade50 : Colors.grey.shade100,
-                  child: Icon(
-                    i == 0 ? Icons.check : Icons.inventory_2_outlined,
-                    size: 20,
-                    color: i == 0 ? Colors.green : Colors.grey,
-                  ),
-                ),
-                title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.w500)),
-                subtitle: Text(
-                  '₹${p.sellingPrice.toStringAsFixed(2)} • Stock: ${p.stock.toInt()} ${p.unit}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-                onTap: () {
-                  Navigator.of(ctx).pop(p);
-                },
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(null),
-            child: const Text('Cancel'),
-          ),
-        ],
       ),
     );
   }
@@ -1636,116 +1492,6 @@ class CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  void _recallBill(int index) {
-    if (index < 0 || index >= _heldBills.length) return;
-
-    final heldBill = _heldBills[index];
-    setState(() {
-      ref.read(cartProvider.notifier).clear();
-      final items = heldBill['cart'] as List<CartItem>;
-      for (final item in items) {
-        ref.read(cartProvider.notifier).addItem(item);
-      }
-      _selectedCustomer = heldBill['customer'] as Customer?;
-      _discountController.text = heldBill['discount'] as String;
-      _paymentMethod = heldBill['paymentMethod'] as String;
-      _isCredit = heldBill['isCredit'] as bool;
-      _amountPaidController.text = heldBill['amountPaid'] as String;
-      _heldBills.removeAt(index);
-    });
-    _persistHeldBills();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Bill recalled'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  void _showHeldBills() {
-    if (_heldBills.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No held bills')));
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (ctx, scrollController) => Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  const Icon(Icons.history, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Held Bills (${_heldBills.length})',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                itemCount: _heldBills.length,
-                itemBuilder: (context, index) {
-                  final bill = _heldBills[index];
-                  final cart = bill['cart'] as List<CartItem>;
-                  final total = cart.fold(0.0, (sum, item) => sum + item.total);
-                  final timestamp = bill['timestamp'] as DateTime;
-                  final customer = bill['customer'] as Customer?;
-
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.orange.withValues(alpha: 0.1),
-                      child: Text(
-                        '${index + 1}',
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    title: Text(
-                      customer != null ? customer.name : 'Walk-in Customer',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Text(
-                      '${cart.length} items • Rs${total.toStringAsFixed(0)} • ${TimeOfDay.fromDateTime(timestamp).format(context)}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _recallBill(index);
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _discountController.dispose();
@@ -2002,7 +1748,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                            color: _selectedCustomer!.totalCredit > 0
                                 ? Colors.orange.withValues(alpha: 0.1)
                                 : Colors.blue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
@@ -2013,7 +1759,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                               Icon(
                                 Icons.person,
                                 size: 12,
-                                color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                                color: _selectedCustomer!.totalCredit > 0
                                     ? Colors.orange
                                     : Colors.blue,
                               ),
@@ -2022,15 +1768,15 @@ class CartScreenState extends ConsumerState<CartScreen>
                                 _selectedCustomer!.name,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: (_selectedCustomer!.totalCredit ?? 0) > 0
+                            color: _selectedCustomer!.totalCredit > 0
                                       ? Colors.orange
                                       : Colors.blue,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              if ((_selectedCustomer!.totalCredit ?? 0) > 0)
+                              if (_selectedCustomer!.totalCredit > 0)
                                 Text(
-                                  ' Due:₹${(_selectedCustomer!.totalCredit ?? 0).toStringAsFixed(0)}',
+                                  ' Due:₹${_selectedCustomer!.totalCredit.toStringAsFixed(0)}',
                                   style: const TextStyle(
                                     fontSize: 10,
                                     color: Colors.red,

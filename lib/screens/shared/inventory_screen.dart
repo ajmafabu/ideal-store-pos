@@ -52,8 +52,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   Future<void> _loadSalesStats() async {
-    final stats = await ref.read(saleServiceProvider).getProductSalesStats();
-    if (mounted) setState(() => _productSalesStats = stats);
+    try {
+      final stats = await ref.read(saleServiceProvider).getProductSalesStats();
+      if (mounted) setState(() => _productSalesStats = stats);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load sales stats: $e'), backgroundColor: Colors.orange),
+        );
+      }
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -601,7 +609,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         for (final filter in _activeFilters) {
           final stockVal = p.totalStock;
           final value = stockVal * p.sellingPrice;
-          final costWorth = stockVal * p.purchasePrice;
           bool match = true;
           switch (filter) {
             case 'out_of_stock': match = stockVal == 0; break;
@@ -615,9 +622,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             case 'sold_7d': final s = _productSalesStats[p.id]; match = s != null && (s['qty7d'] as int) > 0; break;
             case 'sold_30d': final s = _productSalesStats[p.id]; match = s != null && (s['qty30d'] as int) > 0; break;
             case 'no_move_7d': final s = _productSalesStats[p.id]; match = s == null || (s['qty7d'] as int) == 0; break;
+            case 'no_move_15d': final s = _productSalesStats[p.id]; match = s == null || (s['qty15d'] as int?) == 0; break;
             case 'no_move_30d': final s = _productSalesStats[p.id]; match = s == null || (s['qty30d'] as int) == 0; break;
-            case 'no_move_60d': final s = _productSalesStats[p.id]; match = s == null || (s['qty60d'] as int) == 0; break;
-            case 'no_move_90d': final s = _productSalesStats[p.id]; match = s == null || (s['qty90d'] as int) == 0; break;
             case 'high_stock_value': match = value > 100000; break;
             case 'med_stock_value': match = value >= 10000 && value <= 100000; break;
             case 'low_stock_value': match = value > 0 && value < 10000; break;
@@ -689,9 +695,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     const labels = {
       'out_of_stock': 'Out of Stock', 'low_stock': 'Low Stock', 'excess': 'Excess',
       'negative': 'Negative', 'fast_moving': 'Fast', 'slow_moving': 'Slow',
-      'no_sales': 'No Sales', 'sold_today': 'Today', 'sold_7d': '7 Days',
-      'sold_30d': '30 Days', 'no_move_7d': 'No Move 7d', 'no_move_30d': 'No Move 30d',
-      'no_move_60d': 'No Move 60d', 'no_move_90d': 'No Move 90d',
+      'no_sales': 'Never Sold', 'sold_today': 'Today', 'sold_7d': '7 Days',
+      'sold_30d': '30 Days', 'no_move_7d': 'No Sale 7d', 'no_move_15d': 'No Sale 15d',
+      'no_move_30d': 'No Sale 30d',
       'high_stock_value': 'High Value', 'med_stock_value': 'Med Value', 'low_stock_value': 'Low Value',
       'missing_purchase': 'No Purchase', 'missing_barcode': 'No Barcode',
       'dup_product': 'Dup Product', 'dup_barcode': 'Dup Barcode',
@@ -895,19 +901,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       _buildFilterChip('Excess Stock', 'excess'),
                       _buildFilterChip('Negative Stock', 'negative'),
                     ]),
+                    _buildFilterSection('Sales Activity', [
+                      _buildFilterChip('Never Sold', 'no_sales'),
+                      _buildFilterChip('7 Days No Sale', 'no_move_7d'),
+                      _buildFilterChip('15 Days No Sale', 'no_move_15d'),
+                      _buildFilterChip('30 Days No Sale', 'no_move_30d'),
+                    ]),
                     _buildFilterSection('Sales Velocity', [
                       _buildFilterChip('Fast Moving', 'fast_moving'),
                       _buildFilterChip('Slow Moving', 'slow_moving'),
-                      _buildFilterChip('No Sales', 'no_sales'),
-                      _buildFilterChip('Sold Today', 'sold_today'),
-                      _buildFilterChip('Sold Last 7 Days', 'sold_7d'),
-                      _buildFilterChip('Sold Last 30 Days', 'sold_30d'),
                     ]),
-                    _buildFilterSection('No Movement', [
-                      _buildFilterChip('No Move 7 Days', 'no_move_7d'),
-                      _buildFilterChip('No Move 30 Days', 'no_move_30d'),
-                      _buildFilterChip('No Move 60 Days', 'no_move_60d'),
-                      _buildFilterChip('No Move 90 Days', 'no_move_90d'),
+                    _buildFilterSection('Recent Sales', [
+                      _buildFilterChip('Sold Today', 'sold_today'),
+                      _buildFilterChip('Sold 7 Days', 'sold_7d'),
+                      _buildFilterChip('Sold 30 Days', 'sold_30d'),
                     ]),
                     _buildFilterSection('Stock Value', [
                       _buildFilterChip('High Stock Value', 'high_stock_value'),
@@ -1468,138 +1475,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ColorFilterChip extends StatelessWidget {
-  final String label;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ColorFilterChip({
-    required this.label,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? color : color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? color : color.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.3),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : color,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ExpiryFilterChip extends StatelessWidget {
-  final String label;
-  final Color? color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ExpiryFilterChip({
-    required this.label,
-    this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final chipColor = color ?? Colors.grey;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? chipColor : chipColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? chipColor : chipColor.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : chipColor,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PresetChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PresetChip({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      child: FilterChip(
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: selected ? Colors.white : Colors.grey),
-            const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 11)),
-          ],
-        ),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: Colors.teal,
-        checkmarkColor: Colors.white,
-        backgroundColor: Colors.grey.shade100,
-        labelStyle: TextStyle(color: selected ? Colors.white : Colors.black87),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
       ),
     );
   }

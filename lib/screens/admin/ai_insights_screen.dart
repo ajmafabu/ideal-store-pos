@@ -10,10 +10,8 @@ import 'all_low_stock_screen.dart';
 import 'customer_screen.dart';
 import 'returns_screen.dart';
 import 'damaged_screen.dart';
-import 'all_profitable_products_screen.dart';
 import 'supplier_screen.dart';
 import 'expense_screen.dart';
-import '../shared/inventory_screen.dart';
 import 'purchase_order_screen.dart';
 import 'gst_filing_screen.dart';
 import 'all_top_products_screen.dart';
@@ -1045,7 +1043,6 @@ class _CashFlowIntelligence extends ConsumerWidget {
         final cashPos = (data['cash_position'] as num?)?.toDouble() ?? 0;
         final bankPos = (data['bank_position'] as num?)?.toDouble() ?? 0;
         final totalCash = cashPos + bankPos;
-        final cashRunway = (data['cash_runway_days'] as num?)?.toDouble() ?? 999;
         final sales = todaySales.value ?? 0;
         final expenses = todayExpenses.value ?? 0;
         final netFlow = sales - expenses;
@@ -1370,7 +1367,6 @@ class _ActionRecommendations extends ConsumerWidget {
       actions.add(_Action('Improve Profit Margins', 'Monthly profit margin is ${(profit / profitSales * 100).toStringAsFixed(1)}%. Review costs and pricing.', Icons.trending_down_rounded, const Color(0xFFEF4444)));
     }
 
-    final totalProducts = productsList.length;
     final outOfStock = productsList.where((p) => p.stock <= 0).length;
     if (outOfStock > 0) {
       actions.add(_Action('Restore Out-of-Stock Items', '$outOfStock products are completely out of stock. Restock or delist them.', Icons.inventory_2_rounded, const Color(0xFFF59E0B)));

@@ -65,9 +65,6 @@ class ThermalInvoice {
     final now = AppTimezone.toIst(sale.createdAt);
     final dateStr = DateFormat('dd/MM/yyyy').format(now);
     final timeStr = DateFormat('hh:mm a').format(now);
-    final saleId = sale.id.length > 8
-        ? sale.id.substring(0, 8)
-        : sale.id.toUpperCase();
 
     final displayName =
         (useTamil && shopNameTamil != null && shopNameTamil.isNotEmpty)
@@ -83,8 +80,6 @@ class ThermalInvoice {
     ];
 
     final rows = <ThermalRow>[];
-    int totalQty = 0;
-    double totalAmount = 0;
     int sno = 0;
 
     for (final item in sale.items) {
@@ -100,8 +95,6 @@ class ThermalInvoice {
       final qty = item.qty;
       final rate = item.price;
       final total = item.total;
-      totalQty += qty;
-      totalAmount += total;
 
       rows.add(
         ThermalRow(
@@ -155,9 +148,6 @@ class ThermalInvoice {
     final istCreated = AppTimezone.toIst(createdAt);
     final dateStr = DateFormat('dd/MM/yyyy').format(istCreated);
     final timeStr = DateFormat('hh:mm a').format(istCreated);
-    final shortId = saleId.length > 8
-        ? saleId.substring(0, 8)
-        : saleId.toUpperCase();
 
     final displayName =
         (useTamil && shopNameTamil != null && shopNameTamil.isNotEmpty)
@@ -171,7 +161,6 @@ class ThermalInvoice {
     ];
 
     final rows = <ThermalRow>[];
-    int totalQty = 0;
     int sno = 0;
 
     for (final item in items) {
@@ -184,7 +173,6 @@ class ThermalInvoice {
       final qty = item['qty'] ?? 0;
       final rate = ((item['price'] as num?) ?? 0).toDouble();
       final total = ((item['total'] as num?) ?? 0).toDouble();
-      totalQty += qty as int;
 
       rows.add(
         ThermalRow(
@@ -212,19 +200,4 @@ class ThermalInvoice {
 
   static String _price(double amount) => amount.toStringAsFixed(2);
 
-  static String _paymentLabel(String method) {
-    switch (method) {
-      case 'cash':
-        return 'CASH';
-      case 'upi':
-      case 'digital':
-        return 'UPI';
-      case 'credit':
-        return 'CREDIT';
-      case 'split':
-        return 'SPLIT';
-      default:
-        return method.toUpperCase();
-    }
-  }
 }

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 void main() {
   final f = File('assets/app_icon.png').readAsBytesSync();

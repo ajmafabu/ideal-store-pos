@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../config/providers.dart';
 import '../../../utils/app_timezone.dart';
 import '../../../utils/logger.dart';
 import '../../admin/profit_details_screen.dart';

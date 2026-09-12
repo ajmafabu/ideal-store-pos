@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import '../../config/app_colors.dart';
-import '../../config/providers.dart';
 import '../../utils/app_timezone.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
@@ -61,7 +59,6 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
         for (final item in items) {
           final gstRate = (item['gst_rate'] as num?)?.toDouble() ?? 0;
           final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final price = (item['price'] as num?)?.toDouble() ?? 0;
           final hsnCode = item['hsn_code'] as String? ?? '';
           final name = item['name'] as String? ?? '';
           final total = (item['total'] as num?)?.toDouble() ?? 0;

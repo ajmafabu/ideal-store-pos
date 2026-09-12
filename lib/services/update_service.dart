@@ -164,7 +164,7 @@ class UpdateService {
     final request = await client.getUrl(Uri.parse(update.downloadUrl));
     final response = await request.close().timeout(const Duration(minutes: 5));
 
-    final totalBytes = response.contentLength ?? 0;
+    final totalBytes = response.contentLength;
     var receivedBytes = 0;
     final sink = File(zipPath).openWrite();
 

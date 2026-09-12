@@ -389,9 +389,11 @@ class PurchaseService {
                     .eq('id', productId);
               })
               .catchError(
-                (e) => Logger.warning(
-                  'Failed to decrement stock for $productId: $e',
-                ),
+                (e) {
+                  Logger.warning(
+                    'Failed to decrement stock for $productId: $e',
+                  );
+                },
               );
         }
       }
@@ -416,7 +418,9 @@ class PurchaseService {
               }
             })
             .catchError(
-              (e) => Logger.error('Failed to reverse account entry', e),
+              (e) {
+                Logger.error('Failed to reverse account entry', e);
+              },
             );
       }
 
@@ -484,7 +488,6 @@ class PurchaseService {
         Logger.warning('Could not fetch original purchase items: $e');
       }
 
-      final newProductIds = items.map((e) => e.productId).toSet();
       final addedItems = items
           .where((item) => !oldProductIds.contains(item.productId))
           .toList();

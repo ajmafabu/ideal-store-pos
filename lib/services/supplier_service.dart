@@ -207,13 +207,13 @@ class SupplierService {
 
       if (_accountService != null) {
         try {
-          final accounts = await _accountService!.getAccounts();
+          final accounts = await _accountService.getAccounts();
           String accountType = paymentMethod == 'upi' ? 'bank' : 'cash';
           final account = accounts.firstWhere(
             (a) => a.accountType == accountType,
             orElse: () => accounts.first,
           );
-          await _accountService!.addTransaction(
+          await _accountService.addTransaction(
             accountId: account.id,
             type: 'out',
             amount: amount,

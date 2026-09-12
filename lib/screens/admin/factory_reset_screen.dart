@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/logger.dart';
-import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../services/factory_reset_service.dart';
 

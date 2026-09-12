@@ -32,7 +32,7 @@ class BillingSaleTabs extends StatelessWidget {
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => ProviderScope.containerOf(context).read(currentTabProvider.notifier).state = 0,
+            onTap: () => ProviderScope.containerOf(context).read(currentTabProvider.notifier).setTab(0),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [

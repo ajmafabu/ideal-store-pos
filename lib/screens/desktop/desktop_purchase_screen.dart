@@ -857,7 +857,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   child: Row(
                     children: [
                       GestureDetector(
-                        onTap: () => ref.read(currentTabProvider.notifier).state = 0,
+                        onTap: () => ref.read(currentTabProvider.notifier).setTab(0),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1197,7 +1197,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
 
     String? editSupplierId = purchase.supplierId;
     String? editSupplierName = purchase.supplierName;
-    String editPaymentMethod = purchase.paymentMethod ?? 'cash';
+    String editPaymentMethod = purchase.paymentMethod;
     bool editIsCredit = purchase.isCredit;
     final reasonController = TextEditingController();
     final searchController = TextEditingController();

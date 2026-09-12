@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../utils/logger.dart';
 
@@ -39,32 +38,6 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       _savedAddress = address;
       _savedName = name;
     });
-  }
-
-  Future<bool> _ensurePermissions() async {
-    final statuses = await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-
-    final allGranted = statuses.values.every((s) => s.isGranted || s.isLimited);
-    if (!allGranted && mounted) {
-      final permaDenied = statuses.values.any((s) => s.isPermanentlyDenied);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(permaDenied
-              ? 'Bluetooth permissions denied. Please enable in Settings.'
-              : 'Bluetooth permissions required.'),
-          action: permaDenied
-              ? SnackBarAction(label: 'Settings', onPressed: () => openAppSettings())
-              : null,
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-    return allGranted;
   }
 
   Future<void> _scanDevices() async {

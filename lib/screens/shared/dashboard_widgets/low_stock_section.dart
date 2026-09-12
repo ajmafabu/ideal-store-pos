@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/providers.dart';
-import '../../../models/product.dart';
 import '../../admin/all_low_stock_screen.dart';
 import '../../admin/slow_moving_screen.dart';
 

@@ -13,7 +13,6 @@ class PurchaseInvoiceGenerator {
 
   static pw.Widget _buildInvoice(Purchase purchase) {
     final totalGst = purchase.items.fold(0.0, (sum, item) => sum + item.gstAmount);
-    final totalExclGst = purchase.totalAmount - totalGst;
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,

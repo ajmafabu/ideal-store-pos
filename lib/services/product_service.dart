@@ -86,7 +86,7 @@ class ProductService {
                   'unit_type': p.unitType,
                   'pieces_per_unit': p.piecesPerUnit,
                   'variants': p.variants
-                      ?.map(
+                      .map(
                         (v) => {
                           'id': v.id,
                           'product_id': v.productId,

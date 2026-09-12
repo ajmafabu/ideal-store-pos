@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/providers.dart';
 import '../../config/desktop_billing_provider.dart';
@@ -19,7 +18,6 @@ import '../../models/product.dart';
 import '../../services/email_service.dart';
 
 import '../../services/thermal_printer_service.dart';
-import '../../services/offline_service.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/invoice_generator.dart';
 import '../../utils/logger.dart';
@@ -35,7 +33,6 @@ import 'widgets/billing_processing_overlay.dart';
 import 'widgets/billing_sale_tabs.dart';
 import '../../widgets/rate_picker_dialog.dart';
 import 'dialogs/customer_picker_dialog.dart';
-import 'dialogs/sales_history_dialog.dart';
 import 'dialogs/invoice_options_dialog.dart';
 
 class DesktopBillingScreen extends ConsumerStatefulWidget {
@@ -116,7 +113,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   String? _unlockErrorText;
 
   // Product list state
-  List<Map<String, dynamic>> _recentlySold = [];
   String _selectedTier = 'normal';
 
   double get _billDiscount =>
@@ -339,7 +335,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     super.initState();
     _loadProducts();
     _loadHeldBills();
-    _loadRecentlySold();
     _startInactivityTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
@@ -360,20 +355,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     }
   }
 
-  Future<void> _loadRecentlySold() async {
-    try {
-      final service = ref.read(saleServiceProvider);
-      final products = await service.getTopSoldProducts(limit: 10);
-      if (mounted) {
-        setState(() {
-          _recentlySold = products;
-        });
-      }
-    } catch (e) {
-      Logger.warning('Failed to load recently sold: $e');
-    }
-  }
-
   void _startInactivityTimer() {
     _inactivityTimer?.cancel();
     _inactivityTimer = Timer(_inactivityTimeout, _onInactivityTimeout);
@@ -391,31 +372,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _holdBill();
     }
     _showUnlockDialog();
-  }
-
-  void _showUndoToast() {
-    OverlayEntry? overlay;
-    overlay = OverlayEntry(
-      builder: (ctx) => Positioned(
-        bottom: 80,
-        left: MediaQuery.of(ctx).size.width / 2 - 150,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade900,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text('Item removed', style: TextStyle(color: Colors.white, fontSize: 13)),
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(overlay);
-    Future.delayed(const Duration(seconds: 3), () {
-      overlay?.remove();
-    });
   }
 
   void _showUnlockDialog() {

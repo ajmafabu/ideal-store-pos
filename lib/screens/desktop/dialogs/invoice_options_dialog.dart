@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/sale.dart';
-import '../../admin/barcode_label_screen.dart';
 
 class InvoiceOptionsDialog extends StatefulWidget {
   final Sale sale;

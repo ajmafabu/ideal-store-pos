@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -22,13 +21,9 @@ class ThermalPrinterService {
   static const String _autoPrintKey = 'auto_print_enabled';
 
   static final Uint8List _init = Uint8List.fromList([0x1B, 0x40]);
-  static final Uint8List _boldOn = Uint8List.fromList([0x1B, 0x45, 0x01]);
-  static final Uint8List _boldOff = Uint8List.fromList([0x1B, 0x45, 0x00]);
-  static final Uint8List _centerAlign = Uint8List.fromList([0x1B, 0x61, 0x01]);
   static final Uint8List _leftAlign = Uint8List.fromList([0x1B, 0x61, 0x00]);
   static final Uint8List _feedAndCut = Uint8List.fromList([0x1D, 0x56, 0x00]);
   static final Uint8List _lineFeed = Uint8List.fromList([0x0A]);
-  static const int _lineWidth = 48;
 
   Future<String?> getSavedPrinterAddress() async =>
       (await SharedPreferences.getInstance()).getString(_savedDeviceKey);
@@ -140,11 +135,6 @@ class ThermalPrinterService {
       Logger.error('_bluetoothPrintImage', e);
       return false;
     }
-  }
-
-  Future<bool> _bluetoothPrintTamil(String text, String address) async {
-    // Tamil now uses same image printing as English
-    return await _bluetoothPrintImage(text, address);
   }
 
   Future<bool> isConfigured() async => (await getSavedPrinterAddress()) != null;
@@ -434,124 +424,6 @@ class ThermalPrinterService {
       Logger.error('_cropImagePng', e);
       return Uint8List(0);
     }
-  }
-
-  /// Fallback: render all lines as simple bitmap (no column layout)
-  Future<bool> _printFallbackText(ThermalReceiptData data, String title) async {
-    try {
-      // Pass structured data directly to get fixed column positions
-      final pngBytes = await TamilBitmapRenderer.renderReceiptAsImage(
-        headerLines: data.headerLines,
-        rows: data.rows,
-        totalLines: data.totalLines,
-        footerLines: data.footerLines,
-        fontSize: 24,
-      );
-
-      if (pngBytes.isEmpty) {
-        Logger.error('PS: Fallback bitmap empty');
-        return false;
-      }
-
-      final tempImage = await decodeImageFromList(pngBytes);
-      final iw = tempImage.width;
-      final ih = tempImage.height;
-      tempImage.dispose();
-
-      if (iw <= 0 || ih <= 0) return false;
-
-      final pdf = pw.Document();
-      final imageWidthMm = iw * 25.4 / ThermalColumnLayout.dpi;
-      final imageHeightMm = ih * 25.4 / ThermalColumnLayout.dpi;
-      final pageFormat = PdfPageFormat(
-        PdfPageFormat.mm * imageWidthMm,
-        PdfPageFormat.mm * imageHeightMm,
-        marginBottom: 0,
-        marginTop: 0,
-        marginLeft: 0,
-        marginRight: 0,
-      );
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: pageFormat,
-          build: (context) => pw.Image(pw.MemoryImage(pngBytes)),
-        ),
-      );
-
-      Logger.info('PS: Fallback bitmap printing...');
-      await Printing.layoutPdf(onLayout: (format) => pdf.save(), name: title);
-      Logger.info('PS: Fallback done');
-      return true;
-    } catch (e) {
-      Logger.error('PS: Fallback bitmap failed: $e');
-      return false;
-    }
-  }
-
-  String _fmtP(double v) => v.toStringAsFixed(2);
-
-  /// Formats receipt data as Courier-compatible ASCII text with fixed-width columns.
-  String _formatForCourier(ThermalReceiptData data) {
-    final sb = StringBuffer();
-    final sep = '-' * _lineWidth;
-
-    // Header
-    for (final line in data.headerLines) {
-      if (line.startsWith('\u2500')) {
-        sb.writeln(sep);
-      } else {
-        sb.writeln(line);
-      }
-    }
-
-    // Table header
-    sb.writeln(
-      '${"S.No".padRight(4)} ${"Item Name".padRight(19)} '
-      '${"Qty".padRight(5)} ${"Price".padRight(8)} ${"Total".padRight(8)}',
-    );
-    sb.writeln(sep);
-
-    // Table rows
-    for (final row in data.rows) {
-      final sno = row.sNo.toString().padLeft(4);
-      final name = row.productName.length > 19
-          ? row.productName.substring(0, 19)
-          : row.productName.padRight(19);
-      final qty = row.qty.toString().padLeft(5);
-      final price = row.rate.toStringAsFixed(2).padLeft(8);
-      final total = row.amount.toStringAsFixed(2).padLeft(8);
-      sb.writeln('$sno $name $qty $price $total');
-    }
-
-    sb.writeln(sep);
-
-    // Totals
-    for (final line in data.totalLines) {
-      if (line.startsWith('\u2500')) {
-        sb.writeln(sep);
-      } else {
-        final match = RegExp(r'^(.+?):\s*(.+)$').firstMatch(line);
-        if (match != null) {
-          final label = match.group(1)!.trim();
-          final value = match.group(2)!.trim();
-          sb.writeln('${label.padRight(22)}: ${value.padLeft(10)}');
-        } else {
-          sb.writeln(line);
-        }
-      }
-    }
-
-    // Footer
-    for (final line in data.footerLines) {
-      if (line.startsWith('\u2500')) {
-        sb.writeln(sep);
-      } else {
-        sb.writeln(line);
-      }
-    }
-
-    return sb.toString();
   }
 
   Future<List<Printer>> getAvailablePrinters() async {

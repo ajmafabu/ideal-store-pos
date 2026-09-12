@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../config/providers.dart';
-import '../../../models/product.dart';
 import '../../admin/all_top_products_screen.dart';
 
 class TopProductsSection extends ConsumerWidget {

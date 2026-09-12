@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../models/product.dart';
-import '../../models/sale.dart';
 
 class SlowMovingScreen extends ConsumerStatefulWidget {
   const SlowMovingScreen({super.key});
