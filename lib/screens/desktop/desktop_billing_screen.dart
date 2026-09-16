@@ -89,7 +89,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   final _keyboardFocusNode = FocusNode();
   int _selectedCartIndex = -1;
   int _editingCartIndex = -1;
-  List<Map<String, dynamic>> _heldBills = [];
   bool _isSyncing = false;
   bool _isProcessing = false;
   double _customerCredit = 0;
@@ -460,7 +459,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       final data = prefs.getString('desktop_held_bills');
       if (data == null || data.isEmpty) return;
       final list = (jsonDecode(data) as List);
-      _heldBills = list.map((e) {
+      final notifier = ref.read(desktopBillingProvider.notifier);
+      notifier.heldBills.clear();
+      for (final e in list) {
         final m = e as Map<String, dynamic>;
         final s = m['session'] as Map<String, dynamic>;
         final items = (s['items'] as List).map((i) {
@@ -478,8 +479,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             discount: (im['discount'] as num?)?.toDouble() ?? 0,
           );
         }).toList();
-        return {
-          'session': SaleSession(
+        notifier.heldBills.add(HeldBill(
+          session: SaleSession(
             id: s['id'] as String,
             items: items,
             customerId: s['customer_id'] as String?,
@@ -489,9 +490,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             isCredit: s['is_credit'] as bool? ?? false,
             amountPaid: (s['amount_paid'] as num?)?.toDouble() ?? 0,
           ),
-          'time': DateTime.tryParse(m['time'] as String? ?? '') ?? DateTime.now(),
-        };
-      }).toList();
+          time: DateTime.tryParse(m['time'] as String? ?? '') ?? DateTime.now(),
+        ));
+      }
     } catch (e) {
       Logger.warning('Failed to load held bills: $e');
     }
@@ -500,8 +501,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   Future<void> _saveHeldBills() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = _heldBills.map((bill) {
-        final session = bill['session'] as SaleSession;
+      final heldBills = ref.read(desktopBillingProvider.notifier).heldBills;
+      final data = heldBills.map((bill) {
+        final session = bill.session;
         return {
           'session': {
             'id': session.id,
@@ -526,7 +528,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             'is_credit': session.isCredit,
             'amount_paid': session.amountPaid,
           },
-          'time': (bill['time'] as DateTime).toIso8601String(),
+          'time': bill.time.toIso8601String(),
         };
       }).toList();
       await prefs.setString('desktop_held_bills', jsonEncode(data));
@@ -1101,16 +1103,14 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   void _doHoldBill() {
+    final notifier = ref.read(desktopBillingProvider.notifier);
     final session = ref
         .read(desktopBillingProvider)
-        .elementAt(
-          ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-        );
+        .elementAt(notifier.activeSessionIndex);
     if (session.items.isEmpty) return;
 
-    // BUG 3 FIX: Store editingSale reference in held bill
-    _heldBills.add({
-      'session': SaleSession(
+    notifier.heldBills.add(HeldBill(
+      session: SaleSession(
         id: session.id,
         items: List<DesktopCartItem>.from(session.items),
         customerId: session.customerId,
@@ -1120,15 +1120,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         isCredit: session.isCredit,
         amountPaid: session.amountPaid,
       ),
-      'time': DateTime.now(),
-      'editingSale': ref.read(desktopBillingProvider.notifier).editingSale, // Preserve edit context
-    });
+      time: DateTime.now(),
+      editingSale: notifier.editingSale,
+    ));
 
-    ref
-        .read(desktopBillingProvider.notifier)
-        .clearSession(
-          ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-        );
+    notifier.clearSession(notifier.activeSessionIndex);
+    notifier.clearEditingSale();
     setState(() {});
     _saveHeldBills();
 
@@ -1141,9 +1138,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   void _restoreHeldBill(int index) {
-    final bill = _heldBills[index];
-    final session = bill['session'] as SaleSession;
     final notifier = ref.read(desktopBillingProvider.notifier);
+    final bill = notifier.heldBills[index];
+    final session = bill.session;
     notifier.clearSession(notifier.activeSessionIndex);
     for (final item in session.items) {
       notifier.addItem(item);
@@ -1155,12 +1152,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     activeSession.paymentMethod = session.paymentMethod;
     activeSession.isCredit = session.isCredit;
     activeSession.amountPaid = session.amountPaid;
-    // BUG 3 FIX: Restore editingSale reference from held bill
-    final savedEditingSale = bill['editingSale'] as Sale?;
+    final savedEditingSale = bill.editingSale;
     if (savedEditingSale != null) {
       setState(() {
-        ref.read(desktopBillingProvider.notifier).setEditingSale(savedEditingSale);
-        // Reload sale's discount/charges into UI controllers
+        notifier.setEditingSale(savedEditingSale);
         _billDiscountController.text = savedEditingSale.discount > 0 ? savedEditingSale.discount.toStringAsFixed(0) : '';
         _extraChargesController.text = savedEditingSale.extraCharges > 0 ? savedEditingSale.extraCharges.toStringAsFixed(0) : '';
         _selectedPayment = savedEditingSale.paymentMethod.isNotEmpty ? savedEditingSale.paymentMethod : 'cash';
@@ -1170,7 +1165,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         }
       });
     }
-    _heldBills.removeAt(index);
+    notifier.heldBills.removeAt(index);
     setState(() {});
     _saveHeldBills();
   }
@@ -1245,7 +1240,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   void _retrieveBill() {
-    if (_heldBills.isEmpty) return;
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    if (notifier.heldBills.isEmpty) return;
     int heldSelectedIndex = 0;
 
     final heldFocusNode = FocusNode();
@@ -1265,7 +1261,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 onKeyEvent: (event) {
                   if (event is! KeyDownEvent) return;
                   if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                    if (heldSelectedIndex < _heldBills.length - 1) {
+                    if (heldSelectedIndex < notifier.heldBills.length - 1) {
                       setDialogState(() => heldSelectedIndex++);
                     }
                   } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -1273,7 +1269,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       setDialogState(() => heldSelectedIndex--);
                     }
                   } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                    if (_heldBills.isNotEmpty && heldSelectedIndex < _heldBills.length) {
+                    if (notifier.heldBills.isNotEmpty && heldSelectedIndex < notifier.heldBills.length) {
                       _restoreHeldBill(heldSelectedIndex);
                       Navigator.pop(ctx);
                     }
@@ -1283,11 +1279,11 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 },
                 child: ListView.builder(
                   shrinkWrap: true,
-                  itemCount: _heldBills.length,
+                  itemCount: notifier.heldBills.length,
                   itemBuilder: (context, index) {
-                    final bill = _heldBills[index];
-                    final session = bill['session'] as SaleSession;
-                    final time = bill['time'] as DateTime;
+                    final bill = notifier.heldBills[index];
+                    final session = bill.session;
+                    final time = bill.time;
                     final isSelected = index == heldSelectedIndex;
                     return ListTile(
                       selected: isSelected,
@@ -3578,10 +3574,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               const SizedBox(width: 6),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _heldBills.isEmpty ? null : _retrieveBill,
+                  onPressed: ref.read(desktopBillingProvider.notifier).heldBills.isEmpty ? null : _retrieveBill,
                   icon: const Icon(Icons.play_arrow, size: 14),
                   label: Text(
-                    'F7 Retrieve${_heldBills.isNotEmpty ? ' (${_heldBills.length})' : ''}',
+                    'F7 Retrieve${ref.read(desktopBillingProvider.notifier).heldBills.isNotEmpty ? ' (${ref.read(desktopBillingProvider.notifier).heldBills.length})' : ''}',
                     style: const TextStyle(fontSize: 11),
                   ),
                   style: OutlinedButton.styleFrom(
