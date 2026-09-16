@@ -5,8 +5,6 @@ import '../../../models/sale.dart';
 import '../../../models/product.dart';
 import '../../../config/providers.dart';
 import '../../../config/desktop_billing_provider.dart';
-import '../../../services/sale_service.dart';
-import '../../../services/offline_service.dart';
 import '../../../utils/logger.dart';
 
 class SaleCompletionResult {

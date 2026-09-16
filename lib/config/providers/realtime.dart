@@ -3,15 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/product_service.dart';
 import '../../utils/logger.dart';
-import 'services.dart';
-import 'auth.dart';
 import 'products.dart';
 import 'sales.dart';
 import 'purchases.dart';
 import 'expenses.dart';
 import 'customers.dart';
 import 'dashboard.dart';
-import 'analytics.dart';
 import 'accounts.dart';
 import 'returns.dart';
 

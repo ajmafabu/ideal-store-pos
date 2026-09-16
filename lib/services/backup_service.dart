@@ -209,10 +209,7 @@ class BackupService {
       final file = File(filePath);
       await file.writeAsString(jsonStr);
 
-      // Calculate checksum
       final bytes = await file.readAsBytes();
-      final checksum = _calculateChecksum(bytes);
-
       Logger.info('Backup saved to: $filePath (${bytes.length} bytes)');
 
       return filePath;

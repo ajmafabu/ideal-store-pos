@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/sale.dart';
-import '../../../config/providers.dart';
 import '../../../config/desktop_billing_provider.dart';
-import '../../../utils/logger.dart';
 
 class BillingPaymentPanel extends ConsumerWidget {
   final SaleSession session;

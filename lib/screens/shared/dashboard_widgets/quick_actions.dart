@@ -104,7 +104,6 @@ class _Action {
   final String label;
   final Color color;
   final int? tabIndex;
-  final String? message;
   final String? navigateTo;
 
   const _Action(
@@ -112,7 +111,6 @@ class _Action {
     this.label,
     this.color, {
     this.tabIndex,
-    this.message,
     this.navigateTo,
   });
 }

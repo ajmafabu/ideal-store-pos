@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
 import 'products.dart';
-import 'dashboard.dart';
 
 // ============================================
 // ENHANCED DASHBOARD — TODAY CATEGORY/GST/SPARK

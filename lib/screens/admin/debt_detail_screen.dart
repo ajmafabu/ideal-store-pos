@@ -438,14 +438,13 @@ class _FlowEntry {
   final _FlowType type;
   final String description;
   final double amount;
-  double runningBalance;
+  double runningBalance = 0;
 
   _FlowEntry({
     required this.date,
     required this.type,
     required this.description,
     required this.amount,
-    this.runningBalance = 0,
   });
 }
 

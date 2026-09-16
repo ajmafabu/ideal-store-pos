@@ -597,7 +597,7 @@ class VoiceBilling {
       'tin', 'tins', 'can', 'cans', 'sachet', 'sachets',
       'pouch', 'pouches', 'jar', 'jars', 'tube', 'tubes',
     ];
-    for (final unitWord in englishUnits) {
+    for (final unitWord in englishUnits) { // ignore: unused_local_variable
       result = result.replaceAll(RegExp(r'\b$unitWord\b', caseSensitive: false), '');
     }
 

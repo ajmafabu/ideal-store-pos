@@ -439,7 +439,7 @@ class _TransactionEntry {
   final String description;
   final double debit;
   final double credit;
-  double runningBalance;
+  double runningBalance = 0;
 
   _TransactionEntry({
     required this.date,
@@ -447,6 +447,5 @@ class _TransactionEntry {
     required this.description,
     required this.debit,
     required this.credit,
-    this.runningBalance = 0,
   });
 }
