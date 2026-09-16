@@ -97,7 +97,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   String _selectedUnitType = 'pieces';
   int _piecesPerUnit = 1;
   String? _selectedRateLabel;
-  Sale? _editingSale; // Track sale being edited from sales history
   Timer? _searchDebounce;
 
   // Payment state
@@ -1071,7 +1070,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     if (session.items.isEmpty) return;
 
     // BUG 3 FIX: Warn user if holding during edit mode
-    if (_editingSale != null) {
+    if (ref.read(desktopBillingProvider.notifier).editingSale != null) {
       showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -1122,7 +1121,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         amountPaid: session.amountPaid,
       ),
       'time': DateTime.now(),
-      'editingSale': _editingSale, // Preserve edit context
+      'editingSale': ref.read(desktopBillingProvider.notifier).editingSale, // Preserve edit context
     });
 
     ref
@@ -1160,7 +1159,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     final savedEditingSale = bill['editingSale'] as Sale?;
     if (savedEditingSale != null) {
       setState(() {
-        _editingSale = savedEditingSale;
+        ref.read(desktopBillingProvider.notifier).setEditingSale(savedEditingSale);
         // Reload sale's discount/charges into UI controllers
         _billDiscountController.text = savedEditingSale.discount > 0 ? savedEditingSale.discount.toStringAsFixed(0) : '';
         _extraChargesController.text = savedEditingSale.extraCharges > 0 ? savedEditingSale.extraCharges.toStringAsFixed(0) : '';
@@ -1583,7 +1582,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     try {
 
       // If editing an existing sale, update it instead of creating new
-      if (_editingSale != null) {
+      if (ref.read(desktopBillingProvider.notifier).editingSale != null) {
         try {
           final reasonCtrl = TextEditingController();
           final reason = await showDialog<String>(
@@ -1620,7 +1619,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           await ref
               .read(saleServiceProvider)
               .editSaleAtomic(
-                saleId: _editingSale!.id,
+                saleId: ref.read(desktopBillingProvider.notifier).editingSale!.id,
                 items: sale.items,
                 totalAmount: sale.totalAmount,
                 discount: sale.discount,
@@ -1639,7 +1638,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               .resetAfterSale(sessionIndex);
           ref.invalidate(salesHistoryProvider);
           ref.invalidate(productsProvider);
-          _editingSale = null;
+          ref.read(desktopBillingProvider.notifier).clearEditingSale();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -1652,7 +1651,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           return; // Don't create new sale
         } catch (e) {
           // BUG 4 FIX: Clear cart on failure to prevent duplicate sale creation
-          _editingSale = null;
+          ref.read(desktopBillingProvider.notifier).clearEditingSale();
           ref
               .read(desktopBillingProvider.notifier)
               .resetAfterSale(sessionIndex);
@@ -2082,9 +2081,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   selectedCartIndex: _selectedCartIndex,
                   onCartIndexChanged: (index) => setState(() => _selectedCartIndex = index),
                   onSearchFocusRequested: () => _searchFocusNode.requestFocus(),
-                  editingSale: _editingSale,
+                  editingSale: ref.read(desktopBillingProvider.notifier).editingSale,
                   onEditSale: (sale) => setState(() {
-                    _editingSale = sale;
+                    ref.read(desktopBillingProvider.notifier).setEditingSale(sale);
                     // BUG 1 FIX: Load original sale's discount, charges, tier, payment
                     _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
                     _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
@@ -3425,7 +3424,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           const SizedBox(height: 14),
 
           // Edit mode banner
-          if (_editingSale != null)
+          if (ref.read(desktopBillingProvider.notifier).editingSale != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               margin: const EdgeInsets.only(bottom: 10),
@@ -3440,7 +3439,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Editing sale ₹${_editingSale!.finalAmount.toStringAsFixed(0)} (${_editingSale!.items.length} items)',
+                      'Editing sale ₹${ref.read(desktopBillingProvider.notifier).editingSale!.finalAmount.toStringAsFixed(0)} (${ref.read(desktopBillingProvider.notifier).editingSale!.items.length} items)',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -3451,7 +3450,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   GestureDetector(
                     onTap: () {
                       setState(() {
-                        _editingSale = null;
+                        ref.read(desktopBillingProvider.notifier).clearEditingSale();
                       });
                       final idx = ref
                           .read(desktopBillingProvider.notifier)
@@ -3504,7 +3503,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       const Icon(Icons.check, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        _editingSale != null
+                        ref.read(desktopBillingProvider.notifier).editingSale != null
                             ? 'UPDATE SALE'
                             : 'COMPLETE SALE',
                         style: const TextStyle(

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/sale.dart';
 
 class SaleSession {
   final String id;
@@ -74,6 +75,7 @@ class DesktopCartItem {
 class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   int _activeSessionIndex = 0;
   int _sessionCounter = 0;
+  Sale? _editingSale;
 
   @override
   List<SaleSession> build() {
@@ -83,6 +85,17 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   int get activeSessionIndex => _activeSessionIndex;
   SaleSession get activeSession => state[_activeSessionIndex];
+  Sale? get editingSale => _editingSale;
+
+  void setEditingSale(Sale? sale) {
+    _editingSale = sale;
+    state = List.from(state);
+  }
+
+  void clearEditingSale() {
+    _editingSale = null;
+    state = List.from(state);
+  }
 
   void switchSession(int index) {
     if (index >= 0 && index < state.length) {
