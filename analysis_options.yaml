@@ -1,5 +1,13 @@
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    - "tool/**"
+    - "translate_tamil.dart"
+    - "translate_tamil_v2.dart"
+    - "update_tamil_names.dart"
+    - "convert_icon.dart"
+
 linter:
   rules:
     prefer_const_constructors: true

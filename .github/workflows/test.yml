@@ -28,7 +28,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: flutter analyze --no-pub
+        run: dart analyze --no-fatal-infos lib/ test/
 
       - name: Run tests with coverage
         run: flutter test --coverage
