@@ -38,22 +38,22 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
   }
 
   void _initControllers() {
-    // Phase 1: Products fall (5s)
+    // Phase 1: Products fall (7s)
     _productFallController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5000),
+      duration: const Duration(milliseconds: 7000),
     );
 
-    // Phase 2: Products fade/scatter (2s, starts after fall)
+    // Phase 2: Products fade/scatter (2.5s, starts after fall)
     _productFadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 2500),
     );
 
-    // Logo zoom-out (2.5s)
+    // Logo zoom-out (3s)
     _logoController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 3000),
     );
     _logoScale = Tween<double>(begin: 3.0, end: 1.0).animate(
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
@@ -142,24 +142,24 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
   Future<void> _startAnimations() async {
     _gradientController.repeat();
 
-    // Phase 1: Products fall (0 - 5s)
+    // Phase 1: Products fall (0 - 7s)
     _productFallController.forward();
 
-    // Phase 2: Products scatter/fade (at 5s)
-    await Future.delayed(const Duration(milliseconds: 5000));
+    // Phase 2: Products scatter/fade (at 7s)
+    await Future.delayed(const Duration(milliseconds: 7000));
     _productFadeController.forward();
 
-    // Logo starts zooming at 5.3s
+    // Logo starts zooming at 7.3s
     await Future.delayed(const Duration(milliseconds: 300));
     _logoController.forward();
 
-    // Text at 7s
-    await Future.delayed(const Duration(milliseconds: 1700));
+    // Text at 9.5s
+    await Future.delayed(const Duration(milliseconds: 2200));
     _textController.forward();
     _shimmerController.repeat();
 
-    // Navigate at 9.5s
-    await Future.delayed(const Duration(milliseconds: 2500));
+    // Navigate at 12.5s
+    await Future.delayed(const Duration(milliseconds: 3000));
     if (mounted) {
       context.go('/login');
     }
@@ -391,9 +391,9 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
           // Fade phase progress (0 -> 1 over 1.5s after fall)
           final fadeProgress = _productFadeController.value;
 
-          // Y position: fall from above screen to ~75% of screen height
-          final startY = -120.0;
-          final endY = screenSize.height * 0.7 + (index % 3) * 50.0;
+          // Y position: fall from above screen to bottom of screen
+          final startY = -150.0;
+          final endY = screenSize.height * 0.95 + (index % 3) * 40.0;
           final fallCurve = Curves.easeIn.transform(fallProgress);
           final y = startY + (endY - startY) * fallCurve;
 
