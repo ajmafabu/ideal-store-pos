@@ -14,6 +14,7 @@ class BillingSaleTabs extends StatelessWidget {
   final VoidCallback onSearchFocusRequested;
   final void Function(Sale sale) onEditSale;
   final Sale? editingSale;
+  final VoidCallback? onAutoHold;
 
   const BillingSaleTabs({
     super.key,
@@ -24,6 +25,7 @@ class BillingSaleTabs extends StatelessWidget {
     required this.onSearchFocusRequested,
     required this.onEditSale,
     this.editingSale,
+    this.onAutoHold,
   });
 
   @override
@@ -155,15 +157,9 @@ class BillingSaleTabs extends StatelessWidget {
           ),
           GestureDetector(
             onTap: () {
-              // BUG 2 FIX: Prevent creating new tab while editing a sale
-              if (editingSale != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Complete or cancel the current edit first'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
+              // Auto-hold current session if editing or has items
+              if (editingSale != null || sessions[notifier.activeSessionIndex].items.isNotEmpty) {
+                onAutoHold?.call();
               }
               notifier.createQuickSale();
               onCartIndexChanged(-1);
@@ -197,7 +193,7 @@ class BillingSaleTabs extends StatelessWidget {
           TextButton.icon(
             onPressed: () => showDialog(
               context: context,
-              builder: (_) => DesktopSalesHistoryDialog(onEditSale: onEditSale),
+              builder: (_) => DesktopSalesHistoryDialog(onEditSale: onEditSale, onAutoHold: onAutoHold),
             ),
             icon: const Icon(Icons.history, size: 16, color: Colors.white70),
             label: const Text(

@@ -2082,6 +2082,41 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   onCartIndexChanged: (index) => setState(() => _selectedCartIndex = index),
                   onSearchFocusRequested: () => _searchFocusNode.requestFocus(),
                   editingSale: ref.read(desktopBillingProvider.notifier).editingSale,
+                  onAutoHold: () {
+                    // Auto-hold current session before switching context
+                    final session = ref.read(desktopBillingProvider).elementAt(
+                      ref.read(desktopBillingProvider.notifier).activeSessionIndex,
+                    );
+                    if (session.items.isEmpty) return;
+                    _heldBills.add({
+                      'session': SaleSession(
+                        id: session.id,
+                        items: List<DesktopCartItem>.from(session.items),
+                        customerId: session.customerId,
+                        customerName: session.customerName,
+                        totalDiscount: session.totalDiscount,
+                        paymentMethod: session.paymentMethod,
+                        isCredit: session.isCredit,
+                        amountPaid: session.amountPaid,
+                      ),
+                      'time': DateTime.now(),
+                      'editingSale': ref.read(desktopBillingProvider.notifier).editingSale,
+                    });
+                    ref.read(desktopBillingProvider.notifier).clearSession(
+                      ref.read(desktopBillingProvider.notifier).activeSessionIndex,
+                    );
+                    ref.read(desktopBillingProvider.notifier).clearEditingSale();
+                    _saveHeldBills();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Sale held — retrieve from Held Bills'),
+                          backgroundColor: Colors.orange,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
                   onEditSale: (sale) => setState(() {
                     ref.read(desktopBillingProvider.notifier).setEditingSale(sale);
                     // BUG 1 FIX: Load original sale's discount, charges, tier, payment

@@ -20,7 +20,8 @@ import '../../../utils/thermal_invoice.dart';
 
 class DesktopSalesHistoryDialog extends ConsumerStatefulWidget {
   final Function(Sale)? onEditSale;
-  const DesktopSalesHistoryDialog({super.key, this.onEditSale});
+  final VoidCallback? onAutoHold;
+  const DesktopSalesHistoryDialog({super.key, this.onEditSale, this.onAutoHold});
 
   @override
   ConsumerState<DesktopSalesHistoryDialog> createState() =>
@@ -406,6 +407,13 @@ class _DesktopSalesHistoryDialogState
                                     ], text: 'Invoice');
                                   }
                                 } else if (action == 'edit') {
+                                  // Auto-hold current session if it has items
+                                  final currentSession = ref.read(desktopBillingProvider).elementAt(
+                                    ref.read(desktopBillingProvider.notifier).activeSessionIndex,
+                                  );
+                                  if (currentSession.items.isNotEmpty) {
+                                    widget.onAutoHold?.call();
+                                  }
                                   // Load sale items into billing cart for editing
                                   if (widget.onEditSale != null)
                                     widget.onEditSale!(sale);
