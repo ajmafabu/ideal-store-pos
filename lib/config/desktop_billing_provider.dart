@@ -1,6 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/sale.dart';
 
+class HeldBill {
+  final SaleSession session;
+  final DateTime time;
+  final Sale? editingSale;
+
+  HeldBill({required this.session, required this.time, this.editingSale});
+}
+
 class SaleSession {
   final String id;
   final List<DesktopCartItem> items;
@@ -228,6 +236,49 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   void resetAfterSale(int sessionIndex) {
     clearSession(sessionIndex);
+  }
+
+  final List<HeldBill> heldBills = [];
+
+  bool autoHoldCurrentSession() {
+    final session = state[_activeSessionIndex];
+    if (session.items.isEmpty) return false;
+    heldBills.add(HeldBill(
+      session: SaleSession(
+        id: session.id,
+        items: List<DesktopCartItem>.from(session.items),
+        customerId: session.customerId,
+        customerName: session.customerName,
+        totalDiscount: session.totalDiscount,
+        paymentMethod: session.paymentMethod,
+        isCredit: session.isCredit,
+        amountPaid: session.amountPaid,
+      ),
+      time: DateTime.now(),
+      editingSale: _editingSale,
+    ));
+    clearSession(_activeSessionIndex);
+    _editingSale = null;
+    state = List.from(state);
+    return true;
+  }
+
+  bool restoreHeldBill(int index) {
+    if (index < 0 || index >= heldBills.length) return false;
+    final bill = heldBills.removeAt(index);
+    clearSession(_activeSessionIndex);
+    for (final item in bill.session.items) {
+      state[_activeSessionIndex].items.add(item);
+    }
+    state[_activeSessionIndex].customerId = bill.session.customerId;
+    state[_activeSessionIndex].customerName = bill.session.customerName;
+    state[_activeSessionIndex].totalDiscount = bill.session.totalDiscount;
+    state[_activeSessionIndex].paymentMethod = bill.session.paymentMethod;
+    state[_activeSessionIndex].isCredit = bill.session.isCredit;
+    state[_activeSessionIndex].amountPaid = bill.session.amountPaid;
+    _editingSale = bill.editingSale;
+    state = List.from(state);
+    return true;
   }
 }
 

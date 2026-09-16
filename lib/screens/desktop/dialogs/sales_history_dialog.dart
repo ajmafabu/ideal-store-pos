@@ -20,8 +20,8 @@ import '../../../utils/thermal_invoice.dart';
 
 class DesktopSalesHistoryDialog extends ConsumerStatefulWidget {
   final Function(Sale)? onEditSale;
-  final VoidCallback? onAutoHold;
-  const DesktopSalesHistoryDialog({super.key, this.onEditSale, this.onAutoHold});
+  final DesktopBillingNotifier? notifier;
+  const DesktopSalesHistoryDialog({super.key, this.onEditSale, this.notifier});
 
   @override
   ConsumerState<DesktopSalesHistoryDialog> createState() =>
@@ -407,50 +407,10 @@ class _DesktopSalesHistoryDialogState
                                     ], text: 'Invoice');
                                   }
                                 } else if (action == 'edit') {
-                                  // Auto-hold current session if it has items
-                                  final currentSession = ref.read(desktopBillingProvider).elementAt(
-                                    ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-                                  );
-                                  if (currentSession.items.isNotEmpty) {
-                                    widget.onAutoHold?.call();
-                                  }
-                                  // Load sale items into billing cart for editing
+                                  // Just call onEditSale — the parent handles auto-hold + loading
                                   if (widget.onEditSale != null)
                                     widget.onEditSale!(sale);
-                                  final notifier = ref.read(
-                                    desktopBillingProvider.notifier,
-                                  );
-                                  notifier.clearSession(
-                                    notifier.activeSessionIndex,
-                                  );
-                                  for (final item in sale.items) {
-                                    notifier.addItem(
-                                      DesktopCartItem(
-                                        productId: item.productId,
-                                        name: item.name,
-                                        price: item.price,
-                                        qty: item.qty,
-                                        unit: item.unit,
-                                        purchasePrice: item.purchasePrice,
-                                        gstRate: item.gstRate,
-                                        hsnCode: item.hsnCode,
-                                        tamilName: item.tamilName,
-                                        discount: item.discount,
-                                        unitType: item.unitType,
-                                        piecesPerUnit: item.piecesPerUnit,
-                                      ),
-                                    );
-                                  }
-                                  if (sale.customerId != null &&
-                                      sale.customerId!.isNotEmpty) {
-                                    notifier.setCustomer(
-                                      sale.customerId,
-                                      sale.customerName,
-                                    );
-                                  }
-                                  Navigator.pop(
-                                    context,
-                                  ); // Close sales history dialog
+                                  Navigator.pop(context); // Close sales history dialog
                                 } else if (action == 'delete') {
                                   final confirm = await showDialog<bool>(
                                     context: context,

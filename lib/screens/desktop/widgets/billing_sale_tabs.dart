@@ -14,7 +14,7 @@ class BillingSaleTabs extends StatelessWidget {
   final VoidCallback onSearchFocusRequested;
   final void Function(Sale sale) onEditSale;
   final Sale? editingSale;
-  final VoidCallback? onAutoHold;
+  final VoidCallback? onHeldBillsChanged;
 
   const BillingSaleTabs({
     super.key,
@@ -25,7 +25,7 @@ class BillingSaleTabs extends StatelessWidget {
     required this.onSearchFocusRequested,
     required this.onEditSale,
     this.editingSale,
-    this.onAutoHold,
+    this.onHeldBillsChanged,
   });
 
   @override
@@ -158,10 +158,12 @@ class BillingSaleTabs extends StatelessWidget {
           GestureDetector(
             onTap: () {
               // Auto-hold current session if editing or has items
-              if (editingSale != null || sessions[notifier.activeSessionIndex].items.isNotEmpty) {
-                onAutoHold?.call();
+              final notifierRef = notifier;
+              if (editingSale != null || sessions[notifierRef.activeSessionIndex].items.isNotEmpty) {
+                notifierRef.autoHoldCurrentSession();
+                onHeldBillsChanged?.call();
               }
-              notifier.createQuickSale();
+              notifierRef.createQuickSale();
               onCartIndexChanged(-1);
               onSearchFocusRequested();
             },
@@ -193,7 +195,7 @@ class BillingSaleTabs extends StatelessWidget {
           TextButton.icon(
             onPressed: () => showDialog(
               context: context,
-              builder: (_) => DesktopSalesHistoryDialog(onEditSale: onEditSale, onAutoHold: onAutoHold),
+              builder: (_) => DesktopSalesHistoryDialog(onEditSale: onEditSale, notifier: notifier),
             ),
             icon: const Icon(Icons.history, size: 16, color: Colors.white70),
             label: const Text(
