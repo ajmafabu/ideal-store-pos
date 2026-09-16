@@ -104,6 +104,19 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
       'assets/products/masala2.png',
       'assets/products/kindpng_1621993.png',
       'assets/products/kindpng_7151924.png',
+      'assets/products/kindpng_2217232.png',
+      'assets/products/kindpng_2298123.png',
+      'assets/products/kindpng_3334285.png',
+      'assets/products/kindpng_3352361.png',
+      'assets/products/kindpng_4815329.png',
+      'assets/products/kindpng_4828575.png',
+      'assets/products/kindpng_5792844.png',
+      'assets/products/kindpng_5792846.png',
+      'assets/products/kindpng_7090648.png',
+      'assets/products/kindpng_716400.png',
+      'assets/products/kindpng_736035.png',
+      'assets/products/kindpng_7844553.png',
+      'assets/products/kindpng_78543.png',
     ];
 
     for (int i = 0; i < assets.length; i++) {
