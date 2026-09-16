@@ -92,16 +92,18 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
 
   void _initProducts() {
     final assets = [
-      'assets/products/rice_bag.png',
-      'assets/products/oil_bottle.png',
-      'assets/products/detergent.png',
-      'assets/products/shampoo.png',
-      'assets/products/toothpaste.png',
-      'assets/products/tea_packet.png',
-      'assets/products/biscuit.png',
-      'assets/products/dal_pack.png',
+      'assets/products/rice.png',
+      'assets/products/oil.png',
       'assets/products/soap.png',
-      'assets/products/hair_oil.png',
+      'assets/products/buis.png',
+      'assets/products/chips.png',
+      'assets/products/candy.png',
+      'assets/products/candy2.png',
+      'assets/products/choco.png',
+      'assets/products/masal.png',
+      'assets/products/masala2.png',
+      'assets/products/kindpng_1621993.png',
+      'assets/products/kindpng_7151924.png',
     ];
 
     for (int i = 0; i < assets.length; i++) {
