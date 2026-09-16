@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Transaction editing and audit trail
 -- Run in Supabase SQL Editor before using history edit.
 
@@ -24,3 +26,6 @@ CREATE POLICY "Admins manage transaction edits" ON transaction_edits
 -- This migration intentionally creates the audit storage first.
 -- Stock/account-safe edit RPCs are added in the next migration after
 -- the exact payment and batch rules are confirmed against the live schema.
+
+
+COMMIT;

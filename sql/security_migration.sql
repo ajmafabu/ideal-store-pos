@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- SECURITY MIGRATION
 -- Fixes: RLS USING(true), anon GRANT, role escalation
@@ -80,3 +82,6 @@ CREATE POLICY "Admins manage stock_reconciliation" ON stock_reconciliation
 DROP POLICY IF EXISTS "Admin full access payment_reminders" ON payment_reminders;
 CREATE POLICY "Admins manage payment_reminders" ON payment_reminders
   FOR ALL USING (is_admin());
+
+
+COMMIT;

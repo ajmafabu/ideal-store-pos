@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- DATA INTEGRITY MIGRATION
 -- Fixes: row locking, negative due_amount, stock safety
@@ -81,3 +83,6 @@ CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);
 
 -- 7. Add composite index for credit trigger subquery performance
 CREATE INDEX IF NOT EXISTS idx_sales_customer_due ON sales(customer_id, due_amount) WHERE due_amount > 0;
+
+
+COMMIT;

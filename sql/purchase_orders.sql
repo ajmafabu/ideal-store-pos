@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Purchase Orders Table
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -21,3 +23,6 @@ CREATE POLICY "Admins full access purchase_orders" ON purchase_orders
 CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
 CREATE INDEX IF NOT EXISTS idx_purchase_orders_created_at ON purchase_orders(created_at);
+
+
+COMMIT;

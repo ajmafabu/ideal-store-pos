@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- SUPPLIER MANAGEMENT SETUP
 -- Run this in: Supabase Dashboard → SQL Editor
@@ -97,3 +99,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER on_supplier_payment_insert
   AFTER INSERT ON supplier_payments
   FOR EACH ROW EXECUTE FUNCTION update_supplier_dues_after_payment();
+
+
+COMMIT;

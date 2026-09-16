@@ -492,15 +492,22 @@ class SaleService {
       digitalAmount: (saleData['digital_amount'] as num?)?.toDouble() ?? 0,
     );
 
-    // 6. Restore stock for each item in the sale
+    // 6. Restore stock AND batch remaining for each item in the sale
     for (final item in items) {
       final productId = item['product_id'] as String?;
       final qty = (item['qty'] as num?)?.toInt() ?? 0;
+      final purchasePrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
       if (productId != null && qty > 0) {
         try {
+          // Use restore_stock_fifo to restore BOTH products.stock AND
+          // inventory_batches.remaining (the old increment_stock only restored stock)
           await _client.rpc(
-            'increment_stock',
-            params: {'p_product_id': productId, 'p_qty': qty},
+            'restore_stock_fifo',
+            params: {
+              'p_product_id': productId,
+              'p_qty': qty,
+              'p_price': purchasePrice,
+            },
           );
         } catch (e) {
           Logger.warning('Failed to restore stock for $productId: $e');
@@ -663,10 +670,38 @@ class SaleService {
     }
   }
 
-  /// Returns per-product sales summary: {productId: {qty7d, qty30d, qty60d, qty90d, qtyToday, totalValue30d, lastSoldAt}}
-  /// Returns per-product sales summary with daysSinceLastSale for flexible filtering.
-  /// Throws on network/DB errors instead of silently returning empty.
+  /// Returns per-product sales summary using server-side aggregation.
+  /// Falls back to client-side computation if RPC is unavailable.
   Future<Map<String, Map<String, dynamic>>> getProductSalesStats() async {
+    try {
+      final res = await _client.rpc('get_product_sales_stats');
+      if (res is Map<String, dynamic>) {
+        final stats = <String, Map<String, dynamic>>{};
+        for (final entry in res.entries) {
+          final data = entry.value;
+          if (data is Map<String, dynamic>) {
+            stats[entry.key] = {
+              'qtyToday': (data['qtyToday'] as num?)?.toInt() ?? 0,
+              'qty7d': (data['qty7d'] as num?)?.toInt() ?? 0,
+              'qty15d': (data['qty15d'] as num?)?.toInt() ?? 0,
+              'qty30d': (data['qty30d'] as num?)?.toInt() ?? 0,
+              'qty60d': (data['qty60d'] as num?)?.toInt() ?? 0,
+              'qty90d': (data['qty90d'] as num?)?.toInt() ?? 0,
+              'totalValue30d': (data['totalValue30d'] as num?)?.toDouble() ?? 0,
+              'lastSoldAt': data['lastSoldAt'] != null
+                  ? DateTime.parse(data['lastSoldAt'] as String)
+                  : null,
+              'daysSinceLastSale': (data['daysSinceLastSale'] as num?)?.toInt() ?? 999,
+            };
+          }
+        }
+        return stats;
+      }
+    } catch (e) {
+      Logger.warning('get_product_sales_stats RPC failed, falling back to client-side: $e');
+    }
+
+    // Fallback: client-side aggregation (legacy behavior)
     final now = AppTimezone.nowUtc();
     final since90 = now.subtract(const Duration(days: 90));
     final since60 = now.subtract(const Duration(days: 60));
@@ -732,7 +767,6 @@ class SaleService {
       }
     }
 
-    // Compute daysSinceLastSale for each product
     for (final entry in stats.entries) {
       final lastSold = entry.value['lastSoldAt'] as DateTime;
       entry.value['daysSinceLastSale'] = now.difference(lastSold).inDays;

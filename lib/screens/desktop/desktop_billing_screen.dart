@@ -1070,6 +1070,46 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         );
     if (session.items.isEmpty) return;
 
+    // BUG 3 FIX: Warn user if holding during edit mode
+    if (_editingSale != null) {
+      showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Hold Edit?'),
+          content: const Text(
+            'You are editing a sale. Holding will pause the edit. '
+            'When you retrieve it, the edit will continue.\n\nProceed?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx, true);
+                _doHoldBill();
+              },
+              child: const Text('Hold'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    _doHoldBill();
+  }
+
+  void _doHoldBill() {
+    final session = ref
+        .read(desktopBillingProvider)
+        .elementAt(
+          ref.read(desktopBillingProvider.notifier).activeSessionIndex,
+        );
+    if (session.items.isEmpty) return;
+
+    // BUG 3 FIX: Store editingSale reference in held bill
     _heldBills.add({
       'session': SaleSession(
         id: session.id,
@@ -1082,6 +1122,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         amountPaid: session.amountPaid,
       ),
       'time': DateTime.now(),
+      'editingSale': _editingSale, // Preserve edit context
     });
 
     ref
@@ -1115,6 +1156,21 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     activeSession.paymentMethod = session.paymentMethod;
     activeSession.isCredit = session.isCredit;
     activeSession.amountPaid = session.amountPaid;
+    // BUG 3 FIX: Restore editingSale reference from held bill
+    final savedEditingSale = bill['editingSale'] as Sale?;
+    if (savedEditingSale != null) {
+      setState(() {
+        _editingSale = savedEditingSale;
+        // Reload sale's discount/charges into UI controllers
+        _billDiscountController.text = savedEditingSale.discount > 0 ? savedEditingSale.discount.toStringAsFixed(0) : '';
+        _extraChargesController.text = savedEditingSale.extraCharges > 0 ? savedEditingSale.extraCharges.toStringAsFixed(0) : '';
+        _selectedPayment = savedEditingSale.paymentMethod.isNotEmpty ? savedEditingSale.paymentMethod : 'cash';
+        _creditFull = savedEditingSale.amountPaid == 0;
+        if (savedEditingSale.isCredit && savedEditingSale.amountPaid > 0) {
+          _paidController.text = savedEditingSale.amountPaid.toStringAsFixed(0);
+        }
+      });
+    }
     _heldBills.removeAt(index);
     setState(() {});
     _saveHeldBills();
@@ -1595,7 +1651,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           }
           return; // Don't create new sale
         } catch (e) {
+          // BUG 4 FIX: Clear cart on failure to prevent duplicate sale creation
           _editingSale = null;
+          ref
+              .read(desktopBillingProvider.notifier)
+              .resetAfterSale(sessionIndex);
+          _resetSaleState();
           if (mounted) {
             setState(() => _isProcessing = false);
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2021,7 +2082,31 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   selectedCartIndex: _selectedCartIndex,
                   onCartIndexChanged: (index) => setState(() => _selectedCartIndex = index),
                   onSearchFocusRequested: () => _searchFocusNode.requestFocus(),
-                  onEditSale: (sale) => setState(() => _editingSale = sale),
+                  editingSale: _editingSale,
+                  onEditSale: (sale) => setState(() {
+                    _editingSale = sale;
+                    // BUG 1 FIX: Load original sale's discount, charges, tier, payment
+                    _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
+                    _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
+                    _selectedPayment = sale.paymentMethod.isNotEmpty ? sale.paymentMethod : 'cash';
+                    _creditFull = sale.amountPaid == 0;
+                    if (sale.isCredit && sale.amountPaid > 0) {
+                      _paidController.text = sale.amountPaid.toStringAsFixed(0);
+                    }
+                    // BUG 5 FIX: Reset inline cart edit index
+                    _editingCartIndex = -1;
+                    _selectedCartIndex = -1;
+                    _selectedProduct = null;
+                    _searchController.clear();
+                    _searchResults = [];
+                    _showResults = false;
+                    // BUG 6 FIX: Re-fetch customer credit
+                    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+                      _loadCustomerCredit(sale.customerId!);
+                    } else {
+                      setState(() => _customerCredit = 0);
+                    }
+                  }),
                 ),
                 Expanded(
                   child: Row(

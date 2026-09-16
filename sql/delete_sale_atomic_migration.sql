@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- DELETE SALE ATOMIC MIGRATION
 -- Creates delete_sale_atomic() function that
@@ -40,6 +42,11 @@ DECLARE
   v_remaining_to_restore INTEGER;
   v_can_add INTEGER;
 BEGIN
+  -- 0. Admin permission check
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin permission required';
+  END IF;
+
   -- 1. Lock the sale row and read its data
   SELECT s.*
   INTO sale_record
@@ -85,18 +92,17 @@ BEGIN
       RAISE WARNING 'Product % not found during sale deletion — product may have been deleted via CASCADE', v_product_id;
     END IF;
 
-    -- 2b. Restore inventory_batches.remaining (FIFO, newest first)
-    -- NOTE: This is price-based restoration, not batch-lineage restoration.
-    -- We match batches by product_id + purchase_price + partially-depleted status.
-    -- We restore newest-first (reverse of deduct order) to fill the most recent
-    -- batches first. Overflow creates a new orphan batch for manual reconciliation.
+    -- 2b. Restore inventory_batches.remaining (newest first)
+    -- NOTE: We match any partially-depleted batch for this product (no price filter).
+    -- WHY: When sale stored purchase_price=150 (latest) but FIFO deducted from
+    -- batch with price=100 (oldest), restoring by price can't find the right batch.
+    -- Overflow creates a new orphan batch with the sale's stored price for audit.
     v_remaining_to_restore := v_qty;
 
     FOR v_batch IN
       SELECT id, remaining, quantity
       FROM inventory_batches
       WHERE product_id = v_product_id
-        AND purchase_price = v_price
         AND remaining < quantity
       ORDER BY created_at DESC
       FOR UPDATE
@@ -146,3 +152,8 @@ END;
 $$ LANGUAGE plpgsql
    SECURITY DEFINER
    SET search_path = public;
+
+GRANT EXECUTE ON FUNCTION delete_sale_atomic(UUID) TO authenticated;
+
+
+COMMIT;

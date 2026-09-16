@@ -1,3 +1,5 @@
+BEGIN;
+
 -- App config table for force update and remote settings
 CREATE TABLE IF NOT EXISTS app_config (
   key TEXT PRIMARY KEY,
@@ -30,3 +32,6 @@ CREATE POLICY "Admins can insert app_config" ON app_config
       WHERE id = auth.uid() AND role = 'admin'
     )
   );
+
+
+COMMIT;

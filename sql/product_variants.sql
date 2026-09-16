@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- PRODUCT VARIANTS MIGRATION
 -- Run in Supabase SQL Editor
@@ -54,3 +56,5 @@ CREATE TRIGGER trigger_update_product_variants_updated_at
   BEFORE UPDATE ON product_variants
   FOR EACH ROW
   EXECUTE FUNCTION update_product_variants_updated_at();
+
+COMMIT;

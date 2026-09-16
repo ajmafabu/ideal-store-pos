@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- ACCOUNTS MODULE
 -- Two accounts: Cash in Hand, Bank Account
@@ -102,3 +104,6 @@ RETURNS TABLE(name TEXT, total NUMERIC) AS $$
   ORDER BY total DESC
   LIMIT p_limit;
 $$ LANGUAGE sql SECURITY DEFINER;
+
+
+COMMIT;

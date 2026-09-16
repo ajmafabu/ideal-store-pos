@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- WHOLESALE MARKET APP - SUPABASE SETUP
 -- Run this in: Supabase Dashboard → SQL Editor
@@ -351,3 +353,6 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+
+COMMIT;

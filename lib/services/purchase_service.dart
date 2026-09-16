@@ -8,17 +8,14 @@ import 'offline_service.dart';
 
 class PurchaseService {
   final SupabaseClient _client;
-  final ProductService _productService;
   final AccountService _accountService;
   final OfflineService _offlineService;
 
   PurchaseService({
     SupabaseClient? client,
-    ProductService? productService,
     AccountService? accountService,
     OfflineService? offlineService,
   }) : _client = client ?? Supabase.instance.client,
-       _productService = productService ?? ProductService(),
        _accountService = accountService ?? AccountService(),
        _offlineService = offlineService ?? OfflineService();
 
@@ -47,13 +44,18 @@ class PurchaseService {
       // Add stock and inventory batches in parallel (non-fatal — purchase is already saved)
       final itemFutures = <Future>[];
       for (final item in purchase.items) {
+        // 1. Increment stock directly — do NOT use addStock() which creates
+        // duplicate batches via reconcile_stock_with_batches.
         itemFutures.add(
-          _productService.addStock(item.productId, item.qty).catchError((e) {
-            Logger.error('Stock add failed for ${item.productId}', e);
+          _client.rpc('increment_stock', params: {
+            'p_product_id': item.productId,
+            'p_qty': item.qty,
+          }).catchError((e) {
+            Logger.warning('Failed to increment stock: $e');
           }),
         );
 
-        // Update product purchase_price to latest purchase price
+        // 2. Update product purchase_price to latest purchase price
         itemFutures.add(
           _client
               .from('products')
@@ -67,6 +69,7 @@ class PurchaseService {
               ),
         );
 
+        // 3. Create the batch record with purchase_id, price, batch_number, expiry_date
         itemFutures.add(
           _client
               .rpc(

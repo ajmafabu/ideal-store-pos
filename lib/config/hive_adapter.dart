@@ -25,8 +25,10 @@ class HiveAdapter {
 
   static HiveAesCipher get cipher {
     if (_currentCipher == null) {
-      final fallbackKey = Uint8List.fromList(List.filled(32, 0x42));
-      _currentCipher = HiveAesCipher(fallbackKey);
+      throw StateError(
+        'HiveAdapter.init() must be called before accessing cipher. '
+        'Call HiveAdapter.init() in main() before any Hive operations.',
+      );
     }
     return _currentCipher!;
   }

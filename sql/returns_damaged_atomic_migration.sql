@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- RETURNS & DAMAGED ATOMIC MIGRATION
 -- Creates create_return_atomic() and
@@ -260,3 +262,6 @@ $$ LANGUAGE plpgsql
 
 GRANT EXECUTE ON FUNCTION create_return_atomic(UUID, UUID, UUID, TEXT, INTEGER, NUMERIC, NUMERIC, TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION create_damaged_atomic(UUID, UUID, TEXT, INTEGER, NUMERIC, TEXT, UUID) TO authenticated;
+
+
+COMMIT;

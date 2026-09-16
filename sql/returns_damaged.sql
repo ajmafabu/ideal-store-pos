@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- PRODUCT RETURNS & DAMAGED PRODUCTS
 -- RLS is in rls_consolidated.sql
@@ -33,3 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_returns_product ON product_returns(product_id);
 CREATE INDEX IF NOT EXISTS idx_returns_date ON product_returns(created_at);
 CREATE INDEX IF NOT EXISTS idx_damaged_product ON damaged_products(product_id);
 CREATE INDEX IF NOT EXISTS idx_damaged_date ON damaged_products(created_at);
+
+
+COMMIT;

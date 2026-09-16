@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- Fix: Profit calculation
 -- COGS = purchase_price × qty for items SOLD
@@ -49,3 +51,6 @@ BEGIN
         COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.created_at >= p_start AND e.created_at < p_end), 0);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+COMMIT;

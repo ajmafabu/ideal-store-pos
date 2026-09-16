@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- SALES + FULL PROJECT FIX MIGRATION (v1.0.5)
 -- Run this ONCE in: Supabase Dashboard → SQL Editor
@@ -388,3 +390,6 @@ RETURNS TABLE(
     AND ib.remaining > 0
   ORDER BY ib.expiry_date ASC;
 $$ LANGUAGE sql SECURITY DEFINER;
+
+
+COMMIT;

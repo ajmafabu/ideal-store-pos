@@ -13,6 +13,7 @@ class BillingSaleTabs extends StatelessWidget {
   final void Function(int) onCartIndexChanged;
   final VoidCallback onSearchFocusRequested;
   final void Function(Sale sale) onEditSale;
+  final Sale? editingSale;
 
   const BillingSaleTabs({
     super.key,
@@ -22,6 +23,7 @@ class BillingSaleTabs extends StatelessWidget {
     required this.onCartIndexChanged,
     required this.onSearchFocusRequested,
     required this.onEditSale,
+    this.editingSale,
   });
 
   @override
@@ -153,6 +155,16 @@ class BillingSaleTabs extends StatelessWidget {
           ),
           GestureDetector(
             onTap: () {
+              // BUG 2 FIX: Prevent creating new tab while editing a sale
+              if (editingSale != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Complete or cancel the current edit first'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
               notifier.createQuickSale();
               onCartIndexChanged(-1);
               onSearchFocusRequested();

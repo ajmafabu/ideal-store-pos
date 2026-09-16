@@ -1,0 +1,23 @@
+# LCOV coverage configuration
+# Run: flutter test --coverage
+# View: genhtml coverage/lcov.info -o coverage/html && open coverage/html/index.html
+
+# Coverage thresholds
+# Lines: 20% minimum
+# Branches: 15% minimum
+
+# Exclude generated files from coverage
+exclude:
+  - "**/*.g.dart"
+  - "**/*.freezed.dart"
+  - "**/*.gen.dart"
+  - "**/generated/**"
+  - "**/*.mocks.dart"
+  - "test/**"
+  - "build/**"
+  - "android/**"
+  - "ios/**"
+  - "windows/**"
+  - "linux/**"
+  - "macos/**"
+  - "web/**"

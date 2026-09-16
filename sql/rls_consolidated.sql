@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- CONSOLIDATED RLS POLICIES (ROLE-BASED)
 -- Run this ONCE in Supabase SQL Editor
@@ -202,3 +204,6 @@ CREATE POLICY "Admins full access product_returns" ON product_returns
 
 CREATE POLICY "Admins full access damaged_products" ON damaged_products
   FOR ALL USING (is_admin());
+
+
+COMMIT;

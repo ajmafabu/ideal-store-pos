@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Add SFW (Short Finding Words) and Unit Type columns to products table
 -- Run this in Supabase SQL Editor
 
@@ -20,3 +22,6 @@ SET sfw = (
   FROM unnest(string_to_array(lower(name), ' ')) AS word
 )
 WHERE sfw IS NULL;
+
+
+COMMIT;

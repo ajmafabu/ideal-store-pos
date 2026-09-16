@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Function to clear all Tamil names (for re-translation)
 CREATE OR REPLACE FUNCTION clear_all_tamil_names()
 RETURNS void AS $$
@@ -8,3 +10,6 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 GRANT EXECUTE ON FUNCTION clear_all_tamil_names() TO anon;
 GRANT EXECUTE ON FUNCTION clear_all_tamil_names() TO authenticated;
+
+
+COMMIT;

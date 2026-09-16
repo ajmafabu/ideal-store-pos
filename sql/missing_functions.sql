@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- MISSING DATABASE FUNCTIONS
 -- Run this in: Supabase Dashboard → SQL Editor
@@ -14,3 +16,6 @@ BEGIN
   WHERE id = p_product_id;
 END;
 $$ LANGUAGE plpgsql;
+
+
+COMMIT;

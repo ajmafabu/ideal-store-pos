@@ -430,8 +430,12 @@ CREATE TABLE IF NOT EXISTS daily_analytics_summary (
 
 -- Enable RLS
 ALTER TABLE daily_analytics_summary ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated can read daily_analytics" ON daily_analytics_summary FOR SELECT USING (true);
-CREATE POLICY "Service role can manage daily_analytics" ON daily_analytics_summary FOR ALL USING (true);
+DROP POLICY IF EXISTS "Authenticated can read daily_analytics" ON daily_analytics_summary;
+DROP POLICY IF EXISTS "Service role can manage daily_analytics" ON daily_analytics_summary;
+CREATE POLICY "Authenticated can read daily_analytics" ON daily_analytics_summary
+  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Service role can manage daily_analytics" ON daily_analytics_summary
+  FOR ALL USING (auth.role() = 'authenticated');
 
 -- Index for date range queries
 CREATE INDEX IF NOT EXISTS idx_daily_analytics_date ON daily_analytics_summary(date DESC);

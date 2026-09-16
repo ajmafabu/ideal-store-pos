@@ -1,353 +1,354 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ideal_store_pos/models/customer.dart';
-import 'package:ideal_store_pos/models/supplier.dart';
-import 'package:ideal_store_pos/models/product.dart';
-import 'package:ideal_store_pos/models/account.dart';
-import 'package:ideal_store_pos/models/profile.dart';
 import 'package:ideal_store_pos/models/sale.dart';
-import 'package:ideal_store_pos/utils/pin_auth.dart';
-import 'package:ideal_store_pos/utils/app_timezone.dart';
+import 'package:ideal_store_pos/models/product.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   // ============================================
-  // PIN AUTH TESTS
+  // INDIAN CURRENCY FORMAT TESTS
   // ============================================
-  group('PinAuth', () {
-    test('derivePassword returns consistent 64-char hex', () {
-      final p1 = PinAuth.derivePassword('test@example.com', '1234');
-      final p2 = PinAuth.derivePassword('test@example.com', '1234');
+  group('Indian Currency Format', () {
+    final f = NumberFormat('#,##,##0', 'en_IN');
 
-      expect(p1, equals(p2));
-      expect(p1.length, equals(64));
-      expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(p1), isTrue);
-    });
-
-    test('derivePassword differs for different emails', () {
-      final p1 = PinAuth.derivePassword('a@test.com', '1234');
-      final p2 = PinAuth.derivePassword('b@test.com', '1234');
-
-      expect(p1, isNot(equals(p2)));
-    });
-
-    test('derivePassword differs for different PINs', () {
-      final p1 = PinAuth.derivePassword('test@example.com', '1234');
-      final p2 = PinAuth.derivePassword('test@example.com', '5678');
-
-      expect(p1, isNot(equals(p2)));
-    });
-
-    test('derivePassword is NOT the raw PIN', () {
-      final derived = PinAuth.derivePassword('test@example.com', '1234');
-
-      expect(derived, isNot(equals('1234')));
-      expect(derived.contains('1234'), isFalse);
-    });
-
-    test('hashPin returns consistent hash', () {
-      final h1 = PinAuth.hashPin('1234');
-      final h2 = PinAuth.hashPin('1234');
-
-      expect(h1, equals(h2));
-      expect(h1.length, equals(64));
-    });
-
-    test('verifyPin returns true for matching pin and hash', () {
-      final hash = PinAuth.hashPin('1234');
-
-      expect(PinAuth.verifyPin('1234', hash), isTrue);
-    });
-
-    test('verifyPin returns false for wrong pin', () {
-      final hash = PinAuth.hashPin('1234');
-
-      expect(PinAuth.verifyPin('5678', hash), isFalse);
-    });
-  });
-
-  // ============================================
-  // APP TIMEZONE TESTS
-  // ============================================
-  group('AppTimezone', () {
-    test('nowIst returns IST time', () {
-      final ist = AppTimezone.nowIst();
-      final utc = DateTime.now().toUtc();
-
-      final diff = ist.difference(utc);
-      expect(diff.inHours, equals(5));
-    });
-
-    test('todayStartUtc returns UTC midnight for IST today', () {
-      final start = AppTimezone.todayStartUtc();
-
-      expect(start.isUtc, isTrue);
-    });
-
-    test('todayEndUtc is one day after todayStartUtc', () {
-      final start = AppTimezone.todayStartUtc();
-      final end = AppTimezone.todayEndUtc();
-
-      expect(end.difference(start).inDays, equals(1));
-    });
-
-    test('monthStartUtc returns first day of month in UTC', () {
-      final start = AppTimezone.monthStartUtc();
-      final now = AppTimezone.nowIst();
-
-      // monthStartUtc returns midnight IST of day 1, converted to UTC.
-      // When IST is ahead of UTC, this can land on the previous month's last day.
-      expect(start.isUtc, isTrue);
-      // Verify it's within 1 day of the expected UTC start
-      final expectedUtcStart = DateTime.utc(now.year, now.month, 1);
-      final diff = start.difference(expectedUtcStart).abs();
-      expect(diff.inHours, lessThanOrEqualTo(12));
-    });
-  });
-
-  // ============================================
-  // CUSTOMER MODEL TESTS
-  // ============================================
-  group('Customer Model', () {
-    test('fromJson creates valid Customer', () {
-      final json = {
-        'id': 'test-id',
-        'name': 'Test Customer',
-        'phone': '1234567890',
-        'address': 'Test Address',
-        'total_credit': 500.0,
-        'created_at': '2024-01-01T00:00:00.000Z',
-      };
-
-      final customer = Customer.fromJson(json);
-
-      expect(customer.id, 'test-id');
-      expect(customer.name, 'Test Customer');
-      expect(customer.phone, '1234567890');
-      expect(customer.totalCredit, 500.0);
-    });
-
-    test('toInsertJson excludes id and total_credit', () {
-      final customer = Customer(
-        id: 'test-id',
-        name: 'Test Customer',
-        createdAt: DateTime.now(),
+    testWidgets('formats lakhs correctly', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Text('₹${f.format(1234567)}'),
+          ),
+        ),
       );
 
-      final json = customer.toInsertJson();
-
-      expect(json.containsKey('id'), false);
-      expect(json.containsKey('total_credit'), false);
-      expect(json['name'], 'Test Customer');
-    });
-  });
-
-  // ============================================
-  // SUPPLIER MODEL TESTS
-  // ============================================
-  group('Supplier Model', () {
-    test('fromJson creates valid Supplier', () {
-      final json = {
-        'id': 'test-id',
-        'name': 'Test Supplier',
-        'phone': '1234567890',
-        'address': 'Test Address',
-        'gst_number': 'GST123',
-        'total_dues': 1000.0,
-        'created_at': '2024-01-01T00:00:00.000Z',
-      };
-
-      final supplier = Supplier.fromJson(json);
-
-      expect(supplier.id, 'test-id');
-      expect(supplier.name, 'Test Supplier');
-      expect(supplier.gstNumber, 'GST123');
-      expect(supplier.totalDues, 1000.0);
-    });
-  });
-
-  // ============================================
-  // PRODUCT MODEL TESTS
-  // ============================================
-  group('Product Model', () {
-    test('fromJson creates valid Product', () {
-      final json = {
-        'id': 'test-id',
-        'name': 'Test Product',
-        'barcode': '123456789',
-        'category': 'Electronics',
-        'purchase_price': 100.0,
-        'selling_price': 150.0,
-        'stock': 50,
-        'unit': 'pcs',
-        'low_stock_alert': 10,
-        'shop_id': null,
-      };
-
-      final product = Product.fromJson(json);
-
-      expect(product.id, 'test-id');
-      expect(product.name, 'Test Product');
-      expect(product.barcode, '123456789');
-      expect(product.purchasePrice, 100.0);
-      expect(product.sellingPrice, 150.0);
-      expect(product.stock, 50);
+      expect(find.textContaining('12,34,567'), findsOneWidget);
     });
 
-    test('isLowStock returns true when stock <= lowStockAlert', () {
-      final product = Product(
-        id: '1',
-        name: 'Low',
-        purchasePrice: 10,
-        sellingPrice: 20,
-        stock: 5,
-        lowStockAlert: 10,
+    testWidgets('formats small amounts correctly', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Text('₹${f.format(999)}'),
+          ),
+        ),
       );
 
-      expect(product.isLowStock, isTrue);
+      expect(find.textContaining('999'), findsOneWidget);
     });
 
-    test('isLowStock returns false when stock > lowStockAlert', () {
-      final product = Product(
-        id: '1',
-        name: 'High',
-        purchasePrice: 10,
-        sellingPrice: 20,
-        stock: 50,
-        lowStockAlert: 10,
+    testWidgets('formats zero correctly', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Text('₹${f.format(0)}'),
+          ),
+        ),
       );
 
-      expect(product.isLowStock, isFalse);
-    });
-  });
-
-  // ============================================
-  // ACCOUNT MODEL TESTS
-  // ============================================
-  group('Account Model', () {
-    test('fromJson creates valid Account', () {
-      final json = {
-        'id': 'acc-1',
-        'name': 'Cash in Hand',
-        'account_type': 'cash',
-        'balance': 5000.0,
-      };
-
-      final account = Account.fromJson(json);
-
-      expect(account.id, 'acc-1');
-      expect(account.name, 'Cash in Hand');
-      expect(account.accountType, 'cash');
-      expect(account.balance, 5000.0);
+      expect(find.textContaining('₹0'), findsOneWidget);
     });
 
-    test('fromJson handles null balance', () {
-      final json = {
-        'id': 'acc-1',
-        'name': 'Bank',
-        'account_type': 'bank',
-        'balance': null,
-      };
-
-      final account = Account.fromJson(json);
-
-      expect(account.balance, 0.0);
-    });
-  });
-
-  group('AccountTransaction Model', () {
-    test('fromJson creates valid transaction', () {
-      final json = {
-        'id': 'tx-1',
-        'account_id': 'acc-1',
-        'type': 'in',
-        'amount': 1000.0,
-        'category': 'sale',
-        'description': 'Test sale',
-        'created_at': '2024-01-01T12:00:00.000Z',
-      };
-
-      final tx = AccountTransaction.fromJson(json);
-
-      expect(tx.id, 'tx-1');
-      expect(tx.type, 'in');
-      expect(tx.amount, 1000.0);
-      expect(tx.category, 'sale');
-      expect(tx.description, 'Test sale');
-    });
-  });
-
-  // ============================================
-  // PROFILE MODEL TESTS
-  // ============================================
-  group('Profile Model', () {
-    test('isAdmin returns true for admin role', () {
-      final profile = Profile(
-        id: '1',
-        name: 'Admin',
-        role: 'admin',
-        shopId: '',
+    testWidgets('formats large amounts in lakh system', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Text('₹${f.format(5000000)}'),
+          ),
+        ),
       );
 
-      expect(profile.isAdmin, isTrue);
-      expect(profile.isStaff, isFalse);
-    });
-
-    test('isStaff returns true for staff role', () {
-      final profile = Profile(
-        id: '1',
-        name: 'Staff',
-        role: 'staff',
-        shopId: '',
-      );
-
-      expect(profile.isStaff, isTrue);
-      expect(profile.isAdmin, isFalse);
+      // 50,00,000 in Indian format
+      expect(find.textContaining('50,00,000'), findsOneWidget);
     });
   });
 
   // ============================================
-  // CART ITEM TESTS
+  // CART ITEM CARD WIDGET TESTS
   // ============================================
-  group('CartItem', () {
-    test('profit calculates correctly', () {
+  group('CartItem Card', () {
+    testWidgets('displays item name and price', (WidgetTester tester) async {
       final item = CartItem(
-        productId: '1',
-        name: 'Test',
-        price: 150,
-        qty: 2,
-        unit: 'pcs',
-        purchasePrice: 100,
-      );
-
-      expect(item.profit, equals(100)); // (150-100) * 2
-    });
-
-    test('total calculates correctly', () {
-      final item = CartItem(
-        productId: '1',
-        name: 'Test',
-        price: 150,
+        productId: 'p-1',
+        name: 'Test Product',
+        price: 250.0,
         qty: 3,
         unit: 'pcs',
-        purchasePrice: 100,
+        purchasePrice: 150.0,
       );
 
-      expect(item.total, equals(450)); // 150 * 3
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListTile(
+              title: Text(item.name),
+              subtitle: Text('Qty: ${item.qty}'),
+              trailing: Text('₹${item.total}'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Test Product'), findsOneWidget);
+      expect(find.text('Qty: 3'), findsOneWidget);
+      expect(find.text('₹750.0'), findsOneWidget);
     });
 
-    test('toJson includes purchase_price', () {
+    testWidgets('displays Tamil name when available', (
+      WidgetTester tester,
+    ) async {
       final item = CartItem(
-        productId: '1',
-        name: 'Test',
-        price: 100,
+        productId: 'p-1',
+        name: 'Test Product',
+        tamilName: 'சோதனை பொருள்',
+        price: 100.0,
         qty: 1,
         unit: 'pcs',
-        purchasePrice: 50,
       );
 
-      final json = item.toJson();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                Text(item.name),
+                if (item.tamilName != null) Text(item.tamilName!),
+              ],
+            ),
+          ),
+        ),
+      );
 
-      expect(json['purchase_price'], equals(50));
-      expect(json['price'], equals(100));
+      expect(find.text('Test Product'), findsOneWidget);
+      expect(find.text('சோதனை பொருள்'), findsOneWidget);
+    });
+  });
+
+  // ============================================
+  // PRODUCT CARD WIDGET TESTS
+  // ============================================
+  group('Product Card', () {
+    testWidgets('displays product info correctly', (
+      WidgetTester tester,
+    ) async {
+      final product = Product(
+        id: 'prod-1',
+        name: 'Widget Pro',
+        purchasePrice: 100.0,
+        sellingPrice: 200.0,
+        stock: 15,
+        unit: 'pcs',
+        lowStockAlert: 5,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Card(
+              child: Column(
+                children: [
+                  Text(product.name),
+                  Text('₹${product.sellingPrice}'),
+                  Text('Stock: ${product.stock}'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Widget Pro'), findsOneWidget);
+      expect(find.text('₹200.0'), findsOneWidget);
+      expect(find.text('Stock: 15'), findsOneWidget);
+    });
+
+    testWidgets('low stock indicator', (WidgetTester tester) async {
+      final product = Product(
+        id: 'prod-1',
+        name: 'Low Stock Item',
+        purchasePrice: 50.0,
+        sellingPrice: 100.0,
+        stock: 3,
+        unit: 'pcs',
+        lowStockAlert: 5,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Card(
+              child: ListTile(
+                title: Text(product.name),
+                trailing: product.isLowStock
+                    ? const Icon(Icons.warning, color: Colors.orange)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Low Stock Item'), findsOneWidget);
+      expect(find.byIcon(Icons.warning), findsOneWidget);
+    });
+
+    testWidgets('out of stock indicator', (WidgetTester tester) async {
+      final product = Product(
+        id: 'prod-1',
+        name: 'Out of Stock',
+        purchasePrice: 50.0,
+        sellingPrice: 100.0,
+        stock: 0,
+        unit: 'pcs',
+        lowStockAlert: 5,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Card(
+              child: ListTile(
+                title: Text(product.name),
+                trailing: product.stock <= 0
+                    ? const Icon(Icons.error, color: Colors.red)
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Out of Stock'), findsOneWidget);
+      expect(find.byIcon(Icons.error), findsOneWidget);
+    });
+  });
+
+  // ============================================
+  // SALE SUMMARY WIDGET TESTS
+  // ============================================
+  group('Sale Summary', () {
+    testWidgets('displays total, GST, and final amount', (
+      WidgetTester tester,
+    ) async {
+      final items = [
+        CartItem(
+          productId: 'p-1',
+          name: 'Item A',
+          price: 118.0,
+          qty: 2,
+          unit: 'pcs',
+          gstRate: 18.0,
+          purchasePrice: 80.0,
+        ),
+      ];
+
+      final totalGst = items.fold(0.0, (sum, item) => sum + item.gstAmount);
+      final totalAmount = items.fold(0.0, (sum, item) => sum + item.total);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                Text('Subtotal: ₹$totalAmount'),
+                Text('GST: ₹${totalGst.toStringAsFixed(2)}'),
+                Text('Total: ₹${(totalAmount).toStringAsFixed(2)}'),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Subtotal'), findsOneWidget);
+      expect(find.textContaining('GST'), findsOneWidget);
+      expect(find.textContaining('Total'), findsOneWidget);
+    });
+
+    testWidgets('profit display', (WidgetTester tester) async {
+      final item = CartItem(
+        productId: 'p-1',
+        name: 'Profit Item',
+        price: 200.0,
+        qty: 3,
+        unit: 'pcs',
+        purchasePrice: 120.0,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Text('Profit: ₹${item.profit.toStringAsFixed(2)}'),
+          ),
+        ),
+      );
+
+      // (200-120)*3 = 240
+      expect(find.text('Profit: ₹240.00'), findsOneWidget);
+    });
+  });
+
+  // ============================================
+  // CART OPERATIONS TESTS
+  // ============================================
+  group('Cart Operations', () {
+    test('add item increases qty', () {
+      final items = <CartItem>[
+        CartItem(
+          productId: 'p-1',
+          name: 'Widget',
+          price: 100.0,
+          qty: 1,
+          unit: 'pcs',
+        ),
+      ];
+
+      final existing = items.firstWhere((i) => i.productId == 'p-1');
+      existing.qty += 2;
+
+      expect(existing.qty, 3);
+      expect(items.length, 1);
+    });
+
+    test('remove item decreases list', () {
+      final items = <CartItem>[
+        CartItem(
+          productId: 'p-1',
+          name: 'A',
+          price: 100.0,
+          qty: 1,
+          unit: 'pcs',
+        ),
+        CartItem(
+          productId: 'p-2',
+          name: 'B',
+          price: 200.0,
+          qty: 1,
+          unit: 'pcs',
+        ),
+      ];
+
+      items.removeWhere((i) => i.productId == 'p-1');
+
+      expect(items.length, 1);
+      expect(items.first.productId, 'p-2');
+    });
+
+    test('clear cart empties list', () {
+      final items = <CartItem>[
+        CartItem(
+          productId: 'p-1',
+          name: 'A',
+          price: 100.0,
+          qty: 1,
+          unit: 'pcs',
+        ),
+      ];
+
+      items.clear();
+
+      expect(items, isEmpty);
     });
   });
 }

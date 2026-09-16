@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- CREDIT/DEBT TRACKING SETUP
 -- Run this in: Supabase Dashboard → SQL Editor
@@ -97,3 +99,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER on_payment_insert
   AFTER INSERT ON payments
   FOR EACH ROW EXECUTE FUNCTION update_credit_after_payment();
+
+
+COMMIT;

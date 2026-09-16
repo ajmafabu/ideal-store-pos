@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- FIX: Customer credit not reversed on sale deletion
 -- Run this in: Supabase Dashboard → SQL Editor
@@ -43,3 +45,6 @@ SET total_credit = (
   FROM sales s
   WHERE s.customer_id = c.id AND s.due_amount > 0
 );
+
+
+COMMIT;

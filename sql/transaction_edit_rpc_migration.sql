@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Safe transaction editing RPCs
 -- Run after transaction_edit_migration.sql.
 
@@ -175,3 +177,6 @@ BEGIN
                              'payment_method', p_payment_method), auth.uid());
 END;
 $$;
+
+
+COMMIT;

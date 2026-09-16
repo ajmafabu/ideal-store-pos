@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- Analytics RPCs for Advanced Analytics
 -- ============================================
@@ -54,3 +56,6 @@ AS $$
   FROM generate_series(NOW() - INTERVAL '30 days', NOW(), INTERVAL '1 day') AS d(day)
   ORDER BY d.day;
 $$;
+
+
+COMMIT;

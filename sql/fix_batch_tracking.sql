@@ -1,3 +1,5 @@
+BEGIN;
+
 -- ============================================
 -- Fix: Batch tracking - add batch_number and expiry_date
 -- ============================================
@@ -24,3 +26,6 @@ BEGIN
   UPDATE products SET purchase_price = p_purchase_price WHERE id = p_product_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+COMMIT;
