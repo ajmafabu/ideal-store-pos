@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 class AnimatedSplashScreen extends StatefulWidget {
@@ -12,7 +13,8 @@ class AnimatedSplashScreen extends StatefulWidget {
 
 class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     with TickerProviderStateMixin {
-  late AnimationController _productController;
+  late AnimationController _productFallController;
+  late AnimationController _productFadeController;
   late AnimationController _logoController;
   late AnimationController _textController;
   late AnimationController _shimmerController;
@@ -24,35 +26,46 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
   late Animation<Offset> _textSlide;
 
   final List<_FallingProduct> _products = [];
-  final _random = Random();
+  final _random = Random(42);
+  bool _imagesLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _initProducts();
+    _initControllers();
+    _preloadImages();
+  }
 
-    // Product fall controller (1.5s)
-    _productController = AnimationController(
+  void _initControllers() {
+    // Phase 1: Products fall (3s)
+    _productFallController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 3000),
     );
 
-    // Logo zoom-out controller (starts after products begin falling)
-    _logoController = AnimationController(
+    // Phase 2: Products fade/scatter (1.5s, starts after fall)
+    _productFadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
+    );
+
+    // Logo zoom-out (2s)
+    _logoController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
     );
     _logoScale = Tween<double>(begin: 3.0, end: 1.0).animate(
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
     );
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: const Interval(0.0, 0.4)),
+      CurvedAnimation(parent: _logoController, curve: const Interval(0.0, 0.3)),
     );
 
     // Text fade + slide
     _textController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1000),
     );
     _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _textController, curve: Curves.easeOut),
@@ -67,16 +80,14 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     // Shimmer
     _shimmerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 2000),
     );
 
     // Gradient
     _gradientController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 4),
     );
-
-    _startAnimations();
   }
 
   void _initProducts() {
@@ -96,32 +107,44 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     for (int i = 0; i < assets.length; i++) {
       _products.add(_FallingProduct(
         asset: assets[i],
-        startX: 0.1 + _random.nextDouble() * 0.8,
-        delay: i * 0.08,
-        rotation: _random.nextDouble() * 0.6 - 0.3,
-        rotationSpeed: _random.nextDouble() * 2 - 1,
-        size: 40.0 + _random.nextDouble() * 25,
+        startX: 0.08 + _random.nextDouble() * 0.84,
+        delay: i * 0.06,
+        rotation: _random.nextDouble() * 0.4 - 0.2,
+        rotationSpeed: _random.nextDouble() * 1.5 - 0.75,
+        size: 80.0 + _random.nextDouble() * 30,
       ));
     }
+  }
+
+  Future<void> _preloadImages() async {
+    for (final p in _products) {
+      await precacheImage(AssetImage(p.asset), context);
+    }
+    setState(() => _imagesLoaded = true);
+    _startAnimations();
   }
 
   Future<void> _startAnimations() async {
     _gradientController.repeat();
 
-    // Start product fall immediately
-    _productController.forward();
+    // Phase 1: Products fall (0 - 3s)
+    _productFallController.forward();
 
-    // Logo starts zooming out after 1s
-    await Future.delayed(const Duration(milliseconds: 1000));
+    // Phase 2: Products scatter/fade (at 3s)
+    await Future.delayed(const Duration(milliseconds: 3000));
+    _productFadeController.forward();
+
+    // Logo starts zooming at 3.2s
+    await Future.delayed(const Duration(milliseconds: 200));
     _logoController.forward();
 
-    // Text appears
-    await Future.delayed(const Duration(milliseconds: 1000));
+    // Text at 4.5s
+    await Future.delayed(const Duration(milliseconds: 1300));
     _textController.forward();
     _shimmerController.repeat();
 
-    // Navigate after all animations
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // Navigate at 6.5s
+    await Future.delayed(const Duration(milliseconds: 2000));
     if (mounted) {
       context.go('/login');
     }
@@ -129,7 +152,8 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
 
   @override
   void dispose() {
-    _productController.dispose();
+    _productFallController.dispose();
+    _productFadeController.dispose();
     _logoController.dispose();
     _textController.dispose();
     _shimmerController.dispose();
@@ -139,6 +163,14 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (!_imagesLoaded) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+    }
+
     return Scaffold(
       body: AnimatedBuilder(
         animation: _gradientController,
@@ -308,12 +340,12 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
 
   Widget _buildLoadingDots() {
     return AnimatedBuilder(
-      animation: _productController,
+      animation: _productFallController,
       builder: (context, child) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {
-            final offset = (_productController.value + i * 0.33) % 1.0;
+            final offset = (_productFallController.value + i * 0.33) % 1.0;
             final opacity = (sin(offset * pi) * 0.5 + 0.5).toDouble();
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -334,57 +366,48 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     return List.generate(_products.length, (index) {
       final product = _products[index];
       return AnimatedBuilder(
-        animation: _productController,
+        animation: Listenable.merge([_productFallController, _productFadeController]),
         builder: (context, child) {
           final screenSize = MediaQuery.of(context).size;
-          final progress = (_productController.value - product.delay).clamp(0.0, 1.0);
 
-          // Fall from top to middle area
-          final fallProgress = Curves.easeIn.transform(progress);
-          final startY = -80.0;
-          final endY = screenSize.height * 0.15 + (index % 3) * 60.0;
-          final y = startY + (endY - startY) * fallProgress;
+          // Fall phase progress (0 -> 1 over 3s)
+          final fallProgress = (_productFallController.value - product.delay).clamp(0.0, 1.0);
 
-          // Horizontal wobble
-          final wobbleX = sin(progress * pi * 3) * 15;
+          // Fade phase progress (0 -> 1 over 1.5s after fall)
+          final fadeProgress = _productFadeController.value;
 
-          // Rotation
-          final rotation = product.rotation + product.rotationSpeed * progress * pi;
+          // Y position: fall from above screen to ~60% of screen height
+          final startY = -100.0;
+          final endY = screenSize.height * 0.55 + (index % 3) * 40.0;
+          final fallCurve = Curves.easeIn.transform(fallProgress);
+          final y = startY + (endY - startY) * fallCurve;
 
-          // Fade out after landing (products scatter)
-          final fadeStart = 0.6;
-          final fadeProgress = ((progress - fadeStart) / (1.0 - fadeStart)).clamp(0.0, 1.0);
-          final opacity = progress < fadeStart ? 1.0 : (1.0 - fadeProgress);
+          // Horizontal wobble during fall
+          final wobbleX = sin(fallProgress * pi * 2.5) * 20;
 
-          // Scale down when fading
-          final scale = progress < fadeStart ? 1.0 : (1.0 - fadeProgress * 0.5);
+          // Rotation during fall
+          final rotation = product.rotation + product.rotationSpeed * fallProgress * pi;
 
-          // Move outward when fading
+          // During fade phase: scatter outward + shrink + fade
           final centerX = screenSize.width / 2;
-          final offsetX = (product.startX * screenSize.width - centerX) * fadeProgress * 2;
+          final moveOut = (product.startX * screenSize.width - centerX) * fadeProgress * 3;
+          final fadeScale = 1.0 - fadeProgress * 0.6;
+          final fadeOpacity = 1.0 - fadeProgress;
 
           return Positioned(
-            left: product.startX * screenSize.width - product.size / 2 + wobbleX + offsetX,
-            top: y,
+            left: product.startX * screenSize.width - product.size / 2 + wobbleX + moveOut,
+            top: y - fadeProgress * 80,
             child: Transform.rotate(
               angle: rotation,
               child: Transform.scale(
-                scale: scale,
+                scale: fadeScale,
                 child: Opacity(
-                  opacity: opacity,
+                  opacity: fallProgress > 0 ? fadeOpacity : 0,
                   child: Image.asset(
                     product.asset,
                     width: product.size,
                     height: product.size,
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: product.size,
-                      height: product.size,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
                   ),
                 ),
               ),
