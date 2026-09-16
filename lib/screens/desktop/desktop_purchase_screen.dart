@@ -44,6 +44,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   bool _isProcessing = false;
   double _supplierDues = 0;
   final _discountController = TextEditingController();
+  final _purchaseSearchController = TextEditingController();
+  String _purchaseSearchQuery = '';
 
   // Use ref.watch in build, this getter is for non-build methods
   PurchaseSession get _activeSession => ref
@@ -966,6 +968,15 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         ),
       ),
       data: (items) {
+        final q = _purchaseSearchQuery.toLowerCase();
+        final filtered = q.isEmpty
+            ? items
+            : items.where((p) {
+                final supplier = (p.supplierName ?? '').toLowerCase();
+                final amount = p.totalAmount.toStringAsFixed(2);
+                final date = AppTimezone.formatDateTime(p.createdAt).toLowerCase();
+                return supplier.contains(q) || amount.contains(q) || date.contains(q);
+              }).toList();
         if (items.isEmpty) {
           return Center(
             child: Column(
@@ -988,7 +999,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 color: const Color(0xFF0F172A),
                 child: Row(
                   children: [
@@ -1010,6 +1021,49 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                       constraints: const BoxConstraints(),
                     ),
                     const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: TextField(
+                          controller: _purchaseSearchController,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          onChanged: (v) => setState(() => _purchaseSearchQuery = v),
+                          decoration: InputDecoration(
+                            hintText: 'Search by supplier, amount...',
+                            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
+                            prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 16),
+                            suffixIcon: _purchaseSearchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, color: Colors.white70, size: 14),
+                                    onPressed: () {
+                                      _purchaseSearchController.clear();
+                                      setState(() => _purchaseSearchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_purchaseSearchQuery.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text('${filtered.length}/${items.length}',
+                          style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                color: const Color(0xFF1E293B),
+                child: Row(
+                  children: [
                     const SizedBox(width: 40, child: Text('#', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600))),
                     const SizedBox(width: 12),
                     const Expanded(child: Text('SUPPLIER', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
@@ -1021,10 +1075,21 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
-                  itemCount: items.length,
+                child: filtered.isEmpty && _purchaseSearchQuery.isNotEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 12),
+                            Text('No purchases match "$_purchaseSearchQuery"', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                  itemCount: filtered.length,
                   itemBuilder: (context, index) {
-                    final purchase = items[index];
+                    final purchase = filtered[index];
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                       decoration: BoxDecoration(
@@ -3045,6 +3110,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     _priceController.dispose();
     _batchController.dispose();
     _discountController.dispose();
+    _purchaseSearchController.dispose();
     _searchFocus.dispose();
     _qtyFocus.dispose();
     _priceFocus.dispose();
