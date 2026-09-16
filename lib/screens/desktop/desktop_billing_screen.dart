@@ -1241,6 +1241,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
   void _retrieveBill() {
     final notifier = ref.read(desktopBillingProvider.notifier);
+    print('[HOLD] _retrieveBill called, heldBills.length=${notifier.heldBills.length}');
     if (notifier.heldBills.isEmpty) return;
     int heldSelectedIndex = 0;
 
@@ -2059,6 +2060,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   Widget build(BuildContext context) {
     final sessions = ref.watch(desktopBillingProvider);
     final notifier = ref.read(desktopBillingProvider.notifier);
+    ref.watch(desktopBillingProvider.notifier.select((n) => n.heldBillVersion));
     final activeSession = sessions[notifier.activeSessionIndex];
     final total = activeSession.total;
 
@@ -2084,33 +2086,32 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   },
                   onEditSale: (sale) {
                     final ntf = ref.read(desktopBillingProvider.notifier);
-                    // Auto-hold if current session has items
+                    bool held = false;
                     if (ntf.activeSession.items.isNotEmpty) {
-                      ntf.autoHoldCurrentSession();
+                      held = ntf.autoHoldCurrentSession();
                       _saveHeldBills();
                     }
+                    ntf.setEditingSale(sale);
+                    for (final item in sale.items) {
+                      ntf.addItem(DesktopCartItem(
+                        productId: item.productId,
+                        name: item.name,
+                        price: item.price,
+                        qty: item.qty,
+                        unit: item.unit,
+                        purchasePrice: item.purchasePrice,
+                        gstRate: item.gstRate,
+                        hsnCode: item.hsnCode,
+                        tamilName: item.tamilName,
+                        discount: item.discount,
+                        unitType: item.unitType,
+                        piecesPerUnit: item.piecesPerUnit,
+                      ));
+                    }
+                    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+                      ntf.setCustomer(sale.customerId, sale.customerName);
+                    }
                     setState(() {
-                      ntf.setEditingSale(sale);
-                      ntf.clearSession(ntf.activeSessionIndex);
-                      for (final item in sale.items) {
-                        ntf.addItem(DesktopCartItem(
-                          productId: item.productId,
-                          name: item.name,
-                          price: item.price,
-                          qty: item.qty,
-                          unit: item.unit,
-                          purchasePrice: item.purchasePrice,
-                          gstRate: item.gstRate,
-                          hsnCode: item.hsnCode,
-                          tamilName: item.tamilName,
-                          discount: item.discount,
-                          unitType: item.unitType,
-                          piecesPerUnit: item.piecesPerUnit,
-                        ));
-                      }
-                      if (sale.customerId != null && sale.customerId!.isNotEmpty) {
-                        ntf.setCustomer(sale.customerId, sale.customerName);
-                      }
                       _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
                       _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
                       _selectedPayment = sale.paymentMethod.isNotEmpty ? sale.paymentMethod : 'cash';
@@ -2129,6 +2130,15 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       _loadCustomerCredit(sale.customerId!);
                     } else {
                       setState(() => _customerCredit = 0);
+                    }
+                    if (held && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Previous sale held — retrieve from F7'),
+                          backgroundColor: Colors.orange,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
                     }
                   },
                 ),

@@ -157,15 +157,24 @@ class BillingSaleTabs extends StatelessWidget {
           ),
           GestureDetector(
             onTap: () {
-              // Auto-hold current session if editing or has items
               final notifierRef = notifier;
+              bool held = false;
               if (editingSale != null || sessions[notifierRef.activeSessionIndex].items.isNotEmpty) {
-                notifierRef.autoHoldCurrentSession();
+                held = notifierRef.autoHoldCurrentSession();
                 onHeldBillsChanged?.call();
               }
               notifierRef.createQuickSale();
               onCartIndexChanged(-1);
               onSearchFocusRequested();
+              if (held) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Previous sale held — retrieve from F7'),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14),

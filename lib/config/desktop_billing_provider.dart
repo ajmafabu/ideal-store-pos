@@ -239,9 +239,12 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   }
 
   final List<HeldBill> heldBills = [];
+  int _heldBillVersion = 0;
+  int get heldBillVersion => _heldBillVersion;
 
   bool autoHoldCurrentSession() {
     final session = state[_activeSessionIndex];
+    print('[HOLD] autoHoldCurrentSession called, items=${session.items.length}');
     if (session.items.isEmpty) return false;
     heldBills.add(HeldBill(
       session: SaleSession(
@@ -257,6 +260,8 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
       time: DateTime.now(),
       editingSale: _editingSale,
     ));
+    _heldBillVersion++;
+    print('[HOLD] Added to heldBills, total=${heldBills.length}, version=$_heldBillVersion');
     clearSession(_activeSessionIndex);
     _editingSale = null;
     state = List.from(state);
@@ -266,6 +271,7 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   bool restoreHeldBill(int index) {
     if (index < 0 || index >= heldBills.length) return false;
     final bill = heldBills.removeAt(index);
+    _heldBillVersion++;
     clearSession(_activeSessionIndex);
     for (final item in bill.session.items) {
       state[_activeSessionIndex].items.add(item);
