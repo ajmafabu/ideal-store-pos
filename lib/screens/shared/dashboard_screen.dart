@@ -389,11 +389,11 @@ class _QuickStats extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final recentSales = ref.watch(recentSalesProvider);
     final expenses = ref.watch(todayExpensesProvider);
     final stockValue = ref.watch(stockValueProvider);
+    final orderCountAsync = ref.watch(todayOrderCountProvider);
 
-    final orderCount = recentSales.value?.length ?? 0;
+    final orderCount = orderCountAsync.value ?? 0;
     final expenseAmt = expenses.value ?? 0;
     final stockAmt = stockValue.value ?? 0;
 

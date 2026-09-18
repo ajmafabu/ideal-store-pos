@@ -11,17 +11,18 @@ class KpiCards extends ConsumerWidget {
     final yesterdaySales = ref.watch(yesterdaySalesProvider);
     final todayExpenses = ref.watch(todayExpensesProvider);
     final stockValue = ref.watch(stockValueProvider);
-    final recentSales = ref.watch(recentSalesProvider);
     final customerDues = ref.watch(totalCustomerDuesProvider);
     final supplierDues = ref.watch(totalSupplierDuesProvider);
     final avgOrderValue = ref.watch(todayAvgOrderValueProvider);
     final todayGst = ref.watch(todayGstTotalProvider);
     final sparkData = ref.watch(weeklySalesSparkProvider);
 
-    final todayOrdersCount = recentSales.when(
+    final todayOrders = ref.watch(todayOrderCountProvider);
+
+    final todayOrdersCount = todayOrders.when(
       loading: () => 0,
       error: (_, __) => 0,
-      data: (sales) => sales.length,
+      data: (count) => count,
     );
 
     final isLoading = todaySales is AsyncLoading || todayExpenses is AsyncLoading || stockValue is AsyncLoading;
