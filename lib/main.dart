@@ -131,7 +131,7 @@ void _scheduleUpdateCheck() {
   if (!Platform.isWindows) return;
 
   void checkWithRetry(int attempt) {
-    Timer(const Duration(seconds: 5), () async {
+    Timer(const Duration(seconds: 15), () async {
       final logFile = File('${Directory.systemTemp.path}\\update_debug.log');
       try {
         // Skip if we just installed an update (avoids update loop)
