@@ -52,8 +52,9 @@ class GstExportService {
           final gstRate = (item['gst_rate'] ?? 0) as num;
           final discount = (item['discount'] ?? 0) as num;
           
-          final taxable = (price * qty - discount).toDouble();
-          final gstAmount = taxable * gstRate / 100;
+          final total = (price * qty - discount).toDouble();
+          final gstAmount = total * gstRate / (100 + gstRate);
+          final taxable = total - gstAmount;
           
           totalTaxable += taxable;
           totalCgst += gstAmount / 2;
@@ -128,10 +129,12 @@ class GstExportService {
           final rateKey = gstRate.toString();
           
           rateWise.putIfAbsent(rateKey, () => {'taxable': 0, 'cgst': 0, 'sgst': 0});
-          final taxable = (price * qty - discount).toDouble();
+          final total = (price * qty - discount).toDouble();
+          final gstAmount = total * gstRate / (100 + gstRate);
+          final taxable = total - gstAmount;
           rateWise[rateKey]!['taxable'] = rateWise[rateKey]!['taxable']! + taxable;
-          rateWise[rateKey]!['cgst'] = rateWise[rateKey]!['cgst']! + (taxable * gstRate / 200);
-          rateWise[rateKey]!['sgst'] = rateWise[rateKey]!['sgst']! + (taxable * gstRate / 200);
+          rateWise[rateKey]!['cgst'] = rateWise[rateKey]!['cgst']! + (gstAmount / 2);
+          rateWise[rateKey]!['sgst'] = rateWise[rateKey]!['sgst']! + (gstAmount / 2);
         }
       }
       

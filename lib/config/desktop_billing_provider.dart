@@ -78,6 +78,12 @@ class DesktopCartItem {
   double get total => (price * qty) - discountAmount;
   double get profit => (price - purchasePrice) * qty;
   int get totalPieces => unitType == 'pieces' ? qty : qty * piecesPerUnit;
+  
+  // GST getters (consistent with CartItem in sale.dart)
+  double get gstAmount => total * gstRate / (100 + gstRate);
+  double get taxableAmount => total - gstAmount;
+  double get cgst => gstAmount / 2;
+  double get sgst => gstAmount / 2;
 }
 
 class DesktopBillingNotifier extends Notifier<List<SaleSession>> {

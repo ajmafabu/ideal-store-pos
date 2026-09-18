@@ -39,6 +39,7 @@ BEGIN
     'total_products', (SELECT COUNT(*) FROM products),
     'total_customers', (SELECT COUNT(*) FROM customers),
     'low_stock_count', (SELECT COUNT(*) FROM products WHERE stock > 0 AND stock <= low_stock_alert AND low_stock_alert > 0 AND has_variants = false),
+    'today_order_count', (SELECT COUNT(*) FROM sales WHERE created_at >= v_today_start AND created_at < v_today_end),
     'top_products', (SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) FROM (
       SELECT item->>'name' AS name, SUM((item->>'total')::NUMERIC) AS total
       FROM sales s, jsonb_array_elements(s.items) AS item

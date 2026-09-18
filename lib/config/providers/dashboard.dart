@@ -124,8 +124,8 @@ final topProductsProvider = FutureProvider<List<Map<String, dynamic>>>((
 
 final todayOrderCountProvider = FutureProvider<int>((ref) async {
   try {
-    final sales = await ref.read(recentSalesProvider.future);
-    return sales.length;
+    final summary = await ref.watch(dashboardSummaryProvider.future);
+    return (summary['today_order_count'] as num?)?.toInt() ?? 0;
   } catch (e) {
     return 0;
   }
@@ -133,13 +133,10 @@ final todayOrderCountProvider = FutureProvider<int>((ref) async {
 
 final todayAvgOrderValueProvider = FutureProvider<double>((ref) async {
   try {
-    final sales = await ref.watch(recentSalesProvider.future);
-    if (sales.isEmpty) return 0;
-    double total = 0;
-    for (final s in sales) {
-      total += (s['final_amount'] as num?)?.toDouble() ?? 0;
-    }
-    return sales.isNotEmpty ? total / sales.length : 0;
+    final summary = await ref.watch(dashboardSummaryProvider.future);
+    final todaySales = (summary['today_sales'] as num?)?.toDouble() ?? 0;
+    final orderCount = (summary['today_order_count'] as num?)?.toInt() ?? 0;
+    return orderCount > 0 ? todaySales / orderCount : 0;
   } catch (e) {
     return 0;
   }

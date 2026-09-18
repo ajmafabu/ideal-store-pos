@@ -1018,7 +1018,6 @@ class CartScreenState extends ConsumerState<CartScreen>
       );
 
       // Calculate GST totals from cart items
-      final totalGst = _cart.fold(0.0, (sum, item) => sum + item.gstAmount);
       final totalCgst = _cart.fold(0.0, (sum, item) => sum + item.cgst);
       final totalSgst = _cart.fold(0.0, (sum, item) => sum + item.sgst);
 
@@ -1052,7 +1051,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                   : 0),
         cgstAmount: totalCgst,
         sgstAmount: totalSgst,
-        igstAmount: totalGst,
+        igstAmount: 0, // Intra-state: CGST+SGST only. IGST=0
       );
 
       final offlineService = ref.read(offlineServiceProvider);

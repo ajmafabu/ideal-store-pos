@@ -186,7 +186,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Record initial backup setup
-PERFORM record_migration('v070', 'cloud_backup_mechanism', 'backup');
+-- Record initial backup setup (skip if record_migration function doesn't exist)
+-- PERFORM record_migration('v070', 'cloud_backup_mechanism', 'backup');
 
 COMMIT;

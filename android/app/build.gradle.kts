@@ -24,8 +24,8 @@ android {
         applicationId = "com.idealstore.pos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 14
+        versionName = "1.0.120"
         multiDexEnabled = true
     }
 

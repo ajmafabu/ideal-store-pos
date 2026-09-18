@@ -11,6 +11,9 @@ import '../../services/return_service.dart';
 import '../../services/damaged_service.dart';
 import '../../services/customer_service.dart';
 import '../../config/providers.dart';
+import 'balance_sheet_screen.dart';
+import 'receivables_aging_screen.dart';
+import 'cash_flow_screen.dart';
 
 class ReportData {
   final double totalSales;
@@ -115,7 +118,56 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   final client = Supabase.instance.client;
   final endExclusive = range.end.add(const Duration(days: 1));
 
-  // Current period data
+  try {
+    // Server-side aggregation via RPC (replaces client-side loops)
+    final res = await client.rpc('get_reports_summary', params: {
+      'p_start': range.start.toUtc().toIso8601String(),
+      'p_end': endExclusive.toUtc().toIso8601String(),
+    });
+
+    if (res != null && (res as List).isNotEmpty) {
+      final row = res.first;
+      
+      // Parse JSONB fields
+      final salesByDayRaw = row['sales_by_day'] as List? ?? [];
+      final topProductsRaw = row['top_products'] as List? ?? [];
+      final salesByCategoryRaw = row['sales_by_category'] as Map<String, dynamic>? ?? {};
+      final expensesByCategoryRaw = row['expenses_by_category'] as Map<String, dynamic>? ?? {};
+      final paymentBreakdownRaw = row['payment_breakdown'] as Map<String, dynamic>? ?? {};
+
+      final salesByDay = salesByDayRaw
+          .map((e) => {'date': e['date']?.toString() ?? '', 'total': (e['total'] as num?)?.toDouble() ?? 0})
+          .toList();
+
+      final topProducts = topProductsRaw
+          .map((e) => {'name': e['name']?.toString() ?? '', 'total': (e['total'] as num?)?.toDouble() ?? 0})
+          .toList();
+
+      final salesByCategory = salesByCategoryRaw.map((k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0));
+      final expensesByCategory = expensesByCategoryRaw.map((k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0));
+      final paymentBreakdown = paymentBreakdownRaw.map((k, v) => MapEntry(k, (v as num?)?.toDouble() ?? 0));
+
+      return ReportData(
+        totalSales: (row['total_sales'] as num?)?.toDouble() ?? 0,
+        totalPurchases: (row['total_purchases'] as num?)?.toDouble() ?? 0,
+        totalExpenses: (row['total_expenses'] as num?)?.toDouble() ?? 0,
+        netProfit: (row['net_profit'] as num?)?.toDouble() ?? 0,
+        salesByDay: salesByDay,
+        topProducts: topProducts,
+        salesByCategory: salesByCategory,
+        expensesByCategory: expensesByCategory,
+        paymentBreakdown: paymentBreakdown,
+        prevMonthSales: (row['prev_month_sales'] as num?)?.toDouble() ?? 0,
+        prevMonthExpenses: (row['prev_month_expenses'] as num?)?.toDouble() ?? 0,
+        prevMonthProfit: (row['prev_month_profit'] as num?)?.toDouble() ?? 0,
+      );
+    }
+  } catch (e) {
+    // Fallback to client-side aggregation if RPC fails
+    print('RPC get_reports_summary failed, falling back to client-side: $e');
+  }
+
+  // Fallback: client-side aggregation (original code)
   final salesResponse = await client
       .from('sales')
       .select()
@@ -670,11 +722,80 @@ class ReportsScreen extends ConsumerWidget {
                   }),
                 ],
                 const SizedBox(height: 20),
+
+                // Navigation to dedicated report screens
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Detailed Reports',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Divider(),
+                        _buildNavigationTile(
+                          context,
+                          icon: Icons.account_balance,
+                          title: 'Balance Sheet',
+                          subtitle: 'Assets, Liabilities & Equity',
+                          color: Colors.blue,
+                          screen: const BalanceSheetScreen(),
+                        ),
+                        _buildNavigationTile(
+                          context,
+                          icon: Icons.people_alt,
+                          title: 'Receivables Aging',
+                          subtitle: 'Customer dues by age bucket',
+                          color: Colors.orange,
+                          screen: const ReceivablesAgingScreen(),
+                        ),
+                        _buildNavigationTile(
+                          context,
+                          icon: Icons.account_balance_wallet,
+                          title: 'Cash Flow Statement',
+                          subtitle: 'Inflows, Outflows & Net Cash',
+                          color: Colors.green,
+                          screen: const CashFlowScreen(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildNavigationTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required Widget screen,
+  }) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.1),
+        child: Icon(icon, color: color),
+      ),
+      title: Text(title),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => screen),
+        );
+      },
     );
   }
 
