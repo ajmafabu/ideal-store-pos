@@ -831,8 +831,8 @@ class OfflineService {
               );
             }
             await removePendingSale(saleId);
-            // Also remove from local cache (the sale now exists in Supabase with its real UUID)
-            await _salesBox.delete(saleId);
+            // Don't delete from local cache yet — bulk refresh below will update it
+            // Deleting here causes the sale to vanish from history until refresh
             print('[SYNC] Sale $saleId synced successfully');
           }().catchError((e) async {
             final msg = 'Failed to sync sale ${sale['id']}: $e';
@@ -847,9 +847,11 @@ class OfflineService {
             );
             if (retryCount >= maxRetries) {
               Logger.error(
-                'Max retries exceeded for sale ${sale["id"]}, removing',
+                'Max retries ($maxRetries) exceeded for sale ${sale["id"]}, keeping for manual retry',
               );
-              await removePendingSale(sale['id'] as String);
+              // Don't delete — keep in pending so user can force-sync later
+              sale['status'] = 'failed';
+              await _pendingBox.put(sale['id'] as String, sale);
             } else {
               await _pendingBox.put(sale['id'] as String, sale);
             }

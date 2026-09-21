@@ -119,11 +119,15 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
   });
   ref.onDispose(() => channel.unsubscribe());
 
-  // Fallback: refresh products every 60s even if Realtime drops
-  final timer = Timer.periodic(const Duration(seconds: 60), (_) {
+  // Fallback: refresh critical providers every 30s even if Realtime drops
+  final timer = Timer.periodic(const Duration(seconds: 30), (_) {
     ProductService.invalidateCache();
     ref.invalidate(productsProvider);
     ref.invalidate(stockValueProvider);
+    ref.invalidate(salesHistoryProvider);
+    ref.invalidate(recentSalesProvider);
+    ref.invalidate(todaySalesProvider);
+    ref.invalidate(monthlyProfitProvider);
   });
   ref.onDispose(() => timer.cancel());
 
