@@ -18,10 +18,11 @@ BEGIN;
 CREATE OR REPLACE FUNCTION get_dashboard_summary()
 RETURNS JSONB AS $$
 DECLARE
-  v_today_start TIMESTAMPTZ := date_trunc('day', NOW());
-  v_today_end TIMESTAMPTZ := date_trunc('day', NOW()) + INTERVAL '1 day';
+  v_now_ist TIMESTAMPTZ := NOW() AT TIME ZONE 'Asia/Kolkata';
+  v_today_start TIMESTAMPTZ := date_trunc('day', v_now_ist);
+  v_today_end TIMESTAMPTZ := date_trunc('day', v_now_ist) + INTERVAL '1 day';
   v_yesterday_start TIMESTAMPTZ := v_today_start - INTERVAL '1 day';
-  v_month_start TIMESTAMPTZ := date_trunc('month', NOW());
+  v_month_start TIMESTAMPTZ := date_trunc('month', v_now_ist);
   v_result JSONB;
 BEGIN
   SELECT jsonb_build_object(
@@ -40,6 +41,7 @@ BEGIN
     'total_customers', (SELECT COUNT(*) FROM customers),
     'low_stock_count', (SELECT COUNT(*) FROM products WHERE stock > 0 AND stock <= low_stock_alert AND low_stock_alert > 0 AND has_variants = false),
     'today_order_count', (SELECT COUNT(*) FROM sales WHERE created_at >= v_today_start AND created_at < v_today_end),
+    'yesterday_order_count', (SELECT COUNT(*) FROM sales WHERE created_at >= v_yesterday_start AND created_at < v_today_start),
     'top_products', (SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) FROM (
       SELECT item->>'name' AS name, SUM((item->>'total')::NUMERIC) AS total
       FROM sales s, jsonb_array_elements(s.items) AS item

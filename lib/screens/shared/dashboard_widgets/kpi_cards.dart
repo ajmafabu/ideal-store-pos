@@ -18,6 +18,7 @@ class KpiCards extends ConsumerWidget {
     final sparkData = ref.watch(weeklySalesSparkProvider);
 
     final todayOrders = ref.watch(todayOrderCountProvider);
+    final yesterdayOrders = ref.watch(yesterdayOrderCountProvider);
 
     final todayOrdersCount = todayOrders.when(
       loading: () => 0,
@@ -98,6 +99,8 @@ class KpiCards extends ConsumerWidget {
                   icon: Icons.receipt_long_rounded,
                   color: const Color(0xFF6366F1),
                   bgColor: const Color(0xFFEEF2FF),
+                  subtitle: _buildOrderTrendText(todayOrders, yesterdayOrders),
+                  subtitleColor: _getOrderTrendColor(todayOrders, yesterdayOrders),
                 ),
               ),
             ],
@@ -226,6 +229,32 @@ class KpiCards extends ConsumerWidget {
   static Color? _getTrendColor(
     AsyncValue<double> today,
     AsyncValue<double> yesterday,
+  ) {
+    final t = today.value ?? 0;
+    final y = yesterday.value ?? 0;
+    if (y == 0) return null;
+    if (t > y) return const Color(0xFF10B981);
+    if (t < y) return const Color(0xFFEF4444);
+    return null;
+  }
+
+  static String? _buildOrderTrendText(
+    AsyncValue<int> today,
+    AsyncValue<int> yesterday,
+  ) {
+    final t = today.value ?? 0;
+    final y = yesterday.value ?? 0;
+    if (y == 0 && t == 0) return null;
+    if (y == 0) return 'New orders today';
+    final diff = ((t - y) / y * 100);
+    if (diff > 0) return '+${diff.toStringAsFixed(0)}% vs yesterday';
+    if (diff < 0) return '${diff.toStringAsFixed(0)}% vs yesterday';
+    return 'Same as yesterday';
+  }
+
+  static Color? _getOrderTrendColor(
+    AsyncValue<int> today,
+    AsyncValue<int> yesterday,
   ) {
     final t = today.value ?? 0;
     final y = yesterday.value ?? 0;

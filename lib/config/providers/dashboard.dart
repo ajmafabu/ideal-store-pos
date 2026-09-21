@@ -131,6 +131,15 @@ final todayOrderCountProvider = FutureProvider<int>((ref) async {
   }
 });
 
+final yesterdayOrderCountProvider = FutureProvider<int>((ref) async {
+  try {
+    final summary = await ref.watch(dashboardSummaryProvider.future);
+    return (summary['yesterday_order_count'] as num?)?.toInt() ?? 0;
+  } catch (e) {
+    return 0;
+  }
+});
+
 final todayAvgOrderValueProvider = FutureProvider<double>((ref) async {
   try {
     final summary = await ref.watch(dashboardSummaryProvider.future);
