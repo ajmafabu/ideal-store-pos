@@ -19,6 +19,14 @@ final todayTransactionsProvider = FutureProvider<List<AccountTransaction>>((
   return service.getTodayTransactions();
 });
 
+/// Today's money in/out, totalled by the database (no row cap, transfers
+/// excluded) (#20).
+final todaySummaryProvider = FutureProvider<Map<String, double>>((ref) async {
+  ref.watch(todayTransactionsProvider); // refresh together with the list
+  final service = ref.watch(accountServiceProvider);
+  return service.getTodaySummary();
+});
+
 final monthlySummaryProvider = FutureProvider<Map<String, double>>((ref) async {
   final service = ref.watch(accountServiceProvider);
   return service.getMonthlySummary();

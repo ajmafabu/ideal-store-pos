@@ -20,6 +20,8 @@ class HiveAdapter {
   static const String pendingWritesBox = 'pending_writes';
   static const String heldBillsBox = 'held_bills';
   static const String pendingAuditBox = 'pending_audit';
+  /// Queue items that failed 5 times: kept for review instead of deleted (#6).
+  static const String deadLetterBox = 'dead_letters';
 
   static HiveAesCipher? _currentCipher;
 

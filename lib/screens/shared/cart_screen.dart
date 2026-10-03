@@ -10,6 +10,8 @@ import '../../models/product.dart';
 import '../../models/customer.dart';
 import '../../config/providers.dart';
 import '../../services/email_service.dart';
+import '../../services/sale_service.dart';
+import '../../utils/payment_methods.dart';
 import '../../widgets/barcode_scanner.dart';
 import '../../utils/invoice_generator.dart';
 import '../../utils/thermal_invoice.dart';
@@ -245,6 +247,9 @@ class CartScreenState extends ConsumerState<CartScreen>
             hsnCode: product.hsnCode,
             tamilName: product.tamilName,
             rateLabel: rateLabel,
+            unitType: product.unitType,
+            piecesPerUnit: product.piecesPerUnit,
+            stockFactor: 1, // sold in the product's own stock unit
           ),
         );
     _productSearchController.clear();
@@ -292,6 +297,9 @@ class CartScreenState extends ConsumerState<CartScreen>
             hsnCode: product.hsnCode,
             tamilName: product.tamilName,
             rateLabel: rateLabel,
+            unitType: product.unitType,
+            piecesPerUnit: product.piecesPerUnit,
+            stockFactor: 1, // sold in the product's own stock unit
           ),
         );
     setState(() {});
@@ -587,7 +595,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                         '$inCart',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -815,6 +823,9 @@ class CartScreenState extends ConsumerState<CartScreen>
         purchasePrice: _effectivePurchasePrice(product),
         gstRate: product.gstRate,
         hsnCode: product.hsnCode,
+        unitType: product.unitType,
+        piecesPerUnit: product.piecesPerUnit,
+        stockFactor: 1,
       ),
     );
     ScaffoldMessenger.of(context).showSnackBar(
@@ -890,7 +901,16 @@ class CartScreenState extends ConsumerState<CartScreen>
   Future<void> _completeSale() async {
     if (_cart.isEmpty || _isProcessing) return;
     setState(() => _isProcessing = true);
+    try {
+      await _completeSaleInner();
+    } finally {
+      // every early return (validation message, cancelled dialog) lands
+      // here, so the checkout button can never stay disabled (#4)
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
 
+  Future<void> _completeSaleInner() async {
     // Check connectivity before attempting sale
     final offlineService = ref.read(offlineServiceProvider);
     final isOnline = await offlineService.isOnline();
@@ -917,6 +937,13 @@ class CartScreenState extends ConsumerState<CartScreen>
         ),
       );
       if (proceed != true) return;
+    }
+
+    if (_total < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Discount is more than the bill total')),
+      );
+      return;
     }
 
     if (_isCredit && _selectedCustomer == null) {
@@ -983,7 +1010,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                   ? "Credit"
                   : _isSplitPayment
                   ? "Split (Cash + UPI)"
-                  : _paymentMethod}',
+                  : PaymentMethods.label(_paymentMethod)}',
             ),
             const SizedBox(height: 8),
             const Text('Confirm?'),
@@ -1002,10 +1029,7 @@ class CartScreenState extends ConsumerState<CartScreen>
       ),
     );
 
-    if (confirm != true || !mounted) {
-      setState(() => _isProcessing = false);
-      return;
-    }
+    if (confirm != true || !mounted) return;
 
     try {
       final auth = ref.read(authServiceProvider);
@@ -1017,71 +1041,54 @@ class CartScreenState extends ConsumerState<CartScreen>
         (sum, item) => sum + item.discountAmount,
       );
 
-      // Calculate GST totals from cart items
-      final totalCgst = _cart.fold(0.0, (sum, item) => sum + item.cgst);
-      final totalSgst = _cart.fold(0.0, (sum, item) => sum + item.sgst);
+      final method = _isCredit
+          ? PaymentMethods.credit
+          : (_isSplitPayment ? PaymentMethods.split : PaymentMethods.normalize(_paymentMethod));
+      final splitCash = double.tryParse(_cashAmountController.text) ?? 0;
+      final splitUpi = double.tryParse(_upiAmountController.text) ?? 0;
+      double cashAmount = 0;
+      double digitalAmount = 0;
+      if (_isCredit) {
+        cashAmount = _amountPaid; // money taken at the counter on a credit bill
+      } else if (_isSplitPayment) {
+        cashAmount = splitCash;
+        digitalAmount = splitUpi;
+      } else if (method == PaymentMethods.cash) {
+        cashAmount = _total;
+      } else {
+        digitalAmount = _total;
+      }
 
-      final sale = Sale(
-        id: '',
+      final draft = Sale(
+        // same id online/offline: a retried sale is never billed twice (#5)
+        id: newDocumentId(),
         items: _cart,
-        totalAmount: _cart.fold(
-          0.0,
-          (sum, item) => sum + (item.price * item.qty),
-        ),
+        totalAmount: _cart.fold(0.0, (sum, item) => sum + item.total),
         discount: _discount,
         totalDiscount: totalItemDiscount,
-        finalAmount: _total,
-        paymentMethod: _isCredit
-            ? 'credit'
-            : (_isSplitPayment ? 'split' : _paymentMethod),
+        finalAmount: _total < 0 ? 0 : _total,
+        paymentMethod: method,
         createdBy: user?.id ?? '',
         createdAt: DateTime.now(),
         customerId: _selectedCustomer?.id,
+        customerName: _selectedCustomer?.name,
         isCredit: _isCredit,
         amountPaid: _isCredit ? _amountPaid : _total,
-        dueAmount: _dueAmount,
-        cashAmount: _isSplitPayment && !_isCredit
-            ? (double.tryParse(_cashAmountController.text) ?? 0)
-            : (_paymentMethod == 'cash' && !_isCredit ? _total : 0),
-        digitalAmount: _isSplitPayment && !_isCredit
-            ? (double.tryParse(_upiAmountController.text) ?? 0)
-            : ((_paymentMethod == 'digital' || _paymentMethod == 'upi') &&
-                      !_isCredit
-                  ? _total
-                  : 0),
-        cgstAmount: totalCgst,
-        sgstAmount: totalSgst,
-        igstAmount: 0, // Intra-state: CGST+SGST only. IGST=0
+        dueAmount: _isCredit ? _dueAmount : 0,
+        cashAmount: cashAmount,
+        digitalAmount: digitalAmount,
+        // GST split is computed by the database from the customer's state
       );
 
-      final offlineService = ref.read(offlineServiceProvider);
       bool savedOffline = false;
-      if (!isOnline) {
+      Sale sale = draft;
+      try {
+        sale = await ref.read(saleServiceProvider).createSale(draft);
+      } on SaleSavedOffline {
         savedOffline = true;
-        final saleJson = sale.toInsertJson();
-        saleJson['id'] = sale.id.isNotEmpty
-            ? sale.id
-            : DateTime.now().millisecondsSinceEpoch.toString();
-        await offlineService.saveSaleOffline(saleJson);
-        // Stock deduction handled by DB trigger on_sale_created when sale syncs
-        ref.invalidate(salesHistoryProvider);
-        ref.invalidate(productsProvider);
-      } else {
-        try {
-          await ref.read(saleServiceProvider).createSale(sale);
-          ref.invalidate(productsProvider);
-        } catch (e) {
-          savedOffline = true;
-          final saleJson = sale.toInsertJson();
-          saleJson['id'] = sale.id.isNotEmpty
-              ? sale.id
-              : DateTime.now().millisecondsSinceEpoch.toString();
-          await offlineService.saveSaleOffline(saleJson);
-          // Stock deduction handled by DB trigger on_sale_created when sale syncs
-          ref.invalidate(salesHistoryProvider);
-          ref.invalidate(productsProvider);
-        }
       }
+      ref.invalidate(salesHistoryProvider);
+      ref.invalidate(productsProvider);
 
       if (mounted) {
         HapticFeedback.heavyImpact();
@@ -1279,7 +1286,7 @@ class CartScreenState extends ConsumerState<CartScreen>
           );
           await thermalService.shareAsTextFile(
             receiptData.toText(),
-            fileName: 'invoice_${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}',
+            fileName: 'invoice_${sale.invoiceLabel}',
           );
         } else if (invoiceAction == 'whatsapp') {
           final profile = ref.read(profileProvider).value;
@@ -1439,7 +1446,7 @@ class CartScreenState extends ConsumerState<CartScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate/send email: $e'),
+            content: Text('Failed to generate/send email: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );

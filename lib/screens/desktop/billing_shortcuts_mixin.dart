@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
   // Abstract methods — the parent screen must implement these
+  void onF1();
   void onF2();
   void onF3();
   void onF4();
@@ -52,6 +53,10 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
     onResetInactivityTimer();
 
     // ── F-KEYS ──
+    if (key == LogicalKeyboardKey.f1) {
+      onF1();
+      return;
+    }
     if (key == LogicalKeyboardKey.f2) {
       onF2();
       return;
@@ -151,7 +156,7 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
       return;
     }
 
-    // ── DELETE / BACKSPACE → delete cart item ──
+    // ── DELETE / BACKSPACE → delete cart item (with Undo) ──
     if (key == LogicalKeyboardKey.delete ||
         key == LogicalKeyboardKey.backspace) {
       if (!hasSearchText &&

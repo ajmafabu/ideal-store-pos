@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
+import '../../utils/error_messages.dart';
 
 // ============================================
 // TRANSFER SHEET
@@ -229,7 +230,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -479,7 +480,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {

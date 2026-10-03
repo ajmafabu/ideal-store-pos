@@ -14,7 +14,9 @@ import '../../config/providers.dart';
 import '../../services/email_service.dart';
 import '../../services/return_service.dart';
 import '../../services/sale_service.dart';
+import '../../utils/error_messages.dart';
 import '../../utils/invoice_generator.dart';
+import '../../utils/payment_methods.dart';
 import '../../utils/thermal_invoice.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../utils/app_timezone.dart';
@@ -178,7 +180,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to share: $e'),
+            content: Text('Failed to share: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -203,8 +205,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Text(
-                '$e',
+              Text('${ErrorMessages.parse(e)}',
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
@@ -742,7 +743,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export failed: $e'),
+            content: Text('Export failed: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -751,21 +752,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
   }
 
   void _editSale(BuildContext context, WidgetRef ref, Sale sale) async {
-    final editedItems = sale.items
-        .map(
-          (item) => CartItem(
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            qty: item.qty,
-            unit: item.unit,
-            purchasePrice: item.purchasePrice,
-            gstRate: item.gstRate,
-            hsnCode: item.hsnCode,
-            discount: item.discount,
-          ),
-        )
-        .toList();
+    // copyWith keeps unit, tier, Tamil name and stock factor (#22)
+    final editedItems = sale.items.map((item) => item.copyWith()).toList();
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -778,7 +766,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     final newTotal = result['total'] as double;
     final reason = (result['reason'] as String?)?.trim() ?? '';
     final billDiscount = sale.discount;
-    final finalAmount = (newTotal - billDiscount).clamp(0.0, double.infinity);
+    final finalAmount = (newTotal - billDiscount + sale.extraCharges).roundToDouble().clamp(0.0, double.infinity);
     final isCredit = sale.isCredit;
     final amountPaid = isCredit
         ? sale.amountPaid.clamp(0.0, finalAmount)
@@ -788,8 +776,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     double cashAmount = sale.cashAmount;
     double digitalAmount = sale.digitalAmount;
     if (!isCredit) {
-      final method = sale.paymentMethod;
-      if (method == 'split') {
+      final method = PaymentMethods.normalize(sale.paymentMethod);
+      if (method == PaymentMethods.split) {
         final oldPaid = (sale.cashAmount + sale.digitalAmount);
         if (oldPaid > 0) {
           cashAmount = finalAmount * (sale.cashAmount / oldPaid);
@@ -798,7 +786,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           cashAmount = finalAmount;
           digitalAmount = 0;
         }
-      } else if (method == 'digital' || method == 'upi' || method == 'bank') {
+      } else if (method == PaymentMethods.upi || method == PaymentMethods.bank) {
         cashAmount = 0;
         digitalAmount = finalAmount;
       } else {
@@ -806,7 +794,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
         digitalAmount = 0;
       }
     } else {
-      cashAmount = 0;
+      // money already taken at the till stays where it went
+      cashAmount = amountPaid;
       digitalAmount = 0;
     }
 
@@ -836,7 +825,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     if (confirm != true || !context.mounted) return;
 
     try {
-      await SaleService().editSaleAtomic(
+      final outcome = await ref.read(saleServiceProvider).editSaleAtomic(
         saleId: sale.id,
         items: newItems,
         totalAmount: newTotal,
@@ -850,6 +839,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
         cashAmount: cashAmount,
         digitalAmount: digitalAmount,
         reason: reason,
+        extraCharges: sale.extraCharges,
+        roundOff: 0,
       );
 
       ref.invalidate(salesHistoryProvider);
@@ -858,16 +849,19 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sale updated'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text(outcome == EditOutcome.saved
+                ? 'Sale updated'
+                : 'No connection — the edit will be applied when you are back online'),
+            backgroundColor: outcome == EditOutcome.saved ? Colors.green : Colors.orange,
           ),
         );
       }
     } catch (e) {
+      // the server refused: nothing changed, say why (#7)
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Edit NOT saved: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -900,7 +894,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -991,7 +985,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate/send email: $e'),
+            content: Text('Failed to generate/send email: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1015,41 +1009,22 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              print('[DELETE-UI] Confirmed delete for sale ${sale.id}');
               try {
                 await ref.read(saleServiceProvider).deleteSale(sale.id);
-                print(
-                  '[DELETE-UI] deleteSale completed, invalidating provider',
-                );
                 ref.invalidate(salesHistoryProvider);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('Sale deleted'),
+                      content: const Text('Sale deleted — stock, returns and cash book reversed'),
                       backgroundColor: Colors.green,
-                      action: SnackBarAction(
-                        label: 'Undo',
-                        textColor: Colors.white,
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Undo not available - create sale manually',
-                              ),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                        },
-                      ),
                     ),
                   );
                 }
               } catch (e) {
-                print('[DELETE-UI] ERROR: $e');
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error: $e'),
+                      content: Text('Error: ${ErrorMessages.parse(e)}'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -1415,17 +1390,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
               final newPrice = double.tryParse(controller.text);
               if (newPrice != null && newPrice > 0) {
                 setState(
-                  () => _items[index] = CartItem(
-                    productId: item.productId,
-                    name: item.name,
-                    price: newPrice,
-                    qty: item.qty,
-                    unit: item.unit,
-                    purchasePrice: item.purchasePrice,
-                    gstRate: item.gstRate,
-                    hsnCode: item.hsnCode,
-                    discount: item.discount,
-                  ),
+                  () => _items[index] = item.copyWith(price: newPrice),
                 );
                 Navigator.pop(ctx);
               }
@@ -1463,17 +1428,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
               final newQty = int.tryParse(controller.text);
               if (newQty != null && newQty > 0) {
                 setState(
-                  () => _items[index] = CartItem(
-                    productId: item.productId,
-                    name: item.name,
-                    price: item.price,
-                    qty: newQty,
-                    unit: item.unit,
-                    purchasePrice: item.purchasePrice,
-                    gstRate: item.gstRate,
-                    hsnCode: item.hsnCode,
-                    discount: item.discount,
-                  ),
+                  () => _items[index] = item.copyWith(qty: newQty),
                 );
                 Navigator.pop(ctx);
               }
@@ -1564,6 +1519,10 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                                 purchasePrice: _effectivePurchasePrice(product),
                                 gstRate: product.gstRate,
                                 hsnCode: product.hsnCode,
+                                tamilName: product.tamilName,
+                                unitType: product.unitType,
+                                piecesPerUnit: product.piecesPerUnit,
+                                stockFactor: 1,
                               ),
                             );
                           }

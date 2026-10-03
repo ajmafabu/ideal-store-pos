@@ -31,7 +31,7 @@ class BillingShortcutsHelp extends StatelessWidget {
     _ShortcutGroup(
       title: 'Cart',
       items: [
-        _Shortcut('Delete / Backspace', 'Remove selected cart item'),
+        _Shortcut('Delete / Backspace', 'Remove selected cart item (Undo appears)'),
         _Shortcut('+ / -', 'Increment / Decrement selected item qty'),
         _Shortcut('F2', 'Edit selected cart item'),
         _Shortcut('Ctrl + Delete', 'Clear entire cart'),
@@ -56,6 +56,7 @@ class BillingShortcutsHelp extends StatelessWidget {
     _ShortcutGroup(
       title: 'Quick Actions',
       items: [
+        _Shortcut('F1', 'Show this shortcut list'),
         _Shortcut('F4', 'Open customer picker'),
         _Shortcut('F6', 'Hold current bill'),
         _Shortcut('F7', 'Retrieve held bill'),

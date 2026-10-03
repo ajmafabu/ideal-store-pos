@@ -2,15 +2,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/purchase_order.dart';
 import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
+import '../utils/payment_methods.dart';
 import 'product_service.dart';
 
 class PurchaseOrderService {
   final SupabaseClient _client;
-  final ProductService _productService;
 
+  // productService kept for call-site compatibility
   PurchaseOrderService({SupabaseClient? client, ProductService? productService})
-    : _client = client ?? Supabase.instance.client,
-      _productService = productService ?? ProductService();
+    : _client = client ?? Supabase.instance.client;
 
   Future<PurchaseOrder> createPurchaseOrder(PurchaseOrder po) async {
     final user = _client.auth.currentUser;
@@ -96,46 +96,27 @@ class PurchaseOrderService {
     }
   }
 
-  Future<void> receiveOrder(String orderId) async {
-    try {
+  /// Receives an order as a real purchase in one database transaction:
+  /// stock, costed batches, cost price, supplier dues and (if paid now) the
+  /// cash/bank payment — and marks the order received only if all of that
+  /// succeeded (#21). [paymentMethod] 'credit' means pay the supplier later.
+  Future<void> receiveOrder(String orderId, {String paymentMethod = 'credit'}) async {
+    final method = PaymentMethods.normalize(paymentMethod);
+    final isCredit = method == PaymentMethods.credit;
+    double paid = 0;
+    if (!isCredit) {
       final po = await getPurchaseOrder(orderId);
       if (po == null) throw Exception('Purchase order not found');
-
-      // Add stock for each item
-      for (final item in po.items) {
-        if (!item.received) {
-          await _productService.addStock(item.productId, item.qty);
-        }
-      }
-
-      // Mark all items as received
-      final updatedItems = po.items
-          .map(
-            (item) => PurchaseOrderItem(
-              productId: item.productId,
-              name: item.name,
-              qty: item.qty,
-              price: item.price,
-              received: true,
-            ),
-          )
-          .toList();
-
-      // Update order status
-      await _client
-          .from('purchase_orders')
-          .update({
-            'status': 'received',
-            'items': updatedItems.map((e) => e.toJson()).toList(),
-            'updated_at': AppTimezone.nowUtc().toIso8601String(),
-          })
-          .eq('id', orderId);
-
-      Logger.info('Purchase order $orderId received, stock updated');
-    } catch (e) {
-      Logger.error('receiveOrder', e);
-      rethrow;
+      paid = po.items.fold<double>(0, (sum, i) => sum + i.price * i.qty);
     }
+    await _client.rpc('receive_purchase_order', params: {
+      'p_order_id': orderId,
+      'p_is_credit': isCredit,
+      'p_amount_paid': paid,
+      'p_payment_method': isCredit ? PaymentMethods.cash : method,
+    });
+    ProductService.invalidateCache();
+    Logger.info('Purchase order $orderId received as a purchase');
   }
 
   Future<void> cancelOrder(String orderId) async {

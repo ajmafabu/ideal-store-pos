@@ -3,7 +3,9 @@ import 'package:uuid/uuid.dart';
 import '../models/damaged_product.dart';
 import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
+import '../utils/network_errors.dart';
 import 'offline_service.dart';
+import 'product_service.dart';
 
 class DamagedService {
   final SupabaseClient _client = Supabase.instance.client;
@@ -12,11 +14,13 @@ class DamagedService {
   DamagedService({OfflineService? offlineService})
     : _offlineService = offlineService ?? OfflineService();
 
+  /// Writes off damaged stock atomically (stock check under lock, FIFO
+  /// batches, cost of the loss). A rejection such as "Insufficient stock" is
+  /// shown to the user; only a network failure is queued, as an operation
+  /// that is replayed through the same RPC (#6).
   Future<DamagedProduct> createDamaged(DamagedProduct damaged) async {
+    final id = const Uuid().v4();
     try {
-      final user = _client.auth.currentUser;
-      final id = const Uuid().v4();
-
       final response = await _client
           .rpc(
             'create_damaged_atomic',
@@ -27,30 +31,24 @@ class DamagedService {
               'p_quantity': damaged.quantity,
               'p_unit_price': damaged.unitPrice,
               'p_reason': damaged.reason,
-              'p_created_by': user?.id,
+              'p_created_by': _client.auth.currentUser?.id,
             },
           )
           .select()
           .single();
-
-      final created = DamagedProduct.fromJson(response);
-
-      return created;
+      ProductService.invalidateCache();
+      return DamagedProduct.fromJson(response);
     } catch (e) {
       Logger.error('createDamaged', e);
-      // Queue for offline — atomic RPC handles inventory + batch on sync
-      final id = const Uuid().v4();
-      await _offlineService.queuePendingWrite({
-        'table': 'damaged_products',
-        'operation': 'insert',
+      if (!isNetworkError(e)) rethrow;
+      await _offlineService.addPendingOperation({
+        'type': 'damaged',
         'data': {
           'id': id,
           'product_id': damaged.productId,
           'product_name': damaged.productName,
           'quantity': damaged.quantity,
-          'unit_price': damaged.unitPrice,
           'reason': damaged.reason,
-          'created_by': _client.auth.currentUser?.id,
         },
       });
       return damaged;

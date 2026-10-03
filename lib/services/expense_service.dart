@@ -1,13 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense.dart';
+import '../models/sale.dart' show isUuid, newDocumentId;
 import '../utils/logger.dart';
+import '../utils/network_errors.dart';
+import '../utils/payment_methods.dart';
 import 'account_service.dart';
 import 'audit_service.dart';
 import 'offline_service.dart';
 
 class ExpenseService {
   final SupabaseClient _client;
-  final AccountService _accountService;
   final OfflineService _offlineService;
 
   ExpenseService({
@@ -15,100 +17,45 @@ class ExpenseService {
     AccountService? accountService,
     OfflineService? offlineService,
   }) : _client = client ?? Supabase.instance.client,
-       _accountService = accountService ?? AccountService(),
        _offlineService = offlineService ?? OfflineService();
 
+  /// Saves an expense. The database posts it to cash or bank according to
+  /// its payment method (#10, #12); a server rejection is thrown, only a
+  /// network failure queues it (with a stable id).
   Future<Expense?> createExpense(
     Expense expense, {
-    String paymentMethod = 'cash',
+    String? paymentMethod,
   }) async {
+    final id = isUuid(expense.id) ? expense.id : newDocumentId();
+    final data = Expense(
+      id: id,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      createdBy: expense.createdBy,
+      createdAt: expense.createdAt,
+      paymentMethod: PaymentMethods.normalize(paymentMethod ?? expense.paymentMethod),
+    ).toInsertJson();
     try {
-      final response = await _client
-          .from('expenses')
-          .insert(expense.toInsertJson())
-          .select()
-          .single();
-
+      final response = await _client.from('expenses').insert(data).select().single();
       final createdExpense = Expense.fromJson(response);
-
-      // Wire to accounts: expense = Money Out
-      try {
-        final accounts = await _accountService.getAccounts();
-        if (accounts.isEmpty) {
-          await _accountService.ensureAccountsExist();
-        }
-        final refreshed = await _accountService.getAccounts();
-        final accountType =
-            paymentMethod == 'upi' ||
-                paymentMethod == 'digital' ||
-                paymentMethod == 'bank'
-            ? 'bank'
-            : 'cash';
-        final account = refreshed.firstWhere(
-          (a) => a.accountType == accountType,
-          orElse: () => refreshed.first,
-        );
-        await _accountService.addTransaction(
-          accountId: account.id,
-          type: 'out',
-          amount: expense.amount,
-          category: 'expense',
-          description: expense.category,
-        );
-        Logger.info(
-          'Account entry: Expense Rs${expense.amount} (${expense.category}) → $accountType',
-        );
-      } catch (e) {
-        Logger.error('Account entry failed for expense', e);
-      }
-
       AuditService().log(
         action: 'create',
         entityType: 'expense',
         entityId: createdExpense.id,
-        newData: expense.toInsertJson(),
+        newData: data,
         description: 'Expense Rs.${expense.amount} (${expense.category})',
       );
-
       return createdExpense;
     } catch (e) {
       Logger.error('createExpense', e);
-      // Queue for offline sync
+      if (!isNetworkError(e)) rethrow;
       await _offlineService.queuePendingWrite({
         'table': 'expenses',
         'operation': 'insert',
-        'data': expense.toInsertJson(),
+        'data': data,
       });
-      // Queue account entry (Money Out) for when we come back online
-      try {
-        final accounts = await _accountService.getAccounts();
-        if (accounts.isNotEmpty) {
-          final accountType =
-              (paymentMethod == 'upi' ||
-                  paymentMethod == 'digital' ||
-                  paymentMethod == 'bank')
-              ? 'bank'
-              : 'cash';
-          final account = accounts.firstWhere(
-            (a) => a.accountType == accountType,
-            orElse: () => accounts.first,
-          );
-          await _accountService.addTransaction(
-            accountId: account.id,
-            type: 'out',
-            amount: expense.amount,
-            category: 'expense',
-            description: expense.category,
-          );
-        }
-      } catch (accountError) {
-        Logger.error(
-          'Account entry also failed for offline expense',
-          accountError,
-        );
-      }
-      Logger.info('Expense queued for offline sync');
-      return expense;
+      return Expense.fromJson({...data, 'id': id});
     }
   }
 
@@ -161,70 +108,38 @@ class ExpenseService {
   }
 
   Future<double> getTotalExpenses() async {
+    double total = 0;
+    var offset = 0;
     try {
-      final response = await _client.from('expenses').select('amount');
-      double total = 0;
-      for (final e in response as List) {
-        total += (e['amount'] as num).toDouble();
+      while (true) {
+        final page = await _client.from('expenses').select('amount').range(offset, offset + 999);
+        for (final e in page as List) {
+          total += (e['amount'] as num?)?.toDouble() ?? 0;
+        }
+        if ((page as List).length < 1000) break;
+        offset += 1000;
       }
-      return total;
     } catch (e) {
-      return 0;
+      Logger.warning('getTotalExpenses: $e');
     }
+    return total;
   }
 
+  /// Deletes an expense; the database reverses its cash-book entry from the
+  /// account it was paid from. Errors are thrown so the screen can say so.
   Future<void> deleteExpense(String id) async {
-    try {
-      final expenseData = await _client
-          .from('expenses')
-          .select('amount, category, payment_method')
-          .eq('id', id)
-          .maybeSingle();
-
-      await _client.from('expenses').delete().eq('id', id);
-
-      AuditService().log(
-        action: 'delete',
-        entityType: 'expense',
-        entityId: id,
-        oldData: expenseData,
-        description: 'Deleted expense: ${expenseData?['category'] ?? id}',
-      );
-
-      if (expenseData != null) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          if (accounts.isNotEmpty) {
-            // Determine correct account to reverse to
-            final paymentMethod =
-                expenseData['payment_method'] as String? ?? 'cash';
-            final accountType =
-                (paymentMethod == 'upi' ||
-                    paymentMethod == 'digital' ||
-                    paymentMethod == 'bank')
-                ? 'bank'
-                : 'cash';
-            final account = accounts.firstWhere(
-              (a) => a.accountType == accountType,
-              orElse: () => accounts.first,
-            );
-            await _accountService.addTransaction(
-              accountId: account.id,
-              type: 'in',
-              amount: (expenseData['amount'] as num?)?.toDouble() ?? 0,
-              category: 'expense_reversal',
-              description: 'Reversed: ${expenseData['category'] ?? 'expense'}',
-            );
-            Logger.info(
-              'Account reversal: Expense Rs${expenseData['amount']} → $accountType',
-            );
-          }
-        } catch (e) {
-          Logger.error('Failed to reverse account entry for expense', e);
-        }
-      }
-    } catch (e) {
-      Logger.error('deleteExpense', e);
-    }
+    final expenseData = await _client
+        .from('expenses')
+        .select('amount, category, payment_method')
+        .eq('id', id)
+        .maybeSingle();
+    await _client.from('expenses').delete().eq('id', id);
+    AuditService().log(
+      action: 'delete',
+      entityType: 'expense',
+      entityId: id,
+      oldData: expenseData,
+      description: 'Deleted expense: ${expenseData?['category'] ?? id}',
+    );
   }
 }

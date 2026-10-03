@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../utils/logger.dart';
+import '../../utils/error_messages.dart';
 
 class PrinterSetupScreen extends StatefulWidget {
   const PrinterSetupScreen({super.key});
@@ -90,7 +91,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connect failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Connect failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }

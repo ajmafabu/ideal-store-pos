@@ -30,6 +30,12 @@ class AccountTransaction {
   final String? description;
   final DateTime createdAt;
 
+  /// Which document posted this entry ('sales', 'purchases', ...), or null
+  /// for manual entries. Set by the database since app 1.1.0.
+  final String? refType;
+  final String? refId;
+  final String? source;
+
   AccountTransaction({
     required this.id,
     required this.accountId,
@@ -38,7 +44,12 @@ class AccountTransaction {
     required this.category,
     this.description,
     required this.createdAt,
+    this.refType,
+    this.refId,
+    this.source,
   });
+
+  bool get isTransfer => category == 'transfer';
 
   factory AccountTransaction.fromJson(Map<String, dynamic> json) {
     return AccountTransaction(
@@ -49,6 +60,52 @@ class AccountTransaction {
       category: json['category'] as String,
       description: json['description'] as String?,
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      refType: json['ref_type'] as String?,
+      refId: json['ref_id'] as String?,
+      source: json['source'] as String?,
+    );
+  }
+}
+
+/// Totals computed by the database over the whole period (no row cap, #20).
+class AccountSummary {
+  final double totalIn;
+  final double totalOut;
+  final double transfersIn;
+  final double transfersOut;
+  final int transactionCount;
+  final Map<String, double> byCategory;
+
+  const AccountSummary({
+    this.totalIn = 0,
+    this.totalOut = 0,
+    this.transfersIn = 0,
+    this.transfersOut = 0,
+    this.transactionCount = 0,
+    this.byCategory = const {},
+  });
+
+  double get net => totalIn - totalOut;
+
+  Map<String, double> toLegacyMap() => {
+        'total_in': totalIn,
+        'total_out': totalOut,
+        'net': net,
+      };
+
+  factory AccountSummary.fromJson(Map<String, dynamic> json) {
+    final cats = <String, double>{};
+    final raw = json['by_category'];
+    if (raw is Map) {
+      raw.forEach((k, v) => cats[k.toString()] = (v as num?)?.toDouble() ?? 0);
+    }
+    return AccountSummary(
+      totalIn: (json['total_in'] as num?)?.toDouble() ?? 0,
+      totalOut: (json['total_out'] as num?)?.toDouble() ?? 0,
+      transfersIn: (json['transfers_in'] as num?)?.toDouble() ?? 0,
+      transfersOut: (json['transfers_out'] as num?)?.toDouble() ?? 0,
+      transactionCount: (json['transaction_count'] as num?)?.toInt() ?? 0,
+      byCategory: cats,
     );
   }
 }

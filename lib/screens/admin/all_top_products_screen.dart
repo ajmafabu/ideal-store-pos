@@ -3,7 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../models/product.dart';
+import '../../models/product.dart';
 
 class AllTopProductsScreen extends StatefulWidget {
   const AllTopProductsScreen({super.key});

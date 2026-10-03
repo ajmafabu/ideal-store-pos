@@ -27,6 +27,7 @@ final syncStatusProvider = StreamProvider<SyncStatus>((ref) async* {
       pendingOps: pendingOps,
       pendingWrites: pendingWrites,
       lastSyncError: offlineService.lastSyncError,
+      needsReview: offlineService.deadLetterCount,
     );
 
     await Future.delayed(const Duration(seconds: 10));
@@ -40,12 +41,16 @@ class SyncStatus {
   final int pendingWrites;
   final String? lastSyncError;
 
+  /// Items the server refused 5 times, kept for review (#6).
+  final int needsReview;
+
   const SyncStatus({
     required this.isConnected,
     required this.pendingSales,
     required this.pendingOps,
     required this.pendingWrites,
     this.lastSyncError,
+    this.needsReview = 0,
   });
 
   int get totalPending => pendingSales + pendingOps + pendingWrites;

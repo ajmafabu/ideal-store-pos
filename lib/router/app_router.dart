@@ -14,8 +14,35 @@ import '../screens/splash/animated_splash_screen.dart';
 import '../config/providers.dart';
 import '../services/version_check_service.dart';
 import '../utils/logger.dart';
+import '../models/profile.dart';
+import '../services/auth_service.dart';
 
 bool _needsUpdate = false;
+
+// The signed-in user's profile, loaded once per login for the role guard.
+Profile? _profileCache;
+String? _profileCacheUser;
+
+Future<Profile?> _profileFor(AuthService auth, String userId) async {
+  if (_profileCache != null && _profileCacheUser == userId) return _profileCache;
+  try {
+    final p = await auth.getCurrentProfile();
+    if (p != null) {
+      _profileCache = p;
+      _profileCacheUser = userId;
+    }
+    return p;
+  } catch (e) {
+    Logger.error('Router profile load', e);
+    return null;
+  }
+}
+
+/// Forget the cached role (after sign-out or a role change).
+void clearRouterProfileCache() {
+  _profileCache = null;
+  _profileCacheUser = null;
+}
 String? _minVersion;
 
 final routerNavigatorKey = GlobalKey<NavigatorState>();
@@ -60,21 +87,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (user == null) {
+        _profileCache = null;
         return path == '/login' ? null : '/login';
       }
 
-      if (path == '/login') {
-        try {
-          final profile = await auth.getCurrentProfile();
-          if (profile != null) {
-            return profile.isAdmin ? '/admin' : '/staff';
-          }
-        } catch (e) {
-          Logger.error('Router redirect', e);
-        }
+      // Role guard (#2): /admin only for active admins, everyone else to
+      // /staff; a deactivated or deleted login is signed out.
+      final profile = await _profileFor(auth, user.id);
+      if (profile == null) {
+        // could not load (offline): keep the user where they are
         return null;
       }
-
+      if (!profile.active) {
+        _profileCache = null;
+        await auth.signOut();
+        return '/login';
+      }
+      final home = profile.isAdmin ? '/admin' : '/staff';
+      if (path == '/login') return home;
+      if (path.startsWith('/admin') && !profile.isAdmin) return '/staff';
       return null;
     },
     routes: [

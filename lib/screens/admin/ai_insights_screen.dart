@@ -6,6 +6,7 @@ import '../../config/providers.dart';
 import '../../models/product_return.dart';
 import '../../models/damaged_product.dart';
 import '../../utils/app_timezone.dart';
+import '../shared/inventory_screen.dart';
 import 'all_low_stock_screen.dart';
 import 'customer_screen.dart';
 import 'returns_screen.dart';
@@ -91,7 +92,7 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
               child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 10),
-            const Text('AI Insights',
+            const Text('Business Insights',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           ],
         ),
@@ -422,14 +423,14 @@ class _SmartAlerts extends ConsumerWidget {
 
     final expired = expiring.value?.where((p) => p.expiryDate?.isBefore(now) ?? false).toList() ?? [];
     if (expired.isNotEmpty) {
-      alerts.add(_Alert('Products Expired', '${expired.length} products have expired and should be removed from shelf', Icons.event_busy_rounded, const Color(0xFFEF4444), () => Navigator.pushNamed(context, '/admin', arguments: 1)));
+      alerts.add(_Alert('Products Expired', '${expired.length} products have expired and should be removed from shelf', Icons.event_busy_rounded, const Color(0xFFEF4444), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InventoryScreen()))));
     }
     final expiringSoon = expiring.value?.where((p) {
       final diff = p.expiryDate?.difference(now).inDays ?? 999;
       return diff >= 0 && diff <= 30;
     }).toList() ?? [];
     if (expiringSoon.isNotEmpty) {
-      alerts.add(_Alert('Expiring Within 30 Days', '${expiringSoon.length} products expiring soon — consider discounts', Icons.schedule_rounded, const Color(0xFFF97316), () => Navigator.pushNamed(context, '/admin', arguments: 1)));
+      alerts.add(_Alert('Expiring Within 30 Days', '${expiringSoon.length} products expiring soon — consider discounts', Icons.schedule_rounded, const Color(0xFFF97316), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InventoryScreen()))));
     }
     final critical = lowStock.value?.where((p) => p.stock > 0 && p.stock <= (p.lowStockAlert ~/ 2).clamp(1, 999)).toList() ?? [];
     if (critical.isNotEmpty) {
@@ -437,7 +438,7 @@ class _SmartAlerts extends ConsumerWidget {
     }
     final missingCost = products.value?.where((p) => p.purchasePrice <= 0).toList() ?? [];
     if (missingCost.isNotEmpty) {
-      alerts.add(_Alert('Missing Cost Price', '${missingCost.length} products have no cost price — profits may be inaccurate', Icons.info_outline_rounded, const Color(0xFF8B5CF6), () => Navigator.pushNamed(context, '/admin', arguments: 1)));
+      alerts.add(_Alert('Missing Cost Price', '${missingCost.length} products have no cost price — profits may be inaccurate', Icons.info_outline_rounded, const Color(0xFF8B5CF6), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InventoryScreen()))));
     }
     final dues = customerDues.value ?? 0;
     if (dues > 10000) {
@@ -1638,7 +1639,7 @@ class _SalesChart extends ConsumerWidget {
                         final idx = v.toInt();
                         if (idx >= 0 && idx < data.length) {
                           final day = data[idx]['day']?.toString().substring(5) ?? '';
-                          return Text(day, style: TextStyle(fontSize: 9, color: Colors.grey.shade500));
+                          return Text(day, style: TextStyle(fontSize: 10, color: Colors.grey.shade500));
                         }
                         return const Text('');
                       })),

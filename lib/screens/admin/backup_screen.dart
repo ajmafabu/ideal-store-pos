@@ -1,86 +1,159 @@
-import 'package:flutter/material.dart';
-import '../../services/backup_service.dart';
+import 'dart:io';
 
-class BackupScreen extends StatefulWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../config/providers.dart';
+import '../../services/backup_service.dart';
+import '../../utils/app_timezone.dart';
+import '../../utils/error_messages.dart';
+
+/// Backup & Restore (#31): there was no way to restore before.
+class BackupScreen extends ConsumerStatefulWidget {
   const BackupScreen({super.key});
 
   @override
-  State<BackupScreen> createState() => _BackupScreenState();
+  ConsumerState<BackupScreen> createState() => _BackupScreenState();
 }
 
-class _BackupScreenState extends State<BackupScreen> {
-  final _backupService = BackupService();
-  bool _loading = false;
+class _BackupScreenState extends ConsumerState<BackupScreen> {
+  final _service = BackupService();
+  bool _busy = false;
+  String? _busyText;
+  List<File> _local = [];
+  List<String> _cloud = [];
+  List<Map<String, dynamic>> _history = [];
 
-  Future<void> _exportJson() async {
-    setState(() => _loading = true);
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
     try {
-      final file = await _backupService.exportJsonBackup();
-      if (file != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Backup saved: ${file.path.split('/').last}'),
-            backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'Share',
-              textColor: Colors.white,
-              onPressed: () => _backupService.shareBackup(),
-            ),
-          ),
-        );
+      final local = await _service.localBackups();
+      List<String> cloud = [];
+      List<Map<String, dynamic>> history = [];
+      try {
+        cloud = await _service.cloudBackups();
+      } catch (_) {}
+      try {
+        history = await _service.getBackupHistory();
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _local = local;
+          _cloud = cloud;
+          _history = history;
+        });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      _snack('Could not list backups: ${ErrorMessages.parse(e)}', error: true);
     }
   }
 
-  Future<void> _shareBackup() async {
-    setState(() => _loading = true);
+  void _snack(String text, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: error ? Colors.red : Colors.green),
+    );
+  }
+
+  Future<void> _run(String text, Future<void> Function() job) async {
+    setState(() {
+      _busy = true;
+      _busyText = text;
+    });
     try {
-      await _backupService.shareBackup();
+      await job();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: $e'), backgroundColor: Colors.red),
-        );
-      }
+      _snack(ErrorMessages.parse(e), error: true);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _busyText = null;
+        });
+      }
     }
   }
 
-  Future<void> _exportSalesCsv() async {
-    setState(() => _loading = true);
-    try {
-      final file = await _backupService.exportSalesCsv();
-      if (file != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sales CSV saved: ${file.path.split('/').last}'),
-            backgroundColor: Colors.green,
-            action: SnackBarAction(
-              label: 'Share',
-              textColor: Colors.white,
-              onPressed: () => _backupService.shareSalesCsv(),
-            ),
+  Future<void> _backup() => _run('Making backup…', () async {
+        final r = await _service.performBackup();
+        if (!r.success) throw Exception(r.error ?? 'Backup failed');
+        _snack(r.cloudPath != null
+            ? 'Backup saved on this device and in the cloud (${r.fileSizeMB})'
+            : 'Backup saved on this device only (${r.fileSizeMB}) — cloud upload failed');
+        await _refresh();
+      });
+
+  /// Restore needs the word RESTORE typed in, because it replaces everything.
+  Future<bool> _confirmRestore(String what) async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Restore this backup?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(what, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              const Text(
+                'ALL current sales, purchases, stock, customers and cash-book entries will be '
+                'replaced by the backup. Make a fresh backup first if you may need today\'s data.\n\n'
+                'Type RESTORE to continue.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'RESTORE'),
+                onChanged: (_) => setD(() {}),
+              ),
+            ],
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: ctrl.text.trim() == 'RESTORE' ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _afterRestore(Map<String, dynamic> counts) async {
+    ref.invalidate(productsProvider);
+    ref.invalidate(salesHistoryProvider);
+    ref.invalidate(accountsProvider);
+    ref.invalidate(dashboardSummaryProvider);
+    final total = counts.values.fold<num>(0, (s, v) => s + (v is num ? v : 0));
+    _snack('Restored $total records');
+    await _refresh();
+  }
+
+  Future<void> _restoreLocal(File f) async {
+    if (!await _confirmRestore(f.path.split(Platform.pathSeparator).last)) return;
+    await _run('Restoring…', () async => _afterRestore(await _service.restoreFromLocal(f)));
+  }
+
+  Future<void> _restoreCloud(String name) async {
+    if (!await _confirmRestore(name)) return;
+    await _run('Restoring…', () async => _afterRestore(await _service.restoreFromCloud(name)));
+  }
+
+  String _when(String? iso) {
+    final t = DateTime.tryParse(iso ?? '');
+    return t == null ? '' : DateFormat('dd MMM yyyy, hh:mm a').format(AppTimezone.toIst(t));
   }
 
   @override
@@ -88,88 +161,97 @@ class _BackupScreenState extends State<BackupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Backup & Restore'),
+        actions: [IconButton(onPressed: _busy ? null : _refresh, icon: const Icon(Icons.refresh))],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Export your data regularly to keep a safe backup. JSON backup contains all your data.',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
+      body: Stack(
+        children: [
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.backup_rounded, color: Colors.blue, size: 32),
+                  title: const Text('Make a backup now'),
+                  subtitle: const Text('All business data → this device + cloud. Logins and PINs are not included.'),
+                  trailing: FilledButton(onPressed: _busy ? null : _backup, child: const Text('Back up')),
                 ),
-                const SizedBox(height: 24),
-                const Text('Full Backup', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.backup_rounded, color: Colors.green),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.share_rounded, color: Colors.green),
+                  title: const Text('Share latest backup file'),
+                  subtitle: const Text('Keep a copy on a pen drive, e-mail or Drive'),
+                  onTap: _busy ? null : () => _run('Sharing…', _service.shareLatestBackup),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.table_view_rounded, color: Colors.teal),
+                  title: const Text('Export all sales (CSV)'),
+                  subtitle: const Text('For your accountant'),
+                  onTap: _busy ? null : () => _run('Exporting…', _service.shareSalesCsv),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Restore from this device', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (_local.isEmpty)
+                const Padding(padding: EdgeInsets.all(8), child: Text('No backups on this device yet.')),
+              for (final f in _local.take(10))
+                ListTile(
+                  leading: const Icon(Icons.description_outlined),
+                  title: Text(f.path.split(Platform.pathSeparator).last),
+                  subtitle: Text('${(f.lengthSync() / 1024).toStringAsFixed(0)} KB'),
+                  trailing: TextButton(onPressed: _busy ? null : () => _restoreLocal(f), child: const Text('Restore')),
+                ),
+              const SizedBox(height: 16),
+              const Text('Restore from cloud', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (_cloud.isEmpty)
+                const Padding(padding: EdgeInsets.all(8), child: Text('No cloud backups found.')),
+              for (final n in _cloud.take(10))
+                ListTile(
+                  leading: const Icon(Icons.cloud_outlined),
+                  title: Text(n),
+                  trailing: TextButton(onPressed: _busy ? null : () => _restoreCloud(n), child: const Text('Restore')),
+                ),
+              if (_history.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text('Backup history', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                for (final h in _history.take(10))
+                  ListTile(
+                    dense: true,
+                    leading: Icon(
+                      h['status'] == 'completed' ? Icons.check_circle : Icons.error_outline,
+                      color: h['status'] == 'completed' ? Colors.green : Colors.red,
                     ),
-                    title: const Text('Export JSON Backup'),
-                    subtitle: const Text('Full data backup (products, sales, customers, etc.)'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _exportJson,
+                    title: Text(_when(h['started_at']?.toString())),
+                    subtitle: Text(h['status'] == 'completed'
+                        ? '${h['file_path'] ?? ''}'
+                        : 'Failed: ${h['error_message'] ?? ''}'),
                   ),
-                ),
-                Card(
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.share_rounded, color: Colors.blue),
-                    ),
-                    title: const Text('Share JSON Backup'),
-                    subtitle: const Text('Export and share backup file'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _shareBackup,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text('Data Exports', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.table_chart_rounded, color: Colors.orange),
-                    ),
-                    title: const Text('Export Sales CSV'),
-                    subtitle: const Text('Export sales data for accounting'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _exportSalesCsv,
-                  ),
-                ),
               ],
+            ],
+          ),
+          if (_busy)
+            Container(
+              color: Colors.black26,
+              child: Center(
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(width: 16),
+                        Text(_busyText ?? 'Working…'),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
+        ],
+      ),
     );
   }
 }

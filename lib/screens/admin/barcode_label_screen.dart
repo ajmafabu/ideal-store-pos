@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../models/product.dart';
 import '../../config/providers.dart';
+import '../../utils/error_messages.dart';
 
 class BarcodeLabelScreen extends ConsumerStatefulWidget {
   const BarcodeLabelScreen({super.key});
@@ -91,7 +92,7 @@ class _BarcodeLabelScreenState extends ConsumerState<BarcodeLabelScreen> {
           Expanded(
             child: productsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
               data: (products) {
                 final filtered = products.where((p) {
                   return p.name.toLowerCase().contains(_searchQuery) ||

@@ -7,6 +7,8 @@ import '../../models/sale.dart';
 import '../../models/product.dart';
 import '../../services/product_service.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/error_messages.dart';
+import '../../utils/payment_methods.dart';
 
 class ProfitDetailsScreen extends ConsumerStatefulWidget {
   final String initialPeriod;
@@ -677,7 +679,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Error: $e'),
+                        content: Text('Error: ${ErrorMessages.parse(e)}'),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -1030,36 +1032,47 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
               item.purchasePrice;
           final newSell =
               double.tryParse(sellingControllers[idx].text) ?? item.price;
-          return CartItem(
-            productId: item.productId,
-            name: item.name,
-            tamilName: item.tamilName,
-            price: newSell,
-            qty: item.qty,
-            unit: item.unit,
-            purchasePrice: newCost,
-            gstRate: item.gstRate,
-            hsnCode: item.hsnCode,
-            discount: item.discount,
-          );
+          return item.copyWith(price: newSell, purchasePrice: newCost);
         }).toList();
+
+        // new selling prices change the bill: recompute it (it used to keep
+        // the old total, so items and total disagreed)
+        final newSubtotal = updatedItems.fold<double>(0, (sum, i) => sum + i.total);
+        final newFinal = (newSubtotal - sale.discount + sale.extraCharges).roundToDouble().clamp(0.0, double.infinity);
+        final paid = sale.isCredit ? sale.amountPaid.clamp(0.0, newFinal) : newFinal;
+        final method = PaymentMethods.normalize(sale.paymentMethod);
+        double cash = sale.cashAmount, digital = sale.digitalAmount;
+        if (!sale.isCredit) {
+          if (method == PaymentMethods.split && (cash + digital) > 0) {
+            cash = newFinal * (sale.cashAmount / (sale.cashAmount + sale.digitalAmount));
+            digital = newFinal - cash;
+          } else if (method == PaymentMethods.upi || method == PaymentMethods.bank) {
+            cash = 0;
+            digital = newFinal;
+          } else {
+            cash = newFinal;
+            digital = 0;
+          }
+        }
 
         await ref
             .read(saleServiceProvider)
             .editSaleAtomic(
               saleId: sale.id,
               items: updatedItems,
-              totalAmount: sale.totalAmount,
+              totalAmount: newSubtotal,
               discount: sale.discount,
-              finalAmount: sale.finalAmount,
+              finalAmount: newFinal,
               customerId: sale.customerId,
               isCredit: sale.isCredit,
-              amountPaid: sale.amountPaid,
-              dueAmount: sale.dueAmount,
+              amountPaid: paid,
+              dueAmount: sale.isCredit ? newFinal - paid : 0,
               paymentMethod: sale.paymentMethod,
-              cashAmount: sale.cashAmount,
-              digitalAmount: sale.digitalAmount,
+              cashAmount: cash,
+              digitalAmount: digital,
               reason: 'Corrected prices from Profit Analysis',
+              extraCharges: sale.extraCharges,
+              roundOff: 0,
             );
 
         if (mounted) {
@@ -1074,7 +1087,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text('Edit NOT saved: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
           );
         }
       }

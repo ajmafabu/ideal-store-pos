@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import '../../utils/validators.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../config/theme_provider.dart';
 import '../../services/thermal_printer_service.dart';
+import '../../utils/error_messages.dart';
 
 class ShopSettingsScreen extends ConsumerStatefulWidget {
   const ShopSettingsScreen({super.key});
@@ -21,6 +24,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
   late TextEditingController _shopAddressCtrl;
   late TextEditingController _shopPhoneCtrl;
   late TextEditingController _irnCtrl;
+  final _stateCtrl = TextEditingController(text: '33');
   bool _loading = false;
   String _printLanguage = 'english';
   bool _autoPrint = false;
@@ -53,6 +57,22 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
     });
     final autoPrint = await thermalService.getAutoPrint();
     if (mounted) setState(() => _autoPrint = autoPrint);
+    // shop_settings is the one place GST exports, the tax split and the
+    // printed invoice read the shop's details from (#23, #29)
+    try {
+      final row = await Supabase.instance.client.from('shop_settings').select().eq('id', 1).maybeSingle();
+      if (row != null && mounted) {
+        setState(() {
+          String? v(String k) => (row[k] as String?)?.trim().isNotEmpty == true ? row[k] as String : null;
+          _stateCtrl.text = v('state_code') ?? _stateCtrl.text;
+          if (_shopNameCtrl.text.isEmpty) _shopNameCtrl.text = v('shop_name') ?? '';
+          if (_gstinCtrl.text.isEmpty) _gstinCtrl.text = v('gstin') ?? '';
+          if (_shopAddressCtrl.text.isEmpty) _shopAddressCtrl.text = v('address') ?? '';
+          if (_shopPhoneCtrl.text.isEmpty) _shopPhoneCtrl.text = v('phone') ?? '';
+          _printLanguage = v('print_language') ?? _printLanguage;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -63,6 +83,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
     _shopAddressCtrl.dispose();
     _shopPhoneCtrl.dispose();
     _irnCtrl.dispose();
+    _stateCtrl.dispose();
     super.dispose();
   }
 
@@ -92,6 +113,16 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
             ? null
             : _shopPhoneCtrl.text.trim(),
       );
+      String? opt(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+      await Supabase.instance.client.from('shop_settings').upsert({
+        'id': 1,
+        'shop_name': opt(_shopNameCtrl),
+        'address': opt(_shopAddressCtrl),
+        'phone': opt(_shopPhoneCtrl),
+        'gstin': opt(_gstinCtrl)?.toUpperCase(),
+        'state_code': opt(_stateCtrl) ?? '33',
+        'print_language': _printLanguage,
+      });
       ref.invalidate(profileProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,7 +136,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -599,6 +630,27 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                       ),
                       maxLength: 15,
                       textCapitalization: TextCapitalization.characters,
+                      validator: Validators.gstin,
+                      onChanged: (v) {
+                        final st = Validators.stateFromGstin(v);
+                        if (st != null) _stateCtrl.text = st;
+                        setState(() {});
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // State code: decides CGST+SGST (same state) vs IGST
+                    TextFormField(
+                      controller: _stateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Shop state code',
+                        helperText: '33 = Tamil Nadu. Sales to another state are charged IGST.',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.map_outlined),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (v) => RegExp(r'^[0-9]{2}$').hasMatch((v ?? '').trim()) ? null : 'Two digits, e.g. 33',
                     ),
 
                     const SizedBox(height: 12),

@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/logger.dart';
 import '../../config/providers.dart';
 import '../../services/factory_reset_service.dart';
+import '../../utils/error_messages.dart';
 
 class FactoryResetScreen extends ConsumerStatefulWidget {
   const FactoryResetScreen({super.key});
@@ -75,7 +76,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
             title: const Text('Final Confirmation'),
             content: const Text(
               'This will permanently delete ALL products, sales, purchases, expenses, '
-              'customers, suppliers, accounts, and staff data.\n\n'
+              'customers, suppliers and the cash book. Logins, staff and shop settings are kept.\n\n'
               'This action CANNOT be undone!',
             ),
             actions: [
@@ -132,7 +133,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -145,7 +146,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear Purchases & Accounts?'),
-        content: const Text('This will delete all purchases, account transactions, and reset account balances to zero.\n\nProducts, sales, and customers will NOT be affected.'),
+        content: const Text('This deletes all purchases, supplier payments and cash-book entries, and resets balances to zero. Current stock is kept as opening stock at its cost price.\n\nProducts, sales and customers are not affected.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
@@ -178,7 +179,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {

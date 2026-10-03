@@ -5,6 +5,7 @@ import '../../models/expense.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/payment_methods.dart';
 import '../../widgets/empty_state.dart';
 
 class ExpenseScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
   final _descriptionController = TextEditingController();
   String _selectedCategory = 'Rent';
   DateTime _selectedDate = DateTime.now();
+  String _paymentMethod = PaymentMethods.cash; // which account pays (#12)
 
   static const _categories = [
     'Rent', 'Salary', 'Electricity', 'Water', 'Internet',
@@ -45,6 +47,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
             Text('Category: $_selectedCategory'),
             Text('Date: ${DateFormat('dd MMM yyyy').format(_selectedDate)}'),
             Text('Amount: ₹${amount.toStringAsFixed(2)}'),
+            Text('Paid from: ${PaymentMethods.label(_paymentMethod)}'),
             if (_descriptionController.text.isNotEmpty)
               Text('Note: ${_descriptionController.text}'),
           ],
@@ -69,10 +72,11 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
         amount: amount,
         createdBy: user?.id ?? '',
         createdAt: _selectedDate,
+        paymentMethod: _paymentMethod,
       );
 
-      // Insert directly to Supabase
-      await ref.read(expenseServiceProvider).createExpense(expense);
+      // the database books it out of cash or bank by the payment method
+      await ref.read(expenseServiceProvider).createExpense(expense, paymentMethod: _paymentMethod);
 
       ref.invalidate(expensesProvider);
       ref.invalidate(accountsProvider);
@@ -192,7 +196,17 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
                       border: OutlineInputBorder(),
                       prefixText: '₹ ',
                     ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 16),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'cash', label: Text('Cash'), icon: Icon(Icons.payments_outlined)),
+                      ButtonSegment(value: 'upi', label: Text('UPI'), icon: Icon(Icons.qr_code)),
+                      ButtonSegment(value: 'bank', label: Text('Bank'), icon: Icon(Icons.account_balance)),
+                    ],
+                    selected: {_paymentMethod},
+                    onSelectionChanged: (v) => setState(() => _paymentMethod = v.first),
                   ),
                   const SizedBox(height: 16),
                   TextField(

@@ -41,23 +41,8 @@ class CartNotifier extends Notifier<List<CartItem>> {
   }
 
   void updateItemPrice(int index, double newPrice) {
-    final item = state[index];
-    state[index] = CartItem(
-      productId: item.productId,
-      name: item.name,
-      price: newPrice,
-      qty: item.qty,
-      unit: item.unit,
-      purchasePrice: item.purchasePrice,
-      gstRate: item.gstRate,
-      hsnCode: item.hsnCode,
-      tamilName: item.tamilName,
-      discount: item.discount,
-      unitType: item.unitType,
-      piecesPerUnit: item.piecesPerUnit,
-      tier: item.tier,
-      rateLabel: item.rateLabel,
-    );
+    // copyWith keeps unit, tier and stock factor
+    state[index] = state[index].copyWith(price: newPrice);
     state = List.from(state);
   }
 

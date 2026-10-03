@@ -1,14 +1,14 @@
-import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/purchase.dart';
+import '../models/sale.dart' show isUuid, newDocumentId;
 import '../utils/logger.dart';
+import '../utils/network_errors.dart';
 import 'product_service.dart';
 import 'account_service.dart';
 import 'offline_service.dart';
 
 class PurchaseService {
   final SupabaseClient _client;
-  final AccountService _accountService;
   final OfflineService _offlineService;
 
   PurchaseService({
@@ -16,148 +16,57 @@ class PurchaseService {
     AccountService? accountService,
     OfflineService? offlineService,
   }) : _client = client ?? Supabase.instance.client,
-       _accountService = accountService ?? AccountService(),
        _offlineService = offlineService ?? OfflineService();
 
+  /// Saves a purchase with ONE insert. The database adds stock, creates
+  /// costed batches (bill discount spread into the landed cost), updates the
+  /// cost price, the supplier's dues and the cash/bank outflow in the same
+  /// transaction (#11). Server rejections are thrown; only a network
+  /// failure queues the purchase (same id, so the replay is idempotent).
   Future<Purchase> createPurchase(Purchase purchase) async {
+    final withId = isUuid(purchase.id) ? purchase : _withId(purchase, newDocumentId());
+    final insertData = withId.toInsertJson();
     try {
-      final insertData = purchase.toInsertJson();
-      final logFile = File('${Directory.systemTemp.path}\\purchase_debug.log');
-      await logFile.writeAsString(
-        '=== createPurchase ===\n'
-        'Time: ${DateTime.now()}\n'
-        'Insert data: $insertData\n',
-      );
-
       final response = await _client
           .from('purchases')
           .insert(insertData)
           .select()
-          .single();
-
-      final purchaseId = response['id'] as String;
-      await logFile.writeAsString(
-        'SUCCESS: id=$purchaseId\n',
-        mode: FileMode.append,
-      );
-
-      // Add stock and inventory batches in parallel (non-fatal — purchase is already saved)
-      final itemFutures = <Future>[];
-      for (final item in purchase.items) {
-        // 1. Increment stock directly — do NOT use addStock() which creates
-        // duplicate batches via reconcile_stock_with_batches.
-        itemFutures.add(
-          _client.rpc('increment_stock', params: {
-            'p_product_id': item.productId,
-            'p_qty': item.qty,
-          }).catchError((e) {
-            Logger.warning('Failed to increment stock: $e');
-          }),
-        );
-
-        // 2. Update product purchase_price to latest purchase price
-        itemFutures.add(
-          _client
-              .from('products')
-              .update({'purchase_price': item.price})
-              .eq('id', item.productId)
-              .then(
-                (_) {},
-                onError: (e) {
-                  Logger.warning('Failed to update purchase_price: $e');
-                },
-              ),
-        );
-
-        // 3. Create the batch record with purchase_id, price, batch_number, expiry_date
-        itemFutures.add(
-          _client
-              .rpc(
-                'add_inventory_batch',
-                params: {
-                  'p_product_id': item.productId,
-                  'p_purchase_id': purchaseId,
-                  'p_quantity': item.qty,
-                  'p_purchase_price': item.price,
-                  'p_batch_number': item.batchNumber,
-                  'p_expiry_date': item.expiryDate
-                      ?.toIso8601String()
-                      .split('T')
-                      .first,
-                },
-              )
-              .catchError((e) {
-                Logger.warning('Failed to add inventory batch: $e');
-              }),
-        );
-      }
-      await Future.wait(itemFutures);
-
-      // Wire to accounts: only if NOT credit
-      if (!purchase.isCredit) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          String accountType;
-          if (purchase.paymentMethod == 'upi' ||
-              purchase.paymentMethod == 'bank') {
-            accountType = 'bank';
-          } else {
-            accountType = 'cash';
-          }
-          final account = accounts.firstWhere(
-            (a) => a.accountType == accountType,
-            orElse: () => accounts.first,
-          );
-          await _accountService.addTransaction(
-            accountId: account.id,
-            type: 'out',
-            amount: purchase.totalAmount,
-            category: 'purchase',
-            description:
-                'Purchase #${purchaseId.length >= 8 ? purchaseId.substring(0, 8) : purchaseId}',
-          );
-          Logger.info(
-            'Account entry: Purchase Rs${purchase.totalAmount} → $accountType',
-          );
-        } catch (e) {
-          Logger.error('Account entry failed for purchase', e);
-        }
-      }
-
+          .single()
+          .timeout(const Duration(seconds: 20), onTimeout: () => throw Exception('Connection timeout'));
+      ProductService.invalidateCache();
       return Purchase.fromJson(response);
-    } catch (e, stack) {
-      final logFile = File('${Directory.systemTemp.path}\\purchase_debug.log');
-      await logFile.writeAsString(
-        'FAILED: $e\n'
-        'Type: ${e.runtimeType}\n'
-        'Stack: $stack\n',
-        mode: FileMode.append,
-      );
-      Logger.warning('Supabase insert failed, saving offline: $e');
-      // Queue for offline sync
-      final insertData = purchase.toInsertJson();
-      // Add id and created_at so Purchase.fromJson() can parse pending data after restart
-      final offlineId = DateTime.now().microsecondsSinceEpoch.toString();
-      insertData['id'] = offlineId;
-      insertData['created_at'] = DateTime.now().toUtc().toIso8601String();
+    } catch (e) {
+      if (isDuplicateKey(e)) {
+        final existing = await _client.from('purchases').select().eq('id', withId.id).single();
+        return Purchase.fromJson(existing);
+      }
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('Purchase could not reach the server, queuing: $e');
       await _offlineService.queuePendingWrite({
         'table': 'purchases',
         'operation': 'insert',
         'data': insertData,
       });
-      // Also cache locally so History tab shows it immediately
-      await _offlineService.addCachedPurchase(insertData);
-      // Queue stock increments for each item
-      for (final item in purchase.items) {
-        await _offlineService.queuePendingWrite({
-          'table': 'products',
-          'operation': 'stock_add',
-          'data': {'product_id': item.productId, 'qty': item.qty},
-        });
-      }
-      return purchase;
+      await _offlineService.addCachedPurchase(Map<String, dynamic>.from(insertData));
+      return withId;
     }
   }
+
+  Purchase _withId(Purchase p, String id) => Purchase(
+    id: id,
+    supplierName: p.supplierName,
+    items: p.items,
+    totalAmount: p.totalAmount,
+    roundOff: p.roundOff,
+    createdBy: p.createdBy,
+    createdAt: p.createdAt,
+    supplierId: p.supplierId,
+    isCredit: p.isCredit,
+    amountPaid: p.amountPaid,
+    dueAmount: p.dueAmount,
+    paymentMethod: p.paymentMethod,
+    dueDate: p.dueDate,
+  );
 
   Future<List<Purchase>> getPurchases({int limit = 100}) async {
     try {
@@ -343,124 +252,63 @@ class PurchaseService {
     }
   }
 
+  /// Deletes a purchase in one database transaction: its stock and batches
+  /// are removed, supplier dues recomputed, and its cash/bank payment (and
+  /// any supplier payments against it) reversed to the right account. The
+  /// database refuses when some of the stock has already been sold (#11).
   Future<void> deletePurchase(String purchaseId) async {
-    try {
-      final purchaseData = await _client
-          .from('purchases')
-          .select('items, is_credit, supplier_id, total_amount')
-          .eq('id', purchaseId)
-          .single();
-
-      final items = purchaseData['items'] as List? ?? [];
-      final isCredit = purchaseData['is_credit'] as bool? ?? false;
-      final supplierId = purchaseData['supplier_id'] as String?;
-      final totalAmount =
-          (purchaseData['total_amount'] as num?)?.toDouble() ?? 0;
-
-      // Delete the purchase record FIRST (fast, critical path)
-      await _client.from('purchases').delete().eq('id', purchaseId);
-      ProductService.invalidateCache();
-
-      // Everything else runs in background (fire-and-forget)
-      // Delete inventory batches
-      _client
-          .from('inventory_batches')
-          .delete()
-          .eq('purchase_id', purchaseId)
-          .catchError(
-            (e) => Logger.warning('Failed to delete inventory batches: $e'),
-          );
-
-      // Decrement stock per item
-      for (final item in items) {
-        final productId = item['product_id'] as String?;
-        final qty = (item['qty'] as num?)?.toInt() ?? 0;
-        if (productId != null && qty > 0) {
-          _client
-              .from('products')
-              .select('stock')
-              .eq('id', productId)
-              .single()
-              .then((current) {
-                final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-                _client
-                    .from('products')
-                    .update({
-                      'stock': currentStock - qty,
-                      'updated_at': DateTime.now().toUtc().toIso8601String(),
-                    })
-                    .eq('id', productId);
-              })
-              .catchError(
-                (e) {
-                  Logger.warning(
-                    'Failed to decrement stock for $productId: $e',
-                  );
-                },
-              );
+    if (!isUuid(purchaseId)) {
+      // never reached the server: just drop it from the queue/cache
+      for (final w in _offlineService.getPendingWrites()) {
+        final data = w['data'];
+        if (w['table'] == 'purchases' && data is Map && data['id'] == purchaseId) {
+          await _offlineService.removePendingWrite(w['id'].toString());
         }
       }
-
-      // Reverse account entry
-      if (!isCredit && totalAmount > 0) {
-        _accountService
-            .getAccounts()
-            .then((accounts) {
-              if (accounts.isNotEmpty) {
-                final account = accounts.firstWhere(
-                  (a) => a.accountType == 'cash',
-                  orElse: () => accounts.first,
-                );
-                _accountService.addTransaction(
-                  accountId: account.id,
-                  type: 'in',
-                  amount: totalAmount,
-                  category: 'purchase_reversal',
-                  description: 'Reversed purchase',
-                );
-              }
-            })
-            .catchError(
-              (e) {
-                Logger.error('Failed to reverse account entry', e);
-              },
-            );
-      }
-
-      // Delete supplier payment
-      if (isCredit && supplierId != null) {
-        _client
-            .from('supplier_payments')
-            .delete()
-            .eq('purchase_id', purchaseId)
-            .catchError(
-              (e) => Logger.warning('Failed to delete supplier payment: $e'),
-            );
-      }
-    } catch (e) {
-      Logger.warning('Delete purchase failed (offline?), queuing: $e');
-      await _offlineService.queuePendingWrite({
-        'table': 'purchases',
-        'operation': 'delete',
-        'data': {'id': purchaseId},
-      });
-      rethrow;
+      await _offlineService.removeCachedPurchase(purchaseId);
+      return;
     }
+    final pending = _offlineService.getPendingWrites().where((w) {
+      final data = w['data'];
+      return w['table'] == 'purchases' && w['operation'] == 'insert' && data is Map && data['id'] == purchaseId;
+    }).toList();
+    if (pending.isNotEmpty) {
+      for (final w in pending) {
+        await _offlineService.removePendingWrite(w['id'].toString());
+      }
+      await _offlineService.removeCachedPurchase(purchaseId);
+      return;
+    }
+    await _client.rpc('delete_purchase_atomic', params: {'p_purchase_id': purchaseId});
+    ProductService.invalidateCache();
+    await _offlineService.removeCachedPurchase(purchaseId);
   }
 
   Future<double> getTotalPurchases() async {
+    double total = 0;
+    var offset = 0;
     try {
-      final response = await _client.from('purchases').select('total_amount');
-      double total = 0;
-      for (final e in response as List) {
-        total += (e['total_amount'] as num).toDouble();
+      while (true) {
+        final page = await _client
+            .from('purchases')
+            .select('total_amount')
+            .range(offset, offset + 999);
+        for (final e in page as List) {
+          total += (e['total_amount'] as num?)?.toDouble() ?? 0;
+        }
+        if ((page as List).length < 1000) break;
+        offset += 1000;
       }
-      return total;
     } catch (e) {
-      return 0;
+      Logger.warning('getTotalPurchases: $e');
     }
+    return total;
   }
 
+  /// Edits a purchase atomically on the server: old stock/batches out, new
+  /// ones in at the new landed cost, cash/bank delta to ONE resolved
+  /// account, supplier dues for old and new supplier (#11, #13). Errors are
+  /// thrown to the caller — never queued as a raw UPDATE (#7).
   Future<void> editPurchaseAtomic({
     required String purchaseId,
     required List<PurchaseItem> items,
@@ -472,78 +320,27 @@ class PurchaseService {
     required double dueAmount,
     required String paymentMethod,
     required String reason,
+    double? roundOff,
   }) async {
-    try {
-      // Fetch original purchase to identify new items
-      List<String> oldProductIds = [];
-      try {
-        final oldPurchase = await _client
-            .from('purchases')
-            .select('items')
-            .eq('id', purchaseId)
-            .single();
-        final oldItems = (oldPurchase['items'] as List?) ?? [];
-        oldProductIds = oldItems
-            .map((e) => e['product_id'] as String)
-            .where((id) => id.isNotEmpty)
-            .toList();
-      } catch (e) {
-        Logger.warning('Could not fetch original purchase items: $e');
-      }
-
-      final addedItems = items
-          .where((item) => !oldProductIds.contains(item.productId))
-          .toList();
-
-      await _client.rpc(
-        'edit_purchase_atomic',
-        params: {
-          'p_purchase_id': purchaseId,
-          'p_items': items.map((item) => item.toJson()).toList(),
-          'p_total_amount': totalAmount,
-          'p_supplier_id': supplierId,
-          'p_supplier_name': supplierName,
-          'p_is_credit': isCredit,
-          'p_amount_paid': amountPaid,
-          'p_due_amount': dueAmount,
-          'p_payment_method': paymentMethod,
-          'p_reason': reason,
-        },
-      );
-
-      // Update purchase_price for newly added products
-      // (RPC handles stock + batches, but not product purchase_price)
-      if (addedItems.isNotEmpty) {
-        final futures = <Future>[];
-        for (final item in addedItems) {
-          futures.add(
-            _client
-                .from('products')
-                .update({'purchase_price': item.price})
-                .eq('id', item.productId)
-                .catchError((e) {
-                  Logger.warning('Failed to update purchase_price: $e');
-                }),
-          );
-        }
-        await Future.wait(futures);
-      }
-    } catch (e) {
-      Logger.warning('Edit purchase failed (offline?), queuing: $e');
-      await _offlineService.queuePendingWrite({
-        'table': 'purchases',
-        'operation': 'update',
-        'data': {
-          'id': purchaseId,
-          'items': items.map((item) => item.toJson()).toList(),
-          'total_amount': totalAmount,
-          'supplier_id': supplierId,
-          'is_credit': isCredit,
-          'amount_paid': amountPaid,
-          'due_amount': dueAmount,
-          'payment_method': paymentMethod,
-        },
-      });
+    if (!isUuid(purchaseId)) {
+      throw Exception('This purchase has not been synced yet. Wait for sync, then edit it.');
     }
+    await _client.rpc(
+      'edit_purchase_atomic',
+      params: {
+        'p_purchase_id': purchaseId,
+        'p_items': items.map((item) => item.toJson()).toList(),
+        'p_total_amount': totalAmount,
+        'p_supplier_id': supplierId,
+        'p_supplier_name': supplierName,
+        'p_is_credit': isCredit,
+        'p_amount_paid': amountPaid,
+        'p_due_amount': dueAmount,
+        'p_payment_method': paymentMethod,
+        'p_reason': reason,
+        'p_round_off': roundOff,
+      },
+    );
+    ProductService.invalidateCache();
   }
 }

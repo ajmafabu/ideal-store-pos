@@ -14,6 +14,8 @@ import '../../config/providers.dart';
 import 'balance_sheet_screen.dart';
 import 'receivables_aging_screen.dart';
 import 'cash_flow_screen.dart';
+import '../../utils/error_messages.dart';
+import '../../utils/logger.dart';
 
 class ReportData {
   final double totalSales;
@@ -164,7 +166,7 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
     }
   } catch (e) {
     // Fallback to client-side aggregation if RPC fails
-    print('RPC get_reports_summary failed, falling back to client-side: $e');
+    Logger.info('RPC get_reports_summary failed, falling back to client-side: $e');
   }
 
   // Fallback: client-side aggregation (original code)
@@ -337,7 +339,7 @@ class ReportsScreen extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(reportDataProvider),
         child: reportAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
           data: (report) => SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(12),
@@ -661,7 +663,7 @@ class ReportsScreen extends ConsumerWidget {
                                       return Text(
                                         report.salesByDay[idx]['date']
                                             as String,
-                                        style: const TextStyle(fontSize: 9),
+                                        style: const TextStyle(fontSize: 10),
                                       );
                                     }
                                     return const Text('');
@@ -1433,7 +1435,7 @@ class _BalanceSheetSection extends ConsumerWidget {
             const Divider(),
             accountsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('Error loading accounts: $e'),
+              error: (e, _) => Text('Error loading accounts: ${ErrorMessages.parse(e)}'),
               data: (accounts) {
                 double cashBalance = 0;
                 double bankBalance = 0;
@@ -1444,7 +1446,7 @@ class _BalanceSheetSection extends ConsumerWidget {
                 return stockValueAsync.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Text('Error: $e'),
+                  error: (e, _) => Text('Error: ${ErrorMessages.parse(e)}'),
                   data: (stockValue) {
                     return FutureBuilder<double>(
                       future: CustomerService().getTotalDebt(),

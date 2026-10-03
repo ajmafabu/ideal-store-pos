@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../utils/error_messages.dart';
 import '../../models/profile.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
@@ -27,7 +27,7 @@ class StaffScreen extends ConsumerWidget {
         onRefresh: () async => ref.invalidate(staffListProvider),
         child: staffAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
         data: (staff) {
           if (staff.isEmpty) {
             return const Center(child: Text('No staff found'));
@@ -106,10 +106,15 @@ class StaffScreen extends ConsumerWidget {
         _editStaff(context, ref, person);
         break;
       case 'toggle':
-        await Supabase.instance.client
-            .from('profiles')
-            .update({'active': !person.active})
-            .eq('id', person.id);
+        try {
+          await ref.read(authServiceProvider).setStaffActive(person.id, !person.active);
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
+            );
+          }
+        }
         if (context.mounted) ref.invalidate(staffListProvider);
         break;
       case 'delete':
@@ -128,7 +133,15 @@ class StaffScreen extends ConsumerWidget {
           ),
         );
         if (confirm == true && context.mounted) {
-          await Supabase.instance.client.from('profiles').delete().eq('id', person.id);
+          try {
+            await ref.read(authServiceProvider).deleteStaff(person.id);
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
+              );
+            }
+          }
           if (context.mounted) ref.invalidate(staffListProvider);
         }
         break;
@@ -142,23 +155,13 @@ class StaffScreen extends ConsumerWidget {
       builder: (ctx) => _StaffForm(
         onSave: (name, email, password, pin) async {
           try {
-            final auth = ref.read(authServiceProvider);
-
-            if (pin.isNotEmpty) {
-              await auth.signUpWithPin(
-                email: email,
-                pin: pin,
-                name: name,
-                role: 'staff',
-              );
-            } else {
-              await auth.signUp(
-                email: email,
-                password: password,
-                name: name,
-                role: 'staff',
-              );
-            }
+            // separate connection: the admin stays signed in (#2)
+            await ref.read(authServiceProvider).createStaffAccount(
+              email: email,
+              name: name,
+              password: password,
+              pin: pin,
+            );
 
             ref.invalidate(staffListProvider);
             if (context.mounted) {
@@ -170,7 +173,7 @@ class StaffScreen extends ConsumerWidget {
           } catch (e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: $e')),
+                SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
               );
             }
           }
@@ -189,13 +192,19 @@ class StaffScreen extends ConsumerWidget {
         isEdit: true,
         onSave: (name, email, password, pin) async {
           try {
-            await Supabase.instance.client
-                .from('profiles')
-                .update({
-                  'name': name,
-                  'pin': pin.isEmpty ? null : PinAuth.hashPin(pin),
-                })
-                .eq('id', person.id);
+            await ref.read(authServiceProvider).renameStaff(person.id, name);
+            // A PIN is part of the staff member's login password, which only
+            // they can change (Change PIN after signing in). Changing just
+            // the stored hash here used to lock them out.
+            final pinChanged = pin.isNotEmpty && (person.pin == null || !PinAuth.verifyPin(pin, person.pin!));
+            if (pinChanged && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Name saved. The PIN can only be changed by the staff member after signing in.'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
 
             ref.invalidate(staffListProvider);
             if (context.mounted) {
@@ -207,7 +216,7 @@ class StaffScreen extends ConsumerWidget {
           } catch (e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: $e')),
+                SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
               );
             }
           }

@@ -1,3 +1,5 @@
+import 'dashboard_widgets/expiring_products_section.dart';
+import 'dashboard_widgets/low_stock_section.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import '../../utils/app_timezone.dart';
 import '../admin/profit_details_screen.dart';
 import '../admin/all_profitable_products_screen.dart';
 import 'dashboard_widgets/greeting_header.dart';
+import '../../utils/error_messages.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -27,6 +30,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _syncing = false;
 
   Future<void> _refreshAll() async {
+    // the root summary: every KPI below derives from it (#18)
+    ref.invalidate(dashboardSummaryProvider);
     ref.invalidate(todaySalesProvider);
     ref.invalidate(yesterdaySalesProvider);
     ref.invalidate(todayExpensesProvider);
@@ -66,7 +71,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sync failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Sync failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -174,21 +179,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     // ── Weekly Chart ──
                     const _WeeklyChart(),
                     const SizedBox(height: 20),
-                    // ── Business Summary ──
-                    const _BusinessSummary(),
-                    const SizedBox(height: 20),
-                    // ── Top Profitable Products ──
-                    const _TopProfitableProducts(),
-                    const SizedBox(height: 32),
+                    // ── Business Summary + profitable products: admin only (#28) ──
+                    const _AdminOnly(child: _BusinessSummary()),
+                    const _AdminOnly(child: _TopProfitableProducts()),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
             ),
+            // ── Stock and expiry alerts (#24) ──
+            const SliverToBoxAdapter(child: LowStockSection()),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            const SliverToBoxAdapter(child: ExpiringProductsSection()),
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
         ),
       ),
     ),
     );
+  }
+}
+
+/// Shows [child] only when the dashboard summary says the user is an admin.
+class _AdminOnly extends ConsumerWidget {
+  final Widget child;
+  const _AdminOnly({required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin = ref.watch(dashboardIsAdminProvider).value ?? false;
+    if (!isAdmin) return const SizedBox.shrink();
+    return Padding(padding: const EdgeInsets.only(bottom: 20), child: child);
   }
 }
 
@@ -208,6 +229,7 @@ class _HeroCards extends ConsumerWidget {
     final todaySales = ref.watch(todaySalesProvider);
     final yesterdaySales = ref.watch(yesterdaySalesProvider);
     final monthlyProfit = ref.watch(monthlyProfitProvider);
+    final isAdmin = ref.watch(dashboardIsAdminProvider).value ?? false;
 
     final sales = todaySales.value ?? 0;
     final yestSales = yesterdaySales.value ?? 0;
@@ -232,18 +254,20 @@ class _HeroCards extends ConsumerWidget {
             decorativeIcon: Icons.show_chart_rounded,
           ),
         ),
-        const SizedBox(width: 12),
+        // Profit: admin only (#28)
+        if (isAdmin) ...[
+          const SizedBox(width: 12),
         // Profit
         Expanded(
           child: GestureDetector(
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const ProfitDetailsScreen()),
+                MaterialPageRoute(builder: (_) => const ProfitDetailsScreen(initialPeriod: 'monthly')),
               );
             },
             child: _HeroCard(
-              title: 'Monthly Profit',
+              title: 'Profit (this month)',
               value: _fmt(profit),
               trend: null,
               gradient: const LinearGradient(
@@ -256,6 +280,7 @@ class _HeroCards extends ConsumerWidget {
             ),
           ),
         ),
+        ],
       ],
     );
   }
@@ -561,7 +586,7 @@ class _WeeklyChart extends ConsumerWidget {
                           children: [
                             Text(
                               total >= 1000 ? '${(total / 1000).toStringAsFixed(0)}K' : total.toStringAsFixed(0),
-                              style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                             ),
                             const SizedBox(height: 4),
                             Container(
@@ -639,9 +664,9 @@ class _BusinessSummary extends ConsumerWidget {
               ),
               child: Column(
                 children: [
-                  _SummaryRow(label: 'Monthly Sales', value: _fmt(sales), color: const Color(0xFF10B981)),
+                  _SummaryRow(label: 'Sales (excl. GST, after returns)', value: _fmt(sales), color: const Color(0xFF10B981)),
                   const Divider(height: 20),
-                  _SummaryRow(label: 'Purchases', value: _fmt(purchases), color: const Color(0xFF3B82F6)),
+                  _SummaryRow(label: 'Cost of goods sold', value: _fmt(purchases), color: const Color(0xFF3B82F6)),
                   const Divider(height: 20),
                   _SummaryRow(label: 'Expenses', value: _fmt(expenses), color: const Color(0xFFF59E0B)),
                   const Divider(height: 20),
@@ -649,7 +674,7 @@ class _BusinessSummary extends ConsumerWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const ProfitDetailsScreen()),
+                        MaterialPageRoute(builder: (_) => const ProfitDetailsScreen(initialPeriod: 'monthly')),
                       );
                     },
                     child: _SummaryRow(

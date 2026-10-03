@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../utils/error_messages.dart';
 import '../../models/product.dart';
 import '../../models/purchase_order.dart';
 import '../../models/supplier.dart';
@@ -490,29 +491,61 @@ class _OrderCard extends StatelessWidget {
                         ),
                         ElevatedButton(
                           onPressed: () async {
-                            final confirm = await showDialog<bool>(
+                            // receiving creates a real purchase: stock with
+                            // cost, supplier due or payment (#21)
+                            final method = await showDialog<String>(
                               context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text('Receive Order?'),
-                                content: const Text(
-                                  'This will add all items to inventory stock.',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, false),
-                                    child: const Text('Cancel'),
+                              builder: (ctx) => SimpleDialog(
+                                title: const Text('Receive order — how was it paid?'),
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+                                    child: Text(
+                                      'Items are added to stock at the order prices and a purchase bill is created.',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
                                   ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text('Receive'),
+                                  for (final m in const [
+                                    ['credit', 'Not paid yet (supplier due)'],
+                                    ['cash', 'Paid in cash'],
+                                    ['upi', 'Paid by UPI'],
+                                    ['bank', 'Paid by bank / cheque'],
+                                  ])
+                                    SimpleDialogOption(
+                                      onPressed: () => Navigator.pop(ctx, m[0]),
+                                      child: Text(m[1]),
+                                    ),
+                                  SimpleDialogOption(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                                   ),
                                 ],
                               ),
                             );
-                            if (confirm == true) {
-                              await PurchaseOrderService().receiveOrder(
-                                order.id,
-                              );
+                            if (method != null) {
+                              try {
+                                await PurchaseOrderService().receiveOrder(
+                                  order.id,
+                                  paymentMethod: method,
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Order received — stock and purchase bill created'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Receive failed: ${ErrorMessages.parse(e)}'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
                               onLoad();
                             }
                           },
@@ -1155,7 +1188,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {

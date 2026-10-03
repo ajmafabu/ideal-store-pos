@@ -59,7 +59,7 @@ class BillingBottomBar extends StatelessWidget {
                   child: Text(
                     selectedTier.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: selectedTier == 'wholesale'
                           ? Colors.orange.shade800

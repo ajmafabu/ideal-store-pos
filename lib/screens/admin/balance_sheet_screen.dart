@@ -99,12 +99,12 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                           icon: Icons.account_balance_wallet,
                           color: Colors.green,
                           items: [
-                            _buildItem('Cash in Hand', _data!['cash_in_hand'] ?? 0),
-                            _buildItem('Bank Balance', _data!['bank_balance'] ?? 0),
-                            _buildItem('Inventory Value', _data!['inventory_value'] ?? 0),
-                            _buildItem('Accounts Receivable', _data!['total_receivables'] ?? 0),
+                            _buildItem('Cash in Hand', _n('cash_in_hand')),
+                            _buildItem('Bank Balance', _n('bank_balance')),
+                            _buildItem('Inventory Value', _n('inventory_value')),
+                            _buildItem('Accounts Receivable', _n('total_receivables')),
                           ],
-                          total: _data!['total_assets'] ?? 0,
+                          total: _n('total_assets'),
                           totalLabel: 'Total Assets',
                         ),
                         const SizedBox(height: 24),
@@ -115,10 +115,10 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                           icon: Icons.credit_card,
                           color: Colors.red,
                           items: [
-                            _buildItem('Accounts Payable', _data!['total_payables'] ?? 0),
-                            _buildItem('Credit Purchase Dues', _data!['credit_purchase_dues'] ?? 0),
+                            _buildItem('Supplier Dues', _n('total_payables')),
+                            _buildItem('GST Payable', _n('gst_payable')),
                           ],
-                          total: _data!['total_liabilities'] ?? 0,
+                          total: _n('total_liabilities'),
                           totalLabel: 'Total Liabilities',
                         ),
                         const SizedBox(height: 24),
@@ -129,10 +129,10 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                           icon: Icons.account_balance,
                           color: Colors.blue,
                           items: [
-                            _buildItem("Owner's Capital", _data!['owner_capital'] ?? 0),
-                            _buildItem('Retained Earnings', _data!['retained_earnings'] ?? 0),
+                            _buildItem("Owner's Capital", _n('owner_capital')),
+                            _buildItem('Retained Earnings', _n('retained_earnings')),
                           ],
-                          total: _data!['total_equity'] ?? 0,
+                          total: _n('total_equity'),
                           totalLabel: 'Total Equity',
                         ),
                         const SizedBox(height: 24),
@@ -145,6 +145,9 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                 ),
     );
   }
+
+  /// Numbers arrive as int or double from the database.
+  double _n(String key) => (_data?[key] as num?)?.toDouble() ?? 0;
 
   Widget _buildBalanceCheck() {
     final isBalanced = _data?['balance_check'] ?? false;
@@ -174,7 +177,9 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Assets = Liabilities + Equity',
+                    isBalanced
+                        ? 'Assets = Liabilities + Equity'
+                        : 'Difference: Rs${_n('difference').toStringAsFixed(2)} — usually an opening balance that was never entered',
                     style: TextStyle(
                       fontSize: 12,
                       color: isBalanced ? Colors.green.shade600 : Colors.red.shade600,

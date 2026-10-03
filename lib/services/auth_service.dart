@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/supabase_config.dart';
 import '../models/profile.dart';
 import '../utils/pin_auth.dart';
 import '../utils/logger.dart';
@@ -43,7 +44,8 @@ class AuthService {
     await _client.auth.signUp(
       email: email,
       password: password,
-      data: {'name': name, 'role': role},
+      // role is decided by the database, never by signup data (#2)
+      data: {'name': name},
     );
 
     // Store PIN hash if provided
@@ -79,7 +81,7 @@ class AuthService {
     await _client.auth.signUp(
       email: email,
       password: derivedPassword,
-      data: {'name': name, 'role': role},
+      data: {'name': name},
     );
 
     // Store PIN hash with retry
@@ -112,11 +114,86 @@ class AuthService {
       throw Exception('Connection timed out. Check your internet and try again.');
     });
 
+    await _ensureActive();
     AuditService().log(
       action: 'sign_in',
       entityType: 'auth',
       description: 'Signed in with password: $email',
     );
+  }
+
+  /// A deactivated or deleted staff login is signed straight out (#2).
+  Future<void> _ensureActive() async {
+    final profile = await getCurrentProfile();
+    if (profile == null || !profile.active) {
+      await _client.auth.signOut();
+      throw Exception(profile == null
+          ? 'This login has no staff profile. Ask the shop admin to add you.'
+          : 'Your account is not active. Ask the shop admin to activate it.');
+    }
+  }
+
+  /// Creates a staff login WITHOUT touching the admin's own session: the
+  /// signup runs on a separate, non-persisted client (the old code signed
+  /// the admin out and into the new account). The new account is then
+  /// activated as staff by the admin through `admin_set_staff` (#2).
+  Future<void> createStaffAccount({
+    required String email,
+    required String name,
+    String? password,
+    String? pin,
+  }) async {
+    final usePin = pin != null && pin.isNotEmpty;
+    final pass = usePin ? PinAuth.derivePassword(email, pin) : (password ?? '');
+    if (pass.length < 6) throw Exception('Password must be at least 6 characters');
+    final temp = SupabaseClient(
+      SupabaseConfig.supabaseUrl,
+      SupabaseConfig.supabaseAnonKey,
+      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    );
+    try {
+      final res = await temp.auth.signUp(email: email, password: pass, data: {'name': name});
+      final newId = res.user?.id;
+      if (newId == null) throw Exception('Could not create the login. Is this e-mail already used?');
+      // the profile row is created by the signup trigger; retry briefly
+      Object? lastError;
+      for (int i = 0; i < 10; i++) {
+        try {
+          await _client.rpc('admin_set_staff', params: {
+            'p_user_id': newId,
+            'p_name': name,
+            'p_role': 'staff',
+            'p_active': true,
+            'p_pin': usePin ? PinAuth.hashPin(pin) : null,
+          });
+          lastError = null;
+          break;
+        } catch (e) {
+          lastError = e;
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      }
+      if (lastError != null) throw lastError;
+    } finally {
+      try {
+        await temp.auth.signOut();
+      } catch (_) {}
+      await temp.dispose();
+    }
+  }
+
+  Future<void> setStaffActive(String userId, bool active) async {
+    await _client.rpc('admin_set_staff', params: {'p_user_id': userId, 'p_active': active});
+  }
+
+  Future<void> renameStaff(String userId, String name) async {
+    await _client.rpc('admin_set_staff', params: {'p_user_id': userId, 'p_name': name});
+  }
+
+  /// Removes the staff member's profile and, where the database allows it,
+  /// the login itself.
+  Future<void> deleteStaff(String userId) async {
+    await _client.rpc('admin_delete_staff', params: {'p_user_id': userId});
   }
 
   /// Sign in with email + PIN (derives strong password from PIN)
@@ -160,6 +237,7 @@ class AuthService {
         if (e.toString().contains('Invalid PIN')) rethrow;
         Logger.warning('PIN verification skipped due to error: $e');
       }
+      await _ensureActive();
     }
   }
 

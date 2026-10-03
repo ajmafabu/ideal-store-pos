@@ -58,7 +58,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load sales stats: $e'), backgroundColor: Colors.orange),
+          SnackBar(content: Text('Failed to load sales stats: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.orange),
         );
       }
     }
@@ -69,7 +69,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     setState(() => _categories = categories);
   }
 
+  /// Product and stock changes are admin-only (the database enforces it
+  /// too); staff get a clear message instead of a failed save (#28).
+  bool _canEdit() {
+    final isAdmin = ref.read(profileProvider).value?.isAdmin ?? false;
+    if (!isAdmin && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Only the shop admin can change products or stock.')),
+      );
+    }
+    return isAdmin;
+  }
+
   void _openAddProduct({String? barcode}) {
+    if (!_canEdit()) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ProductFormScreen(barcode: barcode)),
@@ -80,6 +93,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   void _openEditProduct(Product product) {
+    if (!_canEdit()) return;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ProductFormScreen(product: product)),
@@ -238,6 +252,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   void _showStockDialog(Product product) {
+    if (!_canEdit()) return;
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -270,11 +285,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             onPressed: () async {
               final qty = int.tryParse(controller.text) ?? 0;
               if (qty > 0) {
-                await ref
-                    .read(productServiceProvider)
-                    .addStock(product.id, qty);
-                ref.invalidate(productsProvider);
-                if (ctx.mounted) Navigator.pop(ctx);
+                try {
+                  final left = await ref
+                      .read(productServiceProvider)
+                      .addStock(product.id, qty);
+                  ref.invalidate(productsProvider);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Stock In done — now ${left.toStringAsFixed(left % 1 == 0 ? 0 : 2)} in stock')),
+                    );
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Stock In failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
               }
             },
             child: const Text(
@@ -286,11 +314,24 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             onPressed: () async {
               final qty = int.tryParse(controller.text) ?? 0;
               if (qty > 0 && qty <= product.stock) {
-                await ref
-                    .read(productServiceProvider)
-                    .deductStock(product.id, qty);
-                ref.invalidate(productsProvider);
-                if (ctx.mounted) Navigator.pop(ctx);
+                try {
+                  final left = await ref
+                      .read(productServiceProvider)
+                      .deductStock(product.id, qty);
+                  ref.invalidate(productsProvider);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Stock Out done — now ${left.toStringAsFixed(left % 1 == 0 ? 0 : 2)} in stock')),
+                    );
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Stock Out failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
               }
             },
             child: const Text(
@@ -304,6 +345,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   }
 
   void _showQuickStockSheet() {
+    if (!_canEdit()) return;
     List<Product> allProducts = [];
     List<Product> filteredProducts = [];
     String searchQuery = '';
@@ -1057,7 +1099,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     'EXPIRED',
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 9,
+                                      fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1077,7 +1119,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     '${product.daysUntilExpiry}d left',
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 9,
+                                      fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1363,7 +1405,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       );
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('PDF export failed: $e'),
+        content: Text('PDF export failed: ${ErrorMessages.parse(e)}'),
         backgroundColor: Colors.red,
       ));
     }
@@ -1407,7 +1449,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         'EXP',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 8,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1426,7 +1468,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         '${product.daysUntilExpiry}d',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 8,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1468,7 +1510,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 Text(
                   'Exp: ${product.expiryDate!.day}/${product.expiryDate!.month}/${product.expiryDate!.year}',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 10,
                     color: product.isExpired ? Colors.red : Colors.grey,
                   ),
                 ),

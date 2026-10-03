@@ -17,6 +17,7 @@ import 'purchase_screen.dart';
 import 'expense_screen.dart';
 import 'reports_screen.dart';
 import 'staff_screen.dart';
+import 'sync_issues_screen.dart';
 import 'customer_screen.dart';
 import 'supplier_screen.dart';
 import 'accounts_screen.dart';
@@ -34,6 +35,7 @@ import 'ai_insights_screen.dart';
 import 'backup_screen.dart';
 import 'gst_filing_screen.dart';
 import 'slow_moving_screen.dart';
+import '../../utils/error_messages.dart';
 
 class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key});
@@ -84,7 +86,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(currentTabProvider);
 
-    if (Platform.isWindows) {
+    // layout follows the window width (#26): sidebar on Windows and on any
+    // screen at least 1100 px wide (tablets in landscape), phone layout below
+    if (Platform.isWindows || MediaQuery.sizeOf(context).width >= 1100) {
       return _buildDesktopLayout(currentIndex);
     }
 
@@ -151,10 +155,18 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         _SidebarItem(icon: Icons.shopping_cart_rounded, label: 'Purchases', index: 3, currentIndex: currentIndex, onTap: _switchTab),
 
                         const _SidebarSection('MANAGEMENT'),
+                        _SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Accounts', index: 9, currentIndex: currentIndex, onTap: _switchTab),
                         _SidebarItem(icon: Icons.people_alt_rounded, label: 'Customers', index: 7, currentIndex: currentIndex, onTap: _switchTab),
                         _SidebarItem(icon: Icons.business_rounded, label: 'Suppliers', index: 8, currentIndex: currentIndex, onTap: _switchTab),
                         _SidebarItem(icon: Icons.people_rounded, label: 'Staff', index: 6, currentIndex: currentIndex, onTap: _switchTab),
                         _SidebarItem(icon: Icons.money_off_rounded, label: 'Expenses', index: 4, currentIndex: currentIndex, onTap: _switchTab),
+
+                        const _SidebarSection('REPORTS'),
+                        _SidebarItem(icon: Icons.receipt_long_rounded, label: 'Reports', index: 5, currentIndex: currentIndex, onTap: _switchTab),
+                        _SidebarItem(icon: Icons.lock_clock_rounded, label: 'Daily Report', index: -15, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyReportScreen()))),
+                        _SidebarItem(icon: Icons.receipt_rounded, label: 'GST Reports', index: -16, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const GSTReportScreen()))),
+                        _SidebarItem(icon: Icons.analytics_rounded, label: 'Analytics', index: -17, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalyticsScreen()))),
+                        _SidebarItem(icon: Icons.insights_rounded, label: 'Business Insights', index: -18, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiInsightsScreen()))),
 
                         const _SidebarSection('TOOLS'),
                         _SidebarItem(icon: Icons.replay_rounded, label: 'Returns', index: -5, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReturnsScreen()))),
@@ -165,6 +177,25 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         _SidebarItem(icon: Icons.print_rounded, label: 'Printer Setup', index: -9, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSetupScreen()))),
                         _SidebarItem(icon: Icons.backup_rounded, label: 'Backup & Restore', index: -12, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()))),
                         _SidebarItem(icon: Icons.receipt_long_rounded, label: 'GST Filing Export', index: -13, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const GstFilingScreen()))),
+
+                        const _SidebarSection('ACCOUNT'),
+                        _SidebarItem(icon: Icons.system_update_rounded, label: 'Check for Updates', index: -19, currentIndex: currentIndex, onTap: (_) => _checkForUpdates()),
+                        _SidebarItem(icon: Icons.lock_outline_rounded, label: 'Change Password', index: -20, currentIndex: currentIndex, onTap: (_) => _showChangePassword()),
+                        _SidebarItem(icon: Icons.delete_forever_rounded, label: 'Factory Reset', index: -21, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const FactoryResetScreen()))),
+                        _SidebarItem(
+                          icon: Icons.brightness_6_rounded,
+                          label: 'Theme: ${switch (ref.watch(themeProvider)) { ThemeMode.light => 'Light', ThemeMode.dark => 'Dark', _ => 'System' }}',
+                          index: -22,
+                          currentIndex: currentIndex,
+                          onTap: (_) {
+                            final next = switch (ref.read(themeProvider)) {
+                              ThemeMode.light => ThemeMode.dark,
+                              ThemeMode.dark => ThemeMode.system,
+                              _ => ThemeMode.light,
+                            };
+                            ref.read(themeProvider.notifier).setThemeMode(next);
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -177,7 +208,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                       final syncStatus = ref.watch(syncStatusProvider);
                       return syncStatus.when(
                         data: (status) {
-                          if (!status.hasPending && status.isConnected && status.lastSyncError == null) return const SizedBox.shrink();
+                          if (!status.hasPending && status.isConnected && status.lastSyncError == null && status.needsReview == 0) {
+                            return const SizedBox.shrink();
+                          }
                           return Container(
                             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -242,6 +275,14 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                               '${status.totalPending} pending',
                                               style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.5)),
                                             ),
+                                          if (status.needsReview > 0)
+                                            GestureDetector(
+                                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncIssuesScreen())),
+                                              child: Text(
+                                                '${status.needsReview} need attention ›',
+                                                style: const TextStyle(fontSize: 11, color: Colors.redAccent, decoration: TextDecoration.underline),
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
@@ -302,7 +343,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                     status.lastSyncError!.length > 100
                                         ? '${status.lastSyncError!.substring(0, 100)}...'
                                         : status.lastSyncError!,
-                                    style: TextStyle(fontSize: 9, color: Colors.red.withValues(alpha: 0.7)),
+                                    style: TextStyle(fontSize: 10, color: Colors.red.withValues(alpha: 0.7)),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -641,7 +682,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                       _MoreMenuSection('REPORTS'),
                       _MoreMenuItem(
                         icon: Icons.auto_awesome,
-                        title: 'AI Insights',
+                        title: 'Business Insights',
                         color: const Color(0xFF667eea),
                         onTap: () {
                           Navigator.pop(ctx);
@@ -771,60 +812,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         icon: Icons.system_update_rounded,
                         title: 'Check for Updates',
                         color: const Color(0xFF2196F3),
-                        onTap: () async {
+                        onTap: () {
                           Navigator.pop(ctx);
-                          try {
-                            final service = UpdateService();
-                            final update = await service.checkForUpdate();
-                            if (!context.mounted) return;
-
-                            if (update == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('You are on the latest version')),
-                              );
-                              return;
-                            }
-
-                            final shouldUpdate = await showDialog<bool>(
-                              context: context,
-                              builder: (dctx) => AlertDialog(
-                                title: Row(
-                                  children: [
-                                    const Icon(Icons.system_update, color: Colors.blue),
-                                    const SizedBox(width: 8),
-                                    const Text('Update Available'),
-                                  ],
-                                ),
-                                content: Text(
-                                  'Version ${update.latestVersion} is available.\n\nYou are on version ${update.currentVersion}',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(dctx, false),
-                                    child: const Text('Later'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.pop(dctx, true),
-                                    child: const Text('Update Now'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (shouldUpdate == true && context.mounted) {
-                              showDialog(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (dctx) => _UpdateProgressDialog(update: update),
-                              );
-                            }
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Update check failed: $e')),
-                              );
-                            }
-                          }
+                          _checkForUpdates();
                         },
                       ),
                       _ThemeMenuItem(),
@@ -914,6 +904,61 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
         ),
       ),
     );
+  }
+
+  Future<void> _checkForUpdates() async {
+    try {
+      final service = UpdateService();
+      final update = await service.checkForUpdate();
+      if (!context.mounted) return;
+
+      if (update == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You are on the latest version')),
+        );
+        return;
+      }
+
+      final shouldUpdate = await showDialog<bool>(
+        context: context,
+        builder: (dctx) => AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.system_update, color: Colors.blue),
+              const SizedBox(width: 8),
+              const Text('Update Available'),
+            ],
+          ),
+          content: Text(
+            'Version ${update.latestVersion} is available.\n\nYou are on version ${update.currentVersion}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dctx, true),
+              child: const Text('Update Now'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldUpdate == true && context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dctx) => _UpdateProgressDialog(update: update),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Update check failed: ${ErrorMessages.parse(e)}')),
+        );
+      }
+    }
   }
 
   void _showChangePassword() {
@@ -1158,7 +1203,7 @@ class _SidebarItem extends StatelessWidget {
                       color: const Color(0xFF10B981),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Text('POS', style: TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: const Text('POS', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
               ],
             ),
@@ -1325,7 +1370,7 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
         setState(() => _status = 'Failed: $e');
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e')),
+          SnackBar(content: Text('Update failed: ${ErrorMessages.parse(e)}')),
         );
       }
     }

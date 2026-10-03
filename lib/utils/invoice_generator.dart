@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/sale.dart';
+import 'payment_methods.dart';
 import '../utils/app_timezone.dart';
 
 class InvoiceGenerator {
@@ -34,8 +35,9 @@ class InvoiceGenerator {
     return _tamilFont!;
   }
 
+  /// The database invoice number when synced, else a short id (#19).
   static String _saleId(Sale sale) {
-    if (sale.id.isNotEmpty) return sale.id.length >= 8 ? sale.id.substring(0, 8).toUpperCase() : sale.id.toUpperCase();
+    if (sale.invoiceNo != null || sale.id.isNotEmpty) return sale.invoiceLabel;
     return sale.createdAt.millisecondsSinceEpoch.toRadixString(16).substring(0, 8).toUpperCase();
   }
 
@@ -54,7 +56,12 @@ class InvoiceGenerator {
     final fb = fontBold ?? pw.Font.timesBold();
     final tFont = tamilFont ?? f;
     final totalItemDiscount = sale.items.fold(0.0, (sum, item) => sum + item.discountAmount);
-    final totalGst = sale.items.fold(0.0, (sum, item) => sum + item.gstAmount);
+    // gross = before line discounts; sale.totalAmount is already net of them
+    final grossSubtotal = sale.items.fold(0.0, (sum, item) => sum + item.price * item.qty);
+    // GST is included in the prices; prefer the split the database stored
+    final totalGst = sale.taxTotal > 0
+        ? sale.taxTotal
+        : sale.items.fold(0.0, (sum, item) => sum + item.gstAmount);
 
     List<pw.Widget> lines = [];
 
@@ -120,7 +127,7 @@ class InvoiceGenerator {
     lines.add(pw.Center(child: pw.Text(_sep(), style: pw.TextStyle(font: f, fontSize: 7))));
 
     // ── Totals ──
-    lines.add(pw.Text(_totalRow('Subtotal:', _price(sale.totalAmount)), style: pw.TextStyle(font: f, fontSize: 8)));
+    lines.add(pw.Text(_totalRow('Subtotal:', _price(grossSubtotal)), style: pw.TextStyle(font: f, fontSize: 8)));
 
     if (totalItemDiscount > 0) {
       lines.add(pw.Text(_totalRow('Item Discount:', '-${_price(totalItemDiscount)}'), style: pw.TextStyle(font: f, fontSize: 8)));
@@ -130,8 +137,8 @@ class InvoiceGenerator {
       lines.add(pw.Text(_totalRow('Bill Discount:', '-${_price(sale.discount)}'), style: pw.TextStyle(font: f, fontSize: 8)));
     }
 
-    if (totalGst > 0) {
-      lines.add(pw.Text(_totalRow('Tax:', _price(totalGst)), style: pw.TextStyle(font: f, fontSize: 8)));
+    if (sale.extraCharges > 0) {
+      lines.add(pw.Text(_totalRow('Extra Charges:', '+${_price(sale.extraCharges)}'), style: pw.TextStyle(font: f, fontSize: 8)));
     }
 
     if (sale.roundOff != 0) {
@@ -142,6 +149,17 @@ class InvoiceGenerator {
 
     // ── Grand total ──
     lines.add(pw.Text(_totalRow('TOTAL', _price(sale.finalAmount)), style: pw.TextStyle(font: fb, fontSize: 10)));
+    if (totalGst > 0) {
+      // included in the total above, not added to it
+      if (sale.igstAmount > 0) {
+        lines.add(pw.Text(_totalRow('incl. IGST:', _price(sale.igstAmount)), style: pw.TextStyle(font: f, fontSize: 7)));
+      } else if (sale.cgstAmount > 0 || sale.sgstAmount > 0) {
+        lines.add(pw.Text(_totalRow('incl. CGST:', _price(sale.cgstAmount)), style: pw.TextStyle(font: f, fontSize: 7)));
+        lines.add(pw.Text(_totalRow('incl. SGST:', _price(sale.sgstAmount)), style: pw.TextStyle(font: f, fontSize: 7)));
+      } else {
+        lines.add(pw.Text(_totalRow('incl. GST:', _price(totalGst)), style: pw.TextStyle(font: f, fontSize: 7)));
+      }
+    }
 
     lines.add(pw.Center(child: pw.Text(_sep(), style: pw.TextStyle(font: f, fontSize: 7))));
 
@@ -152,7 +170,7 @@ class InvoiceGenerator {
       lines.add(pw.Text(_leftRight('Paid:', _price(sale.amountPaid)), style: pw.TextStyle(font: f, fontSize: 8)));
       lines.add(pw.Text(_leftRight('Due:', _price(sale.dueAmount)), style: pw.TextStyle(font: fb, fontSize: 9)));
     }
-    if (sale.paymentMethod == 'split') {
+    if (PaymentMethods.normalize(sale.paymentMethod) == PaymentMethods.split) {
       lines.add(pw.Text(_leftRight('Cash:', _price(sale.cashAmount)), style: pw.TextStyle(font: f, fontSize: 8)));
       lines.add(pw.Text(_leftRight('UPI:', _price(sale.digitalAmount)), style: pw.TextStyle(font: f, fontSize: 8)));
     }
@@ -197,6 +215,8 @@ class InvoiceGenerator {
       case 'cash': return 'CASH';
       case 'upi':
       case 'digital': return 'UPI';
+      case 'bank':
+      case 'card': return 'BANK';
       case 'credit': return 'CREDIT';
       case 'split': return 'SPLIT';
       default: return method.toUpperCase();

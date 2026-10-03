@@ -8,6 +8,9 @@ class Customer {
   final String? stateCode;
   final double creditLimit;
 
+  /// GSTIN of a registered business customer (B2B invoices, GSTR-1) (#23).
+  final String? gstin;
+
   Customer({
     required this.id,
     required this.name,
@@ -17,6 +20,7 @@ class Customer {
     required this.createdAt,
     this.stateCode,
     this.creditLimit = 0,
+    this.gstin,
   });
 
   factory Customer.fromJson(Map<String, dynamic> json) => Customer(
@@ -30,6 +34,7 @@ class Customer {
         DateTime.now(),
     stateCode: json['state_code'] as String?,
     creditLimit: (json['credit_limit'] as num?)?.toDouble() ?? 0,
+    gstin: json['gstin'] as String?,
   );
 
   Map<String, dynamic> toJson() => {

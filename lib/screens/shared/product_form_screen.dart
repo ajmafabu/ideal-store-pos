@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../utils/validators.dart';
 import '../../models/product.dart';
 import '../../config/providers.dart';
 import '../../widgets/barcode_scanner.dart';
+import '../../utils/error_messages.dart';
 
 class ProductFormScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -202,6 +204,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
       if (_isEditing) {
         await service.updateProduct(product);
+        // stock is only changed through a physical count, never by
+        // overwriting the column (#8)
+        final oldStock = widget.product!.stock;
+        final newStock = int.tryParse(_stockController.text);
+        if (newStock != null && newStock != oldStock) {
+          if (newStock < 0) throw Exception('Stock cannot be negative');
+          await service.setPhysicalStock(product.id, newStock);
+        }
       } else {
         await service.createProduct(product);
       }
@@ -220,7 +230,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -359,7 +369,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         border: OutlineInputBorder(),
                         prefixText: '₹ ',
                       ),
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => Validators.amount(v, required: false, allowZero: true, label: 'Purchase price'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -371,7 +382,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         border: OutlineInputBorder(),
                         prefixText: '₹ ',
                       ),
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => Validators.amount(v, label: 'Selling price'),
                     ),
                   ),
                 ],
@@ -399,7 +411,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         prefixText: '₹ ',
                         hintText: 'Leave empty to disable',
                       ),
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => Validators.amount(v, required: false, label: 'Rate 2'),
                     ),
                   ),
                 ],
@@ -415,6 +428,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
+                      validator: (v) => Validators.quantity(v, min: 0),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -468,6 +482,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         helperText: 'Product classification code',
                       ),
                       keyboardType: TextInputType.number,
+                      validator: Validators.hsn,
                     ),
                   ),
                 ],
@@ -481,6 +496,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                   helperText: 'Alert when stock goes below this',
                 ),
                 keyboardType: TextInputType.number,
+                validator: (v) => Validators.quantity(v, min: 0),
               ),
               const SizedBox(height: 12),
               Row(

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/customer.dart';
 import '../../config/providers.dart';
 import '../../services/statement_pdf_generator.dart';
+import '../../utils/error_messages.dart';
 
 class DebtDetailScreen extends ConsumerStatefulWidget {
   final Customer customer;
@@ -108,7 +109,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Payment failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -124,7 +125,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}')),
         );
       }
     }
@@ -548,7 +549,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 Navigator.pop(context, true);
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
+                  SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}')),
                 );
               }
             }

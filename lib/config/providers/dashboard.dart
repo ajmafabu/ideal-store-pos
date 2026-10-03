@@ -11,18 +11,18 @@ import 'products.dart';
 final dashboardSummaryProvider = FutureProvider<Map<String, dynamic>>((
   ref,
 ) async {
-  try {
-    final res = await Supabase.instance.client.rpc('get_dashboard_summary');
-    if (res is Map<String, dynamic>) return res;
-    if (res is String) {
-      return Map<String, dynamic>.from(
-        (res as dynamic) as Map,
-      );
-    }
-    return {};
-  } catch (e) {
-    return {};
-  }
+  // Errors are NOT turned into zeros any more: a failed load shows as an
+  // error instead of a misleading ₹0 (#18).
+  final res = await Supabase.instance.client.rpc('get_dashboard_summary');
+  if (res is Map) return Map<String, dynamic>.from(res);
+  return {};
+});
+
+/// Profit, cost and stock value are admin-only; the database returns them
+/// as null for staff (#28).
+final dashboardIsAdminProvider = FutureProvider<bool>((ref) async {
+  final summary = await ref.watch(dashboardSummaryProvider.future);
+  return summary['is_admin'] == true;
 });
 
 // Individual providers now read from the consolidated summary
@@ -43,15 +43,18 @@ final todayExpensesProvider = FutureProvider<double>((ref) async {
 
 final monthlyProfitProvider = FutureProvider<Map<String, double>>((ref) async {
   final summary = await ref.watch(dashboardSummaryProvider.future);
+  // monthly_sales is revenue net of GST and returns; cogs is the FIFO cost
+  // of what was sold (not purchase bills) (#15, #18)
   final sales = (summary['monthly_sales'] as num?)?.toDouble() ?? 0;
-  final purchases = (summary['monthly_cogs'] as num?)?.toDouble() ?? 0;
+  final cogs = (summary['monthly_cogs'] as num?)?.toDouble() ?? 0;
   final expenses = (summary['monthly_expenses'] as num?)?.toDouble() ?? 0;
   return {
     'sales': sales,
-    'purchases': purchases,
+    'cogs': cogs,
+    'purchases': cogs, // old key, same meaning (cost of goods sold)
+    'returns': (summary['monthly_returns'] as num?)?.toDouble() ?? 0,
     'expenses': expenses,
-    'profit': (summary['monthly_profit'] as num?)?.toDouble() ??
-        (sales - purchases - expenses),
+    'profit': (summary['monthly_profit'] as num?)?.toDouble() ?? (sales - cogs - expenses),
   };
 });
 
@@ -60,9 +63,14 @@ final stockValueProvider = FutureProvider<double>((ref) async {
   return (summary['stock_value'] as num?)?.toDouble() ?? 0;
 });
 
+/// Low AND out-of-stock products (the old filter skipped stock 0, so the
+/// "Out of Stock" list was always empty) (#24).
 final lowStockListProvider = FutureProvider<List<Product>>((ref) async {
   final products = await ref.watch(productsProvider.future);
-  return products.where((p) => p.isLowStock).toList();
+  return products
+      .where((p) => !p.hasVariants && p.stock <= p.lowStockAlert)
+      .toList()
+    ..sort((a, b) => a.stock.compareTo(b.stock));
 });
 
 final missingCostPriceProvider = FutureProvider<List<Product>>((ref) async {
@@ -70,12 +78,33 @@ final missingCostPriceProvider = FutureProvider<List<Product>>((ref) async {
   return products.where((p) => p.purchasePrice <= 0).toList();
 });
 
+/// Expiry alerts from purchase batches (where expiry dates are entered) as
+/// well as the product's own expiry field (#24). One entry per product, at
+/// its earliest expiring batch that still has stock.
 final expiringProductsProvider = FutureProvider<List<Product>>((ref) async {
   final products = await ref.watch(productsProvider.future);
-  return products
-      .where((p) => p.expiryDate != null && (p.isExpiringSoon || p.isExpired))
-      .toList()
+  final byId = {for (final p in products) p.id: p};
+  final earliest = <String, DateTime>{};
+  try {
+    final rows = await Supabase.instance.client.rpc('get_expiring_batches', params: {'p_days': 30});
+    for (final r in (rows as List? ?? const [])) {
+      final m = Map<String, dynamic>.from(r as Map);
+      final id = m['product_id']?.toString();
+      final d = DateTime.tryParse(m['expiry_date']?.toString() ?? '');
+      if (id == null || d == null || !byId.containsKey(id)) continue;
+      if (!earliest.containsKey(id) || d.isBefore(earliest[id]!)) earliest[id] = d;
+    }
+  } catch (_) {
+    // fall back to the product field below
+  }
+  for (final p in products) {
+    if (p.expiryDate != null && (p.isExpiringSoon || p.isExpired) && !earliest.containsKey(p.id)) {
+      earliest[p.id] = p.expiryDate!;
+    }
+  }
+  final list = earliest.entries.map((e) => byId[e.key]!.copyWith(expiryDate: e.value)).toList()
     ..sort((a, b) => a.expiryDate!.compareTo(b.expiryDate!));
+  return list;
 });
 
 final recentSalesProvider = FutureProvider<List<Map<String, dynamic>>>((

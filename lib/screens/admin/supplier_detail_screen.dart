@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/supplier.dart';
 import '../../config/providers.dart';
 import '../../services/statement_pdf_generator.dart';
+import '../../utils/error_messages.dart';
 
 class SupplierDetailScreen extends ConsumerStatefulWidget {
   final Supplier supplier;
@@ -71,7 +72,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}')),
         );
       }
     }
@@ -483,7 +484,7 @@ class _SupplierPaymentDialogState extends State<_SupplierPaymentDialog> {
                 Navigator.pop(context, true);
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
+                  SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}')),
                 );
               }
             }

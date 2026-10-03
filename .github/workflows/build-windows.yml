@@ -45,6 +45,9 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
           Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "ideal-store-pos-${version}-windows.zip"
+          # checksum the app verifies before installing an update
+          $hash = (Get-FileHash "ideal-store-pos-${version}-windows.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  ideal-store-pos-${version}-windows.zip" | Out-File -Encoding ascii -NoNewline "ideal-store-pos-${version}-windows.zip.sha256"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -60,6 +63,8 @@ jobs:
             3. Run `ideal_store_pos.exe`
             
             The app will auto-update when new versions are released.
-          files: ideal-store-pos-${{ steps.version.outputs.VERSION }}-windows.zip
+          files: |
+            ideal-store-pos-${{ steps.version.outputs.VERSION }}-windows.zip
+            ideal-store-pos-${{ steps.version.outputs.VERSION }}-windows.zip.sha256
           draft: false
           prerelease: false

@@ -21,7 +21,7 @@ class AppColors {
   );
 
   static const LinearGradient stockGradient = LinearGradient(
-    colors: [Color(0xFF2193b0), Color(0x006dd5fa)],
+    colors: [Color(0xFF2193b0), Color(0xFF6dd5fa)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

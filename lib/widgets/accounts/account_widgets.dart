@@ -84,7 +84,7 @@ class MiniStat extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 16),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,

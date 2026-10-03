@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../models/sale.dart' show newDocumentId;
+import '../../utils/payment_methods.dart';
+import '../../utils/error_messages.dart';
 import '../../utils/logger.dart';
 import 'package:printing/printing.dart';
 import '../../models/purchase.dart';
@@ -76,7 +79,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to load suppliers: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to load suppliers: ${ErrorMessages.parse(e)}')));
       }
     }
   }
@@ -236,30 +239,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                     newSellPrice != product.sellingPrice) {
                   ref
                       .read(productServiceProvider)
-                      .updateProduct(
-                        Product(
-                          id: product.id,
-                          name: product.name,
-                          barcode: product.barcode,
-                          category: product.category,
-                          purchasePrice: newPrice,
-                          sellingPrice: newSellPrice,
-                          stock: product.stock,
-                          unit: product.unit,
-                          lowStockAlert: product.lowStockAlert,
-                          shopId: product.shopId,
-                          gstRate: product.gstRate,
-                          hsnCode: product.hsnCode,
-                          expiryDate: product.expiryDate,
-                          batchNumber: product.batchNumber,
-                          hasVariants: product.hasVariants,
-                          variants: product.variants,
-                          tamilName: product.tamilName,
-                          sfw: product.sfw,
-                          unitType: product.unitType,
-                          piecesPerUnit: product.piecesPerUnit,
-                        ),
-                      );
+                      .updatePrices(product.id, purchasePrice: newPrice, sellingPrice: newSellPrice);
                 }
                 setState(() {
                   final existing = _cart.indexWhere(
@@ -433,43 +413,10 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                         newSellPrice != product.sellingPrice)) {
                   ref
                       .read(productServiceProvider)
-                      .updateProduct(
-                        Product(
-                          id: product.id,
-                          name: product.name,
-                          barcode: product.barcode,
-                          category: product.category,
-                          purchasePrice: newPrice,
-                          sellingPrice: newSellPrice,
-                          stock: product.stock,
-                          unit: product.unit,
-                          lowStockAlert: product.lowStockAlert,
-                          shopId: product.shopId,
-                          gstRate: product.gstRate,
-                          hsnCode: product.hsnCode,
-                          expiryDate: product.expiryDate,
-                          batchNumber: product.batchNumber,
-                          hasVariants: product.hasVariants,
-                          variants: product.variants,
-                          tamilName: product.tamilName,
-                          sfw: product.sfw,
-                          unitType: product.unitType,
-                          piecesPerUnit: product.piecesPerUnit,
-                        ),
-                      );
+                      .updatePrices(product.id, purchasePrice: newPrice, sellingPrice: newSellPrice);
                 }
                 setState(() {
-                  _cart[index] = PurchaseItem(
-                    productId: item.productId,
-                    name: item.name,
-                    price: newPrice,
-                    qty: item.qty,
-                    unit: item.unit,
-                    gstRate: item.gstRate,
-                    hsnCode: item.hsnCode,
-                    batchNumber: item.batchNumber,
-                    expiryDate: item.expiryDate,
-                  );
+                  _cart[index] = item.copyWith(price: newPrice);
                 });
                 Navigator.pop(ctx);
               } else {
@@ -520,13 +467,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
               final newQty = int.tryParse(qtyController.text);
               if (newQty != null && newQty > 0) {
                 setState(() {
-                  _cart[index] = PurchaseItem(
-                    productId: item.productId,
-                    name: item.name,
-                    price: item.price,
-                    qty: newQty,
-                    unit: item.unit,
-                  );
+                  _cart[index] = item.copyWith(qty: newQty);
                 });
                 Navigator.pop(ctx);
               } else {
@@ -899,7 +840,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
       }
 
       final purchase = Purchase(
-        id: '',
+        id: newDocumentId(), // same id on retry: never saved twice (#5)
         supplierName: _selectedSupplier?.name,
         items: _cart,
         totalAmount: _total,
@@ -909,7 +850,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
         isCredit: _isCredit,
         amountPaid: _isCredit ? _amountPaid : _total,
         dueAmount: _dueAmount,
-        paymentMethod: _paymentMethod,
+        paymentMethod: PaymentMethods.normalize(_paymentMethod),
       );
 
       final createdPurchase = await ref
@@ -971,7 +912,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text('Purchase NOT saved: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1541,7 +1482,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
           .watch(purchasesProvider)
           .when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
             data: (purchases) {
               if (purchases.isEmpty) {
                 return const EmptyState(
@@ -1853,7 +1794,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export failed: $e'),
+            content: Text('Export failed: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -1868,17 +1809,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
   ) async {
     final editedItems = purchase.items
         .map(
-          (item) => PurchaseItem(
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            qty: item.qty,
-            unit: item.unit,
-            gstRate: item.gstRate,
-            hsnCode: item.hsnCode,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-          ),
+          (item) => item.copyWith(),
         )
         .toList();
 
@@ -1953,7 +1884,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -2045,7 +1976,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error sharing invoice: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error sharing invoice: ${ErrorMessages.parse(e)}')));
       }
     }
   }
@@ -2086,7 +2017,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Error: $e'),
+                      content: Text('Error: ${ErrorMessages.parse(e)}'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -2200,17 +2131,7 @@ class _EditPurchaseDialogState extends State<_EditPurchaseDialog> {
       if (newQty <= 0) {
         _items.removeAt(index);
       } else {
-        _items[index] = PurchaseItem(
-          productId: _items[index].productId,
-          name: _items[index].name,
-          price: _items[index].price,
-          qty: newQty,
-          unit: _items[index].unit,
-          gstRate: _items[index].gstRate,
-          hsnCode: _items[index].hsnCode,
-          batchNumber: _items[index].batchNumber,
-          expiryDate: _items[index].expiryDate,
-        );
+        _items[index] = _items[index].copyWith(qty: newQty);
       }
     });
   }
@@ -2257,17 +2178,7 @@ class _EditPurchaseDialogState extends State<_EditPurchaseDialog> {
                         );
                         if (existing >= 0) {
                           final cur = _items[existing];
-                          _items[existing] = PurchaseItem(
-                            productId: cur.productId,
-                            name: cur.name,
-                            price: cur.price,
-                            qty: cur.qty + 1,
-                            unit: cur.unit,
-                            gstRate: cur.gstRate,
-                            hsnCode: cur.hsnCode,
-                            batchNumber: cur.batchNumber,
-                            expiryDate: cur.expiryDate,
-                          );
+                          _items[existing] = cur.copyWith(qty: cur.qty + 1);
                         } else {
                           _items.add(
                             PurchaseItem(

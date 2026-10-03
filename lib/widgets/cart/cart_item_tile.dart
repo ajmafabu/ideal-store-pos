@@ -156,7 +156,7 @@ class CartItemTile extends StatelessWidget {
                           ),
                           child: Text(
                             '${item.discount.toStringAsFixed(0)}%',
-                            style: const TextStyle(color: Colors.green, fontSize: 9, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),

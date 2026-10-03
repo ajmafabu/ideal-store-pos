@@ -1,389 +1,210 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
 
+/// Full backup and restore (#31).
+///
+/// A backup is one JSON file `{format, version, created_at, tables: {...}}`
+/// with every business table read page by page (no 1000-row cut-off). It is
+/// saved on this device and uploaded to the private "backups" storage
+/// bucket. Login data (profiles with PIN hashes) is never included.
+/// Restore sends the file to the `restore_backup` database function, which
+/// replaces all business data in ONE transaction: it either fully succeeds
+/// or changes nothing.
 class BackupService {
   final SupabaseClient _client;
 
-  BackupService({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+  BackupService({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
-  // ============================================
-  // LEGACY METHODS (for backward compatibility)
-  // ============================================
+  static const format = 'ideal-pos-backup';
+  static const version = 2;
+  static const _bucket = 'backups';
 
-  /// Export all data to JSON and return the file
-  Future<File?> exportJsonBackup() async {
-    try {
-      final data = await exportData();
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final fileName = 'backup_$timestamp.json';
+  /// Same order as `backup_table_list()` in the database (parents first).
+  static const tables = [
+    'shop_settings', 'app_config', 'customers', 'suppliers', 'products', 'product_variants',
+    'accounts', 'sales', 'purchase_orders', 'purchases', 'inventory_batches', 'payments',
+    'supplier_payments', 'expenses', 'account_transactions', 'legacy_postings', 'product_returns',
+    'damaged_products', 'stock_reconciliation', 'payment_reminders', 'transaction_edits',
+  ];
 
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/$fileName';
-
-      final jsonStr = JsonEncoder.withIndent('  ').convert(data);
-      final file = File(filePath);
-      await file.writeAsString(jsonStr);
-
-      Logger.info('JSON backup exported: $filePath');
-      return file;
-    } catch (e) {
-      Logger.error('Failed to export JSON backup: $e');
-      return null;
+  Future<List<Map<String, dynamic>>> _readAll(String table) async {
+    final rows = <Map<String, dynamic>>[];
+    const page = 1000;
+    var from = 0;
+    while (true) {
+      final res = await _client.from(table).select().range(from, from + page - 1);
+      final list = (res as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      rows.addAll(list);
+      if (list.length < page) break;
+      from += page;
     }
+    return rows;
   }
 
-  /// Share the last backup file
-  Future<void> shareBackup() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final files = directory.listSync().whereType<File>().where(
-        (f) => f.path.contains('backup_') && f.path.endsWith('.json'),
-      ).toList();
-
-      if (files.isEmpty) {
-        Logger.warning('No backup files found to share');
-        return;
-      }
-
-      // Sort by modified time, newest first
-      files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-      final latestBackup = files.first;
-
-      await Share.shareXFiles(
-        [XFile(latestBackup.path)],
-        text: 'Ideal Store POS Backup',
-      );
-    } catch (e) {
-      Logger.error('Failed to share backup: $e');
-    }
-  }
-
-  /// Export sales data to CSV
-  Future<File?> exportSalesCsv() async {
-    try {
-      final response = await _client
-          .from('sales')
-          .select('id, items, total_amount, final_amount, payment_method, created_at, customer_id, is_credit')
-          .order('created_at', ascending: false);
-
-      if (response.isEmpty) {
-        Logger.warning('No sales data to export');
-        return null;
-      }
-
-      // Build CSV
-      final csv = StringBuffer();
-      csv.writeln('ID,Items,Total Amount,Final Amount,Payment Method,Created At,Customer ID,Is Credit');
-
-      for (final sale in response) {
-        final items = (sale['items'] as List?)
-            ?.map((item) => '${item['name'] ?? ''}(${item['qty'] ?? 0})')
-            .join('; ') ?? '';
-        csv.writeln(
-          '${sale['id']},'
-          '"${items.replaceAll('"', '""')}",'
-          '${sale['total_amount'] ?? 0},'
-          '${sale['final_amount'] ?? 0},'
-          '${sale['payment_method'] ?? ''},'
-          '${sale['created_at'] ?? ''},'
-          '${sale['customer_id'] ?? ''},'
-          '${sale['is_credit'] ?? false}',
-        );
-      }
-
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final fileName = 'sales_export_$timestamp.csv';
-
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/$fileName';
-
-      final file = File(filePath);
-      await file.writeAsString(csv.toString());
-
-      Logger.info('Sales CSV exported: $filePath');
-      return file;
-    } catch (e) {
-      Logger.error('Failed to export sales CSV: $e');
-      return null;
-    }
-  }
-
-  /// Share the last sales CSV export
-  Future<void> shareSalesCsv() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final files = directory.listSync().whereType<File>().where(
-        (f) => f.path.contains('sales_export_') && f.path.endsWith('.csv'),
-      ).toList();
-
-      if (files.isEmpty) {
-        Logger.warning('No CSV files found to share');
-        return;
-      }
-
-      files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-      final latestCsv = files.first;
-
-      await Share.shareXFiles(
-        [XFile(latestCsv.path)],
-        text: 'Sales Export - Ideal Store POS',
-      );
-    } catch (e) {
-      Logger.error('Failed to share CSV: $e');
-    }
-  }
-
-  /// Create a backup record and return the backup ID
-  Future<String?> createBackupRecord({String type = 'manual'}) async {
-    try {
-      final result = await _client.rpc(
-        'create_backup_record',
-        params: {'p_backup_type': type},
-      );
-      return result as String?;
-    } catch (e) {
-      Logger.error('Failed to create backup record: $e');
-      return null;
-    }
-  }
-
-  /// Export all data to JSON files
+  /// Reads every business table. A table that cannot be read stops the
+  /// backup (a silent gap would make the backup useless for restore).
   Future<Map<String, dynamic>> exportData() async {
     final data = <String, dynamic>{};
-
-    // List of tables to backup
-    final tables = [
-      'products',
-      'product_variants',
-      'sales',
-      'purchases',
-      'expenses',
-      'customers',
-      'suppliers',
-      'accounts',
-      'account_transactions',
-      'product_returns',
-      'damaged_products',
-      'purchase_orders',
-      'inventory_batches',
-      'profiles',
-      'app_config',
-    ];
-
-    for (final table in tables) {
-      try {
-        final response = await _client.from(table).select();
-        data[table] = response;
-        Logger.info('Exported $table: ${response.length} rows');
-      } catch (e) {
-        Logger.warning('Failed to export $table: $e');
-        data[table] = [];
-      }
+    for (final t in tables) {
+      data[t] = await _readAll(t);
+      Logger.info('Backup: $t ${(data[t] as List).length} rows');
     }
-
-    return data;
+    return {
+      'format': format,
+      'version': version,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'tables': data,
+    };
   }
 
-  /// Save backup to local file
-  Future<String?> saveBackupToFile({
-    required Map<String, dynamic> data,
-    String? directory,
-  }) async {
-    try {
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final fileName = 'backup_$timestamp.json';
-
-      // Use provided directory or default temp directory
-      final dir = directory ?? Directory.systemTemp.path;
-      final filePath = '$dir/$fileName';
-
-      // Convert to JSON with pretty printing
-      final jsonStr = JsonEncoder.withIndent('  ').convert(data);
-
-      // Write to file
-      final file = File(filePath);
-      await file.writeAsString(jsonStr);
-
-      final bytes = await file.readAsBytes();
-      Logger.info('Backup saved to: $filePath (${bytes.length} bytes)');
-
-      return filePath;
-    } catch (e) {
-      Logger.error('Failed to save backup file: $e');
-      return null;
-    }
+  Future<Directory> _localDir() async {
+    final dir = Directory('${(await getApplicationDocumentsDirectory()).path}/ideal_pos_backups');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
   }
 
-  /// Complete a backup record
-  Future<void> completeBackup({
-    required String backupId,
-    required String filePath,
-    required int fileSizeBytes,
-    required String checksum,
-  }) async {
+  /// Makes a backup: local file + cloud copy + history record.
+  Future<BackupResult> performBackup({String type = 'manual'}) async {
+    final watch = Stopwatch()..start();
+    String? backupId;
     try {
-      await _client.rpc(
-        'complete_backup',
-        params: {
-          'p_backup_id': backupId,
-          'p_file_path': filePath,
-          'p_file_size_bytes': fileSizeBytes,
-          'p_checksum': checksum,
-        },
-      );
-      Logger.info('Backup completed: $backupId');
-    } catch (e) {
-      Logger.error('Failed to complete backup: $e');
-    }
-  }
-
-  /// Fail a backup record
-  Future<void> failBackup({
-    required String backupId,
-    required String errorMessage,
-  }) async {
-    try {
-      await _client.rpc(
-        'fail_backup',
-        params: {
-          'p_backup_id': backupId,
-          'p_error_message': errorMessage,
-        },
-      );
-    } catch (e) {
-      Logger.error('Failed to record backup failure: $e');
-    }
-  }
-
-  /// Get backup history
-  Future<List<Map<String, dynamic>>> getBackupHistory({int limit = 20}) async {
-    try {
-      final result = await _client.rpc(
-        'get_backup_history',
-        params: {'p_limit': limit},
-      );
-      if (result is List) {
-        return result.cast<Map<String, dynamic>>();
-      }
-      return [];
-    } catch (e) {
-      Logger.error('Failed to get backup history: $e');
-      return [];
-    }
-  }
-
-  /// Get database size estimate
-  Future<Map<String, dynamic>> getDatabaseSize() async {
-    try {
-      final result = await _client.rpc('get_database_size_estimate');
-      if (result is Map<String, dynamic>) {
-        return result;
-      }
-      return {};
-    } catch (e) {
-      Logger.error('Failed to get database size: $e');
-      return {};
-    }
-  }
-
-  /// Get table row counts
-  Future<Map<String, dynamic>> getTableRowCounts() async {
-    try {
-      final result = await _client.rpc('get_table_row_counts');
-      if (result is Map<String, dynamic>) {
-        return result;
-      }
-      return {};
-    } catch (e) {
-      Logger.error('Failed to get table row counts: $e');
-      return {};
-    }
-  }
-
-  /// Full backup workflow: create record, export, save, complete
-  Future<BackupResult> performBackup({
-    String? directory,
-    String type = 'manual',
-  }) async {
-    final stopwatch = Stopwatch()..start();
-
-    try {
-      // 1. Create backup record
-      final backupId = await createBackupRecord(type: type);
-      if (backupId == null) {
-        return BackupResult(
-          success: false,
-          error: 'Failed to create backup record',
-        );
-      }
-
-      // 2. Export data
+      backupId = (await _client.rpc('create_backup_record', params: {'p_backup_type': type}))?.toString();
       final data = await exportData();
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(data)));
+      final checksum = sha256.convert(bytes).toString();
+      final name = 'backup_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first}.json';
 
-      // 3. Save to file
-      final filePath = await saveBackupToFile(
-        data: data,
-        directory: directory,
-      );
-      if (filePath == null) {
-        await failBackup(
-          backupId: backupId,
-          errorMessage: 'Failed to save backup file',
-        );
-        return BackupResult(
-          success: false,
-          error: 'Failed to save backup file',
-        );
+      final file = File('${(await _localDir()).path}/$name');
+      await file.writeAsBytes(bytes);
+
+      String? cloudPath;
+      try {
+        await _client.storage.from(_bucket).uploadBinary(
+              name,
+              bytes,
+              fileOptions: const FileOptions(contentType: 'application/json', upsert: true),
+            );
+        cloudPath = '$_bucket/$name';
+      } catch (e) {
+        Logger.warning('Cloud upload failed, backup kept on this device only: $e');
       }
 
-      // 4. Get file info
-      final file = File(filePath);
-      final fileSize = await file.length();
-      final bytes = await file.readAsBytes();
-      final checksum = _calculateChecksum(bytes);
-
-      // 5. Complete backup record
-      await completeBackup(
-        backupId: backupId,
-        filePath: filePath,
-        fileSizeBytes: fileSize,
-        checksum: checksum,
-      );
-
-      stopwatch.stop();
-
+      if (backupId != null) {
+        await _client.rpc('complete_backup', params: {
+          'p_backup_id': backupId,
+          'p_file_path': cloudPath ?? file.path,
+          'p_file_size_bytes': bytes.length,
+          'p_checksum': checksum,
+        });
+      }
+      watch.stop();
       return BackupResult(
         success: true,
         backupId: backupId,
-        filePath: filePath,
-        fileSizeBytes: fileSize,
+        filePath: file.path,
+        cloudPath: cloudPath,
+        fileSizeBytes: bytes.length,
         checksum: checksum,
-        duration: stopwatch.elapsed,
-        tablesBackedUp: data.keys.length,
+        duration: watch.elapsed,
+        tablesBackedUp: tables.length,
       );
     } catch (e) {
-      stopwatch.stop();
-      Logger.error('Backup failed: $e');
-      return BackupResult(
-        success: false,
-        error: e.toString(),
-        duration: stopwatch.elapsed,
-      );
+      watch.stop();
+      Logger.error('Backup failed', e);
+      if (backupId != null) {
+        try {
+          await _client.rpc('fail_backup', params: {'p_backup_id': backupId, 'p_error_message': e.toString()});
+        } catch (_) {}
+      }
+      return BackupResult(success: false, error: e.toString(), duration: watch.elapsed);
     }
   }
 
-  /// Calculate simple checksum (sum of bytes modulo 2^32)
-  String _calculateChecksum(List<int> bytes) {
-    int sum = 0;
-    for (final byte in bytes) {
-      sum = (sum + byte) & 0xFFFFFFFF;
+  /// Backups saved on this device, newest first.
+  Future<List<File>> localBackups() async {
+    final dir = await _localDir();
+    final files = dir.listSync().whereType<File>().where((f) => f.path.endsWith('.json')).toList()
+      ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+    return files;
+  }
+
+  /// Backups in the cloud bucket, newest first (file names).
+  Future<List<String>> cloudBackups() async {
+    final items = await _client.storage.from(_bucket).list();
+    final names = items.map((o) => o.name).where((n) => n.endsWith('.json')).toList()
+      ..sort((a, b) => b.compareTo(a));
+    return names;
+  }
+
+  Future<void> shareLatestBackup() async {
+    final files = await localBackups();
+    if (files.isEmpty) throw Exception('No backup on this device yet. Make a backup first.');
+    await Share.shareXFiles([XFile(files.first.path)], text: 'Ideal Store POS Backup');
+  }
+
+  Map<String, dynamic> _parse(List<int> bytes) {
+    final data = jsonDecode(utf8.decode(bytes));
+    if (data is! Map || data['format'] != format || data['tables'] is! Map) {
+      throw Exception('This file is not an Ideal Store POS backup (version 2 or later).');
     }
-    return sum.toRadixString(16).padLeft(8, '0');
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Replaces ALL business data with the backup, in one database
+  /// transaction. Returns rows restored per table.
+  Future<Map<String, dynamic>> restore(List<int> bytes) async {
+    final data = _parse(bytes);
+    final res = await _client.rpc('restore_backup', params: {'p_data': data, 'p_confirm': 'RESTORE'});
+    return res is Map ? Map<String, dynamic>.from(res) : {};
+  }
+
+  Future<Map<String, dynamic>> restoreFromLocal(File file) async => restore(await file.readAsBytes());
+
+  Future<Map<String, dynamic>> restoreFromCloud(String name) async =>
+      restore(await _client.storage.from(_bucket).download(name));
+
+  Future<List<Map<String, dynamic>>> getBackupHistory({int limit = 20}) async {
+    final res = await _client.rpc('get_backup_history', params: {'p_limit': limit});
+    return (res as List? ?? const []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  /// Every sale as CSV (for an accountant).
+  Future<File> exportSalesCsv() async {
+    final sales = await _readAll('sales');
+    sales.sort((a, b) => '${b['created_at']}'.compareTo('${a['created_at']}'));
+    final csv = StringBuffer('Invoice No,Date,Items,Total,Final Amount,Payment,Customer ID,Credit,Due\n');
+    for (final s in sales) {
+      final items = (s['items'] as List?)
+              ?.map((i) => '${(i as Map)['name'] ?? ''}(${i['qty'] ?? 0})')
+              .join('; ') ??
+          '';
+      csv.writeln([
+        s['invoice_no'] ?? '',
+        s['created_at'] ?? '',
+        '"${items.replaceAll('"', '""')}"',
+        s['total_amount'] ?? 0,
+        s['final_amount'] ?? 0,
+        s['payment_method'] ?? '',
+        s['customer_id'] ?? '',
+        s['is_credit'] ?? false,
+        s['due_amount'] ?? 0,
+      ].join(','));
+    }
+    final file = File('${(await _localDir()).path}/sales_export_${DateTime.now().millisecondsSinceEpoch}.csv');
+    await file.writeAsString(csv.toString());
+    return file;
+  }
+
+  Future<void> shareSalesCsv() async {
+    final file = await exportSalesCsv();
+    await Share.shareXFiles([XFile(file.path)], text: 'Sales Export - Ideal Store POS');
   }
 }
 
@@ -391,6 +212,7 @@ class BackupResult {
   final bool success;
   final String? backupId;
   final String? filePath;
+  final String? cloudPath;
   final int? fileSizeBytes;
   final String? checksum;
   final Duration? duration;
@@ -401,6 +223,7 @@ class BackupResult {
     required this.success,
     this.backupId,
     this.filePath,
+    this.cloudPath,
     this.fileSizeBytes,
     this.checksum,
     this.duration,
@@ -411,18 +234,5 @@ class BackupResult {
   String get fileSizeMB {
     if (fileSizeBytes == null) return 'N/A';
     return '${(fileSizeBytes! / 1024 / 1024).toStringAsFixed(2)} MB';
-  }
-
-  String get durationFormatted {
-    if (duration == null) return 'N/A';
-    return '${duration!.inSeconds}.${(duration!.inMilliseconds % 1000) ~/ 100}s';
-  }
-
-  @override
-  String toString() {
-    if (success) {
-      return 'Backup successful: $filePath ($fileSizeMB, $durationFormatted)';
-    }
-    return 'Backup failed: $error';
   }
 }

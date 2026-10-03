@@ -74,6 +74,7 @@ class ThermalInvoice {
     final header = <String>[
       displayName,
       'QUOTATION',
+      'Bill No: ${sale.invoiceLabel}',
       'Date: $dateStr  Time: $timeStr',
       if (customerName != null && customerName.isNotEmpty)
         'Customer: $customerName',

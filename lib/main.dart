@@ -182,7 +182,7 @@ void _scheduleUpdateCheck() {
           await logFile.writeAsString('No update available\n', mode: FileMode.append);
         }
       } catch (e, st) {
-        print('[UPDATE] Update check failed: $e');
+        Logger.info('[UPDATE] Update check failed: $e');
         try {
           logFile.writeAsStringSync('ERROR: $e\n$st\n', mode: FileMode.append);
         } catch (_) {}

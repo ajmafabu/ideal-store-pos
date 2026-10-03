@@ -1,12 +1,23 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/account.dart';
 import '../utils/logger.dart';
 import '../utils/app_timezone.dart';
+import '../utils/network_errors.dart';
 import 'offline_service.dart';
 
+/// Cash book access.
+///
+/// Since app 1.1.0 sales, purchases, expenses, payments and refunds post
+/// themselves to the cash book inside the database (triggers), so this
+/// service only handles manual entries, transfers and reading. Balances are
+/// kept equal to the journal by a database trigger (#10, #20).
 class AccountService {
   final SupabaseClient _client;
   final OfflineService _offlineService;
+
+  /// Page size for exports; PostgREST caps a single response at 1,000 rows.
+  static const _pageSize = 1000;
 
   AccountService({SupabaseClient? client, OfflineService? offlineService})
     : _client = client ?? Supabase.instance.client,
@@ -16,7 +27,6 @@ class AccountService {
     try {
       final res = await _client.from('accounts').select().order('created_at');
       final list = (res as List).map((a) => Account.fromJson(a)).toList();
-      // Cache for offline
       try {
         await _offlineService.cacheAccounts(
           (res as List).cast<Map<String, dynamic>>(),
@@ -27,7 +37,6 @@ class AccountService {
       return list;
     } catch (e) {
       Logger.error('getAccounts', e);
-      // Offline fallback
       try {
         final cached = _offlineService.getCachedAccounts();
         if (cached.isNotEmpty) {
@@ -41,28 +50,11 @@ class AccountService {
   }
 
   Future<Account?> getAccountByType(String type) async {
-    try {
-      final res = await _client
-          .from('accounts')
-          .select()
-          .eq('account_type', type)
-          .maybeSingle();
-      if (res == null) return null;
-      return Account.fromJson(res);
-    } catch (e) {
-      Logger.error('getAccountByType', e);
-      // Offline fallback
-      try {
-        final cached = _offlineService.getCachedAccounts();
-        final match = cached.where((a) => a['account_type'] == type);
-        if (match.isNotEmpty) {
-          return Account.fromJson(match.first);
-        }
-      } catch (e) {
-        Logger.warning('Failed to load account by type from offline cache: $e');
-      }
-      return null;
+    final accounts = await getAccounts();
+    for (final a in accounts) {
+      if (a.accountType == type) return a;
     }
+    return null;
   }
 
   Future<Account> createAccount(
@@ -86,127 +78,122 @@ class AccountService {
 
   Future<void> ensureAccountsExist() async {
     final accounts = await getAccounts();
+    if (accounts.isEmpty && !(await _offlineService.isOnline())) return;
     final hasCash = accounts.any((a) => a.accountType == 'cash');
     final hasBank = accounts.any((a) => a.accountType == 'bank');
-    if (!hasCash) await createAccount('Cash in Hand', 'cash');
-    if (!hasBank) await createAccount('Bank Account', 'bank');
-  }
-
-  /// Merge duplicate accounts of the same type into the first one.
-  /// Keeps the oldest account and transfers balances from duplicates.
-  Future<int> mergeDuplicateAccounts() async {
-    final accounts = await getAccounts();
-    int merged = 0;
-    for (final type in ['cash', 'bank']) {
-      final of_type = accounts.where((a) => a.accountType == type).toList();
-      if (of_type.length <= 1) continue;
-      // Keep the oldest (first), merge others into it
-      final keep = of_type.first;
-      for (int i = 1; i < of_type.length; i++) {
-        final dup = of_type[i];
-        if (dup.balance != 0) {
-          // Transfer balance from duplicate to keeper
-          try {
-            final user = _client.auth.currentUser;
-            await _client.rpc(
-              'add_account_transaction',
-              params: {
-                'p_account_id': keep.id,
-                'p_type': 'in',
-                'p_amount': dup.balance.abs(),
-                'p_category': 'opening',
-                'p_description': 'Merged from duplicate account',
-                'p_created_by': user?.id,
-              },
-            );
-          } catch (e) {
-            Logger.warning('Failed to transfer balance during merge: $e');
-          }
-        }
-        // Delete the duplicate account
-        try {
-          await _client.from('accounts').delete().eq('id', dup.id);
-          merged++;
-        } catch (e) {
-          Logger.warning('Failed to delete duplicate account: $e');
-        }
-      }
+    try {
+      if (!hasCash) await createAccount('Cash in Hand', 'cash');
+      if (!hasBank) await createAccount('Bank Account', 'bank');
+    } catch (e) {
+      Logger.warning('ensureAccountsExist: $e');
     }
-    return merged;
   }
 
+  /// Merges duplicate cash/bank accounts in one database transaction:
+  /// signed balances and the full journal history are kept (#20).
+  Future<int> mergeDuplicateAccounts() async {
+    try {
+      final res = await _client.rpc('merge_duplicate_accounts');
+      return (res as num?)?.toInt() ?? 0;
+    } catch (e) {
+      Logger.warning('mergeDuplicateAccounts: $e');
+      return 0;
+    }
+  }
+
+  DateTime _toUtc(DateTime d) => d.isUtc ? d : d.subtract(AppTimezone.localOffset);
+
+  /// One page of journal rows (newest first) — for the on-screen list.
   Future<List<AccountTransaction>> getTransactions({
     String? accountId,
     DateTime? startDate,
     DateTime? endDate,
     String? searchQuery,
     int limit = 100,
+    int offset = 0,
   }) async {
     try {
       var query = _client.from('account_transactions').select();
-
-      if (accountId != null) {
-        query = query.eq('account_id', accountId);
+      if (accountId != null) query = query.eq('account_id', accountId);
+      if (startDate != null) query = query.gte('created_at', _toUtc(startDate).toIso8601String());
+      if (endDate != null) query = query.lt('created_at', _toUtc(endDate).toIso8601String());
+      if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+        // strip characters that have meaning inside a PostgREST or() filter
+        final q = searchQuery.replaceAll(RegExp(r'[,()*%\\]'), ' ').trim();
+        if (q.isNotEmpty) {
+          query = query.or('description.ilike.%$q%,category.ilike.%$q%');
+        }
       }
-      if (startDate != null) {
-        final utcStart = startDate.isUtc
-            ? startDate
-            : startDate.subtract(AppTimezone.localOffset);
-        query = query.gte('created_at', utcStart.toIso8601String());
-      }
-      if (endDate != null) {
-        final utcEnd = endDate.isUtc
-            ? endDate
-            : endDate.subtract(AppTimezone.localOffset);
-        query = query.lt('created_at', utcEnd.toIso8601String());
-      }
-
-      // Server-side search
-      if (searchQuery != null && searchQuery.isNotEmpty) {
-        query = query.or('description.ilike.%$searchQuery%,category.ilike.%$searchQuery%');
-      }
-
       final res = await query
           .order('created_at', ascending: false)
-          .limit(limit);
-      return (res as List)
-          .map((t) => AccountTransaction.fromJson(t))
-          .toList();
+          .range(offset, offset + limit - 1);
+      return (res as List).map((t) => AccountTransaction.fromJson(t)).toList();
     } catch (e) {
       Logger.error('getTransactions', e);
       return [];
     }
   }
 
-  Future<List<AccountTransaction>> getTodayTransactions() async {
-    final start = AppTimezone.todayStartUtc();
-    final end = AppTimezone.todayEndUtc();
-    return getTransactions(startDate: start, endDate: end);
-  }
-
-  Future<List<AccountTransaction>> getMonthTransactions() async {
-    final start = AppTimezone.monthStartUtc();
-    final end = AppTimezone.monthEndUtc();
-    return getTransactions(startDate: start, endDate: end);
-  }
-
-  Future<Map<String, double>> getMonthlySummary() async {
-    final transactions = await getMonthTransactions();
-    double totalIn = 0, totalOut = 0;
-    for (final t in transactions) {
-      if (t.type == 'in') {
-        totalIn += t.amount;
-      } else {
-        totalOut += t.amount;
-      }
+  /// Every journal row in the period, fetched page by page — for PDF/CSV
+  /// exports, which used to stop silently at 100 rows (#20).
+  Future<List<AccountTransaction>> getAllTransactions({
+    String? accountId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final all = <AccountTransaction>[];
+    var offset = 0;
+    while (true) {
+      final page = await getTransactions(
+        accountId: accountId,
+        startDate: startDate,
+        endDate: endDate,
+        limit: _pageSize,
+        offset: offset,
+      );
+      all.addAll(page);
+      if (page.length < _pageSize) break;
+      offset += _pageSize;
     }
-    return {
-      'total_in': totalIn,
-      'total_out': totalOut,
-      'net': totalIn - totalOut,
-    };
+    return all;
   }
 
+  Future<List<AccountTransaction>> getTodayTransactions() =>
+      getTransactions(startDate: AppTimezone.todayStartUtc(), endDate: AppTimezone.todayEndUtc());
+
+  Future<List<AccountTransaction>> getMonthTransactions() =>
+      getTransactions(startDate: AppTimezone.monthStartUtc(), endDate: AppTimezone.monthEndUtc());
+
+  /// Totals computed by the database: no row cap, transfers between your
+  /// own accounts reported separately instead of inflating in/out (#20).
+  Future<AccountSummary> getSummary({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? accountId,
+  }) async {
+    try {
+      final res = await _client.rpc('get_account_summary', params: {
+        'p_start': startDate == null ? null : _toUtc(startDate).toIso8601String(),
+        'p_end': endDate == null ? null : _toUtc(endDate).toIso8601String(),
+        'p_account_id': accountId,
+      });
+      final row = (res is List && res.isNotEmpty) ? res.first : res;
+      if (row is Map<String, dynamic>) return AccountSummary.fromJson(row);
+    } catch (e) {
+      Logger.error('getSummary', e);
+    }
+    return const AccountSummary();
+  }
+
+  Future<Map<String, double>> getMonthlySummary() async =>
+      (await getSummary(startDate: AppTimezone.monthStartUtc(), endDate: AppTimezone.monthEndUtc())).toLegacyMap();
+
+  Future<Map<String, double>> getTodaySummary() async =>
+      (await getSummary(startDate: AppTimezone.todayStartUtc(), endDate: AppTimezone.todayEndUtc())).toLegacyMap();
+
+  /// Manual cash-book entry (opening balance, owner's drawings, other income
+  /// or expense). Business documents post themselves — never call this for a
+  /// sale/purchase/expense/payment.
   Future<void> addTransaction({
     required String accountId,
     required String type,
@@ -215,7 +202,6 @@ class AccountService {
     String? description,
   }) async {
     try {
-      final user = _client.auth.currentUser;
       await _client.rpc(
         'add_account_transaction',
         params: {
@@ -224,95 +210,63 @@ class AccountService {
           'p_amount': amount,
           'p_category': category,
           'p_description': description,
-          'p_created_by': user?.id,
+          'p_created_by': _client.auth.currentUser?.id,
+          'p_source': 'manual',
         },
       );
     } catch (e) {
-      Logger.warning('addTransaction failed, queuing offline: $e');
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('addTransaction offline, queuing: $e');
+      // queued as a plain insert: the database's balance trigger applies it
       await _offlineService.queuePendingWrite({
         'table': 'account_transactions',
         'operation': 'insert',
         'data': {
+          'id': const Uuid().v4(),
           'account_id': accountId,
           'type': type,
           'amount': amount,
           'category': category,
           'description': description,
+          'source': 'manual',
+          'created_at': DateTime.now().toUtc().toIso8601String(),
         },
       });
     }
   }
 
+  /// Atomic transfer between two of your own accounts (one database call).
   Future<void> transferBetweenAccounts({
     required String fromAccountId,
     required String toAccountId,
     required double amount,
     String? description,
   }) async {
-    // Try atomic transfer via RPC first
-    try {
-      final user = _client.auth.currentUser;
-      await _client.rpc(
-        'transfer_between_accounts',
-        params: {
-          'p_from_account_id': fromAccountId,
-          'p_to_account_id': toAccountId,
-          'p_amount': amount,
-          'p_description': description ?? 'Transfer',
-          'p_created_by': user?.id,
-        },
-      );
-      return;
-    } catch (e) {
-      Logger.warning('Atomic transfer RPC failed, falling back to two-step: $e');
+    if (fromAccountId == toAccountId) {
+      throw Exception('Choose two different accounts');
     }
-
-    // Fallback: two-step with rollback
-    await addTransaction(
-      accountId: fromAccountId,
-      type: 'out',
-      amount: amount,
-      category: 'transfer',
-      description: description ?? 'Transfer out',
+    await _client.rpc(
+      'transfer_between_accounts',
+      params: {
+        'p_from_account_id': fromAccountId,
+        'p_to_account_id': toAccountId,
+        'p_amount': amount,
+        'p_description': description ?? 'Transfer',
+        'p_created_by': _client.auth.currentUser?.id,
+      },
     );
-
-    try {
-      await addTransaction(
-        accountId: toAccountId,
-        type: 'in',
-        amount: amount,
-        category: 'transfer',
-        description: description ?? 'Transfer in',
-      );
-    } catch (e) {
-      await addTransaction(
-        accountId: fromAccountId,
-        type: 'in',
-        amount: amount,
-        category: 'transfer',
-        description: 'Rollback: failed transfer',
-      );
-      rethrow;
-    }
   }
 
-  Future<Map<String, double>> getTodaySummary() async {
-    final transactions = await getTodayTransactions();
-    double totalIn = 0, totalOut = 0;
-
-    for (final t in transactions) {
-      if (t.type == 'in') {
-        totalIn += t.amount;
-      } else {
-        totalOut += t.amount;
-      }
+  /// Per-account check that balance = journal (difference = opening balance
+  /// or historical drift from older app versions).
+  Future<List<Map<String, dynamic>>> getReconciliation() async {
+    try {
+      final res = await _client.rpc('get_account_reconciliation');
+      return (res as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      Logger.error('getReconciliation', e);
+      return [];
     }
-
-    return {
-      'total_in': totalIn,
-      'total_out': totalOut,
-      'net': totalIn - totalOut,
-    };
   }
 
   Map<String, double> getCategoryBreakdown(
@@ -320,6 +274,7 @@ class AccountService {
   ) {
     final breakdown = <String, double>{};
     for (final t in transactions) {
+      if (t.isTransfer) continue;
       final key = '${t.category}_${t.type}';
       breakdown[key] = (breakdown[key] ?? 0) + t.amount;
     }

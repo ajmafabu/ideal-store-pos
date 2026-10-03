@@ -137,7 +137,7 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}')),
         );
       }
     }

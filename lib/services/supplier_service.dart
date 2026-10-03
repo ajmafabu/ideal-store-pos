@@ -1,4 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/payment_methods.dart';
+import '../utils/network_errors.dart';
+import '../models/sale.dart' show newDocumentId;
 import '../models/supplier.dart';
 import '../utils/logger.dart';
 import 'account_service.dart';
@@ -6,7 +9,6 @@ import 'offline_service.dart';
 
 class SupplierService {
   final SupabaseClient _supabase;
-  final AccountService? _accountService;
   final OfflineService _offlineService;
 
   SupplierService({
@@ -14,7 +16,6 @@ class SupplierService {
     AccountService? accountService,
     OfflineService? offlineService,
   }) : _supabase = client ?? Supabase.instance.client,
-       _accountService = accountService,
        _offlineService = offlineService ?? OfflineService();
 
   Future<List<Supplier>> getSuppliers() async {
@@ -187,6 +188,11 @@ class SupplierService {
     }
   }
 
+  /// Records a payment to a supplier. The database checks it against the
+  /// purchase due, updates supplier dues and books it out of cash or bank by
+  /// the payment method (#10, #12). Server rejections are thrown (they used
+  /// to be queued offline and reported as success); only a network failure
+  /// queues the payment.
   Future<void> recordPayment({
     required String supplierId,
     required String purchaseId,
@@ -194,73 +200,20 @@ class SupplierService {
     String paymentMethod = 'cash',
     String? notes,
   }) async {
+    final data = {
+      'id': newDocumentId(),
+      'supplier_id': supplierId,
+      'purchase_id': purchaseId,
+      'amount': amount,
+      'payment_method': PaymentMethods.normalize(paymentMethod),
+      'notes': notes,
+    };
     try {
-      final user = _supabase.auth.currentUser;
-      await _supabase.from('supplier_payments').insert({
-        'supplier_id': supplierId,
-        'purchase_id': purchaseId,
-        'amount': amount,
-        'payment_method': paymentMethod,
-        'notes': notes,
-        'created_by': user?.id,
-      });
-
-      if (_accountService != null) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          String accountType = paymentMethod == 'upi' ? 'bank' : 'cash';
-          final account = accounts.firstWhere(
-            (a) => a.accountType == accountType,
-            orElse: () => accounts.first,
-          );
-          await _accountService.addTransaction(
-            accountId: account.id,
-            type: 'out',
-            amount: amount,
-            category: 'credit_payment',
-            description: 'Credit payment to supplier',
-          );
-        } catch (e) {
-          Logger.warning(
-            'Failed to add account entry for supplier payment: $e',
-          );
-        }
-      }
+      await _supabase.from('supplier_payments').insert({...data, 'created_by': _supabase.auth.currentUser?.id});
     } catch (e) {
-      Logger.warning('recordPayment failed, queuing offline: $e');
-      await _offlineService.queuePendingWrite({
-        'table': 'supplier_payments',
-        'operation': 'insert',
-        'data': {
-          'supplier_id': supplierId,
-          'purchase_id': purchaseId,
-          'amount': amount,
-          'payment_method': paymentMethod,
-          'notes': notes,
-        },
-      });
-    }
-  }
-
-  Future<void> updatePurchaseCredit({
-    required String purchaseId,
-    required String? supplierId,
-    required bool isCredit,
-    required double amountPaid,
-    required double dueAmount,
-  }) async {
-    try {
-      await _supabase
-          .from('purchases')
-          .update({
-            'supplier_id': supplierId,
-            'is_credit': isCredit,
-            'amount_paid': amountPaid,
-            'due_amount': dueAmount,
-          })
-          .eq('id', purchaseId);
-    } catch (e) {
-      Logger.error('updatePurchaseCredit', e);
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('Supplier payment could not reach the server, queuing: $e');
+      await _offlineService.queuePendingWrite({'table': 'supplier_payments', 'operation': 'insert', 'data': data});
     }
   }
 

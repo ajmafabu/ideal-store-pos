@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/sale.dart';
+import '../models/sale.dart';
 
 class HeldBill {
   final SaleSession session;
@@ -37,6 +37,9 @@ class SaleSession {
   double get total => subtotal - totalDiscount;
   int get itemCount => items.length;
   int get totalQty => items.fold(0, (sum, item) => sum + item.qty);
+
+  /// Bill-level GST included in the line totals (before the bill discount).
+  double get gstTotal => items.fold(0.0, (sum, item) => sum + item.gstAmount);
 }
 
 class DesktopCartItem {
@@ -56,6 +59,11 @@ class DesktopCartItem {
   final double basePrice;
   final String? rateLabel;
 
+  /// Stock units consumed by one unit of this line (e.g. 12 for a box of 12
+  /// of a product whose stock is counted in pieces). The database deducts
+  /// qty × stockFactor (#22).
+  final double stockFactor;
+
   DesktopCartItem({
     required this.productId,
     required this.name,
@@ -72,12 +80,120 @@ class DesktopCartItem {
     this.tier = 'normal',
     double? basePrice,
     this.rateLabel,
-  }) : basePrice = basePrice ?? price;
+    double? stockFactor,
+  }) : basePrice = basePrice ?? price,
+       stockFactor = stockFactor ?? (unitType == 'pieces' ? 1.0 : piecesPerUnit.toDouble());
 
   double get discountAmount => (price * qty) * (discount / 100);
   double get total => (price * qty) - discountAmount;
-  double get profit => (price - purchasePrice) * qty;
-  int get totalPieces => unitType == 'pieces' ? qty : qty * piecesPerUnit;
+
+  /// Profit after the line discount (purchasePrice is per line unit).
+  double get profit => total - purchasePrice * qty;
+  double get totalPieces => qty * stockFactor;
+
+  DesktopCartItem copyWith({
+    double? price,
+    int? qty,
+    double? purchasePrice,
+    double? discount,
+    String? rateLabel,
+    String? tier,
+  }) => DesktopCartItem(
+    productId: productId,
+    name: name,
+    price: price ?? this.price,
+    qty: qty ?? this.qty,
+    unit: unit,
+    purchasePrice: purchasePrice ?? this.purchasePrice,
+    gstRate: gstRate,
+    hsnCode: hsnCode,
+    tamilName: tamilName,
+    discount: discount ?? this.discount,
+    unitType: unitType,
+    piecesPerUnit: piecesPerUnit,
+    tier: tier ?? this.tier,
+    basePrice: basePrice,
+    rateLabel: rateLabel ?? this.rateLabel,
+    stockFactor: stockFactor,
+  );
+
+  /// The line as stored on the sale.
+  CartItem toCartItem({String? tier}) => CartItem(
+    productId: productId,
+    name: name,
+    price: price,
+    qty: qty,
+    unit: unit,
+    purchasePrice: purchasePrice,
+    gstRate: gstRate,
+    hsnCode: hsnCode,
+    tamilName: tamilName,
+    discount: discount,
+    unitType: unitType,
+    piecesPerUnit: piecesPerUnit,
+    tier: tier ?? this.tier,
+    rateLabel: rateLabel,
+    stockFactor: stockFactor,
+  );
+
+  /// Rebuild a cart line from a saved sale line (edit sale).
+  factory DesktopCartItem.fromCartItem(CartItem item) => DesktopCartItem(
+    productId: item.productId,
+    name: item.name,
+    price: item.price,
+    qty: item.qty,
+    unit: item.unit,
+    purchasePrice: item.purchasePrice,
+    gstRate: item.gstRate,
+    hsnCode: item.hsnCode,
+    tamilName: item.tamilName,
+    discount: item.discount,
+    unitType: item.unitType,
+    piecesPerUnit: item.piecesPerUnit,
+    tier: item.tier,
+    rateLabel: item.rateLabel,
+    stockFactor: item.stockFactor,
+  );
+
+  /// Held-bill storage keeps every field, so a restored bill sells the same
+  /// units at the same rate.
+  Map<String, dynamic> toHeldJson() => {
+    'product_id': productId,
+    'name': name,
+    'price': price,
+    'qty': qty,
+    'unit': unit,
+    'purchase_price': purchasePrice,
+    'gst_rate': gstRate,
+    'hsn_code': hsnCode,
+    'tamil_name': tamilName,
+    'discount': discount,
+    'unit_type': unitType,
+    'pieces_per_unit': piecesPerUnit,
+    'tier': tier,
+    'base_price': basePrice,
+    'rate_label': rateLabel,
+    'stock_factor': stockFactor,
+  };
+
+  factory DesktopCartItem.fromHeldJson(Map<String, dynamic> m) => DesktopCartItem(
+    productId: m['product_id'] as String,
+    name: m['name'] as String,
+    price: (m['price'] as num).toDouble(),
+    qty: (m['qty'] as num).toInt(),
+    unit: m['unit'] as String? ?? 'pcs',
+    purchasePrice: (m['purchase_price'] as num?)?.toDouble() ?? 0,
+    gstRate: (m['gst_rate'] as num?)?.toDouble() ?? 0,
+    hsnCode: m['hsn_code'] as String?,
+    tamilName: m['tamil_name'] as String?,
+    discount: (m['discount'] as num?)?.toDouble() ?? 0,
+    unitType: m['unit_type'] as String? ?? 'pieces',
+    piecesPerUnit: (m['pieces_per_unit'] as num?)?.toInt() ?? 1,
+    tier: m['tier'] as String? ?? 'normal',
+    basePrice: (m['base_price'] as num?)?.toDouble(),
+    rateLabel: m['rate_label'] as String?,
+    stockFactor: (m['stock_factor'] as num?)?.toDouble(),
+  );
   
   // GST getters (consistent with CartItem in sale.dart)
   double get gstAmount => total * gstRate / (100 + gstRate);
@@ -136,7 +252,7 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   void addItem(DesktopCartItem item) {
     final session = state[_activeSessionIndex];
     final existing = session.items.indexWhere(
-      (c) => c.productId == item.productId,
+      (c) => c.productId == item.productId && c.unitType == item.unitType && c.stockFactor == item.stockFactor,
     );
     if (existing >= 0) {
       session.items[existing].qty += item.qty;
@@ -250,7 +366,6 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   bool autoHoldCurrentSession() {
     final session = state[_activeSessionIndex];
-    print('[HOLD] autoHoldCurrentSession called, items=${session.items.length}');
     if (session.items.isEmpty) return false;
     heldBills.add(HeldBill(
       session: SaleSession(
@@ -267,7 +382,6 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
       editingSale: _editingSale,
     ));
     _heldBillVersion++;
-    print('[HOLD] Added to heldBills, total=${heldBills.length}, version=$_heldBillVersion');
     clearSession(_activeSessionIndex);
     _editingSale = null;
     state = List.from(state);

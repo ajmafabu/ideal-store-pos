@@ -5,6 +5,7 @@ import '../../config/providers.dart';
 import '../../models/sale.dart';
 import '../../models/product_return.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/error_messages.dart';
 
 class ReturnsScreen extends ConsumerStatefulWidget {
   const ReturnsScreen({super.key});
@@ -73,8 +74,10 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
   List<CartItem> get _selectedItems =>
       _billItems.where((item) => (_returnQty[item.productId] ?? 0) > 0).toList();
 
+  // estimate net of the line discount; the database applies the bill
+  // discount too, so the recorded refund can be a little lower
   double get _totalRefund => _selectedItems.fold(
-      0.0, (sum, item) => sum + item.price * (_returnQty[item.productId] ?? 0));
+      0.0, (sum, item) => sum + (item.qty == 0 ? 0 : item.total / item.qty) * (_returnQty[item.productId] ?? 0));
 
   int get _totalReturnQty =>
       _returnQty.values.fold(0, (sum, q) => sum + q);
@@ -132,7 +135,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   ),
                   error: (e, _) => SliverFillRemaining(
-                    child: Center(child: Text('Error: $e')),
+                    child: Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
                   ),
                   data: (returns) {
                     if (returns.isEmpty) {
@@ -489,7 +492,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                   child: Text(
                                     item.tier.toUpperCase(),
                                     style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 10,
                                         color: item.tier == 'wholesale'
                                             ? Colors.blue
                                             : Colors.purple,
@@ -700,45 +703,53 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
       final saleId = _selectedBill!['id'] as String;
       final returns = <ProductReturn>[];
 
+      final service = ref.read(returnServiceProvider);
+      int done = 0;
+      double refunded = 0;
+      double creditReduced = 0;
       for (final item in _selectedItems) {
         final qty = _returnQty[item.productId] ?? 0;
         if (qty <= 0) continue;
-
-        returns.add(ProductReturn(
+        // refund value, credit reduction and refund account are decided by
+        // the database from what the customer actually paid (#14)
+        final r = await service.createReturn(ProductReturn(
           id: '',
           productId: item.productId,
           productName: item.name,
           quantity: qty,
           unitPrice: item.price,
-          refundAmount: item.price * qty,
           reason: reason,
-          createdAt: AppTimezone.nowIst(),
+          createdAt: AppTimezone.nowUtc(),
           originalSaleId: saleId,
-          returnAmount: item.price * qty,
+          returnAmount: item.total * qty / (item.qty == 0 ? 1 : item.qty),
         ));
+        returns.add(r);
+        done++;
+        refunded += r.refundAmount;
+        creditReduced += r.creditAdjusted;
       }
 
-      await ref.read(returnServiceProvider).createBulkReturn(
-            originalSaleId: saleId,
-            returns: returns,
-          );
-
       if (mounted) {
+        final parts = <String>['$done return(s) recorded'];
+        if (refunded > 0) parts.add('refund Rs${refunded.toStringAsFixed(0)}');
+        if (creditReduced > 0) parts.add('due reduced by Rs${creditReduced.toStringAsFixed(0)}');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${returns.length} return(s) recorded'),
-            backgroundColor: Colors.green,
-          ),
+          SnackBar(content: Text(parts.join(' • ')), backgroundColor: Colors.green),
         );
         _selectBill(null);
         ref.invalidate(returnsProvider);
+        ref.invalidate(productsProvider);
+        ref.invalidate(salesHistoryProvider);
         _loadWeekBills();
       }
     } catch (e) {
+      // lines before the failing one were saved; refresh so the list is true
+      ref.invalidate(returnsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Return failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
+        _loadWeekBills();
       }
     } finally {
       if (mounted) setState(() => _submitting = false);

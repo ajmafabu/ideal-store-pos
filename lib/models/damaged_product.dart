@@ -24,7 +24,7 @@ class DamagedProduct {
       id: json['id'] as String,
       productId: json['product_id'] as String?,
       productName: json['product_name'] as String? ?? '',
-      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      quantity: (json['quantity'] as num?)?.round() ?? 0,
       unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
       reason: json['reason'] as String?,
       createdBy: json['created_by'] as String?,

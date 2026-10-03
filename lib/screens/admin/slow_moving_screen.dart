@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../models/product.dart';
+import '../../utils/error_messages.dart';
 
 class SlowMovingScreen extends ConsumerStatefulWidget {
   const SlowMovingScreen({super.key});
@@ -29,59 +30,45 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
       // Get all products
       final products = await ref.read(productServiceProvider).getAllProducts();
 
-      // Get all sales from last 90 days to check selling frequency
-      final sales = await ref.read(saleServiceProvider).getSalesHistory(limit: 500);
-
-      // Count how many times each product was sold in last 90 days
+      // Per-product quantities over 7–90 days, aggregated by the database
+      // over EVERY sale (it used to scan only the last 500 bills, so busy
+      // shops saw best sellers listed as "never sold") (#24).
+      final stats = await ref.read(saleServiceProvider).getProductSalesStats();
+      final key = _selectedDays <= 7
+          ? 'qty7d'
+          : _selectedDays <= 15
+              ? 'qty15d'
+              : _selectedDays <= 30
+                  ? 'qty30d'
+                  : _selectedDays <= 60
+                      ? 'qty60d'
+                      : 'qty90d';
       final Map<String, int> salesCount = {};
       final Map<String, DateTime> lastSold = {};
-
+      stats.forEach((id, st) {
+        salesCount[id] = (st[key] as num?)?.toInt() ?? 0;
+        final last = st['lastSoldAt'];
+        if (last is DateTime) lastSold[id] = last;
+      });
       final now = DateTime.now();
-      for (final sale in sales) {
-        final saleDate = sale.createdAt;
-        final daysSince = now.difference(saleDate).inDays;
 
-        for (final item in sale.items) {
-          final productId = item.productId;
-
-          // Count sales in selected period
-          if (daysSince <= _selectedDays) {
-            salesCount[productId] = (salesCount[productId] ?? 0) + item.qty;
-          }
-
-          // Track last sold date
-          if (!lastSold.containsKey(productId) || saleDate.isAfter(lastSold[productId]!)) {
-            lastSold[productId] = saleDate;
-          }
-        }
-      }
-
-      // Find slow-moving products:
-      // - Products with stock > 0
-      // - Not sold (or sold very little) in the selected period
+      // Slow moving: in stock, and not sold in the period or selling very
+      // little against the stock held
       final slowProducts = products.where((p) {
-        if (p.stock <= 0) return false; // Skip out of stock
-
+        if (p.stock <= 0) return false;
         final soldQty = salesCount[p.id] ?? 0;
         final lastSale = lastSold[p.id];
-
-        // If never sold or sold very little relative to stock
-        if (lastSale == null) return true; // Never sold
-        final daysSinceLastSale = now.difference(lastSale).inDays;
-
-        // Slow = low sales relative to stock OR not sold recently
-        if (soldQty == 0 && daysSinceLastSale > _selectedDays) return true;
-        if (p.stock > 20 && soldQty < 3) return true; // High stock, low sales
-
+        if (lastSale == null) return true; // no sale in 90 days
+        if (soldQty == 0 && now.difference(lastSale).inDays > _selectedDays) return true;
+        if (p.stock > 20 && soldQty < 3) return true;
         return false;
       }).toList();
 
-      // Sort by days since last sold (oldest first)
       slowProducts.sort((a, b) {
         final aLast = lastSold[a.id];
         final bLast = lastSold[b.id];
         if (aLast == null && bLast == null) return 0;
-        if (aLast == null) return -1; // Never sold first
+        if (aLast == null) return -1;
         if (bLast == null) return 1;
         return aLast.compareTo(bLast);
       });
@@ -101,7 +88,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error analyzing slow moving stock: $e'),
+            content: Text('Error analyzing slow moving stock: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -201,7 +188,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                                   Text(
                                     lastSold != null
                                         ? 'Last sold: ${DateFormat('dd MMM yyyy').format(lastSold)} (${DateTime.now().difference(lastSold).inDays} days ago)'
-                                        : 'Never sold',
+                                        : 'No sale in 90+ days',
                                     style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                                   ),
                                 ],

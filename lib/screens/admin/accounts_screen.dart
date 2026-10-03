@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import '../../utils/error_messages.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
@@ -135,7 +136,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
         },
         child: accountsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
           data: (accounts) {
             if (accounts.isEmpty) {
               return const EmptyState(
@@ -438,7 +439,8 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   Future<void> _exportAsPdf() async {
     try {
       final service = ref.read(accountServiceProvider);
-      final transactions = await service.getTransactions(
+      // every row in the period (used to stop at 100) (#20)
+      final transactions = await service.getAllTransactions(
         startDate: _filterStart,
         endDate: _filterEnd,
       );
@@ -477,7 +479,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
             mainAxisAlignment: pw.MainAxisAlignment.end,
             children: [
               pw.Text(
-                'Total: Rs${transactions.fold(0.0, (sum, t) => sum + (t.type == 'in' ? t.amount : -t.amount)).toStringAsFixed(0)}',
+                'Net (excluding transfers): Rs${transactions.where((t) => t.category != 'transfer').fold(0.0, (sum, t) => sum + (t.type == 'in' ? t.amount : -t.amount)).toStringAsFixed(0)}',
                 style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
               ),
             ],
@@ -493,7 +495,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }
@@ -502,7 +504,8 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
   Future<void> _exportAsCsv() async {
     try {
       final service = ref.read(accountServiceProvider);
-      final transactions = await service.getTransactions(
+      // every row in the period (used to stop at 100) (#20)
+      final transactions = await service.getAllTransactions(
         startDate: _filterStart,
         endDate: _filterEnd,
       );
@@ -522,7 +525,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }

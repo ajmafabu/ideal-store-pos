@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
+import '../../utils/error_messages.dart';
 
 class AllLowStockScreen extends ConsumerWidget {
   const AllLowStockScreen({super.key});
@@ -13,7 +14,7 @@ class AllLowStockScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('All Low Stock Products')),
       body: lowStock.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
         data: (products) {
           if (products.isEmpty) {
             return const Center(

@@ -1,117 +1,53 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/supabase_config.dart';
 import '../utils/logger.dart';
 
+/// Factory reset (#31). The reset itself runs in ONE database transaction
+/// (`factory_reset`, admin only): it either clears everything or nothing.
+/// The old version deleted table by table from the app and could stop
+/// half-way, leaving a broken database.
 class FactoryResetService {
-  final _client = Supabase.instance.client;
+  final SupabaseClient _client = Supabase.instance.client;
 
+  /// Re-checks the signed-in admin's password on a separate connection, so
+  /// a typo or another account's e-mail never changes the current session.
   Future<bool> verifyAdmin(String email, String password) async {
-    try {
-      final response = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      final user = response.user;
-      if (user == null) return false;
-
-      // Check if user is admin
-      final profile = await _client
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (profile == null || profile['role'] != 'admin') {
-        await _client.auth.signOut();
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      Logger.error('verifyAdmin', e);
+    final current = _client.auth.currentUser;
+    if (current == null || (current.email ?? '').toLowerCase() != email.trim().toLowerCase()) {
       return false;
     }
+    final temp = SupabaseClient(
+      SupabaseConfig.supabaseUrl,
+      SupabaseConfig.supabaseAnonKey,
+      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    );
+    try {
+      final res = await temp.auth.signInWithPassword(email: email.trim(), password: password);
+      if (res.user?.id != current.id) return false;
+      final profile = await _client.from('profiles').select('role, active').eq('id', current.id).maybeSingle();
+      return profile != null && profile['role'] == 'admin' && profile['active'] != false;
+    } catch (e) {
+      Logger.warning('verifyAdmin failed: $e');
+      return false;
+    } finally {
+      try {
+        await temp.auth.signOut();
+      } catch (_) {}
+      await temp.dispose();
+    }
   }
 
+  /// Deletes every business record (sales, purchases, stock, customers,
+  /// suppliers, cash book). Logins, staff and shop settings are kept.
   Future<void> resetAllData() async {
-    Logger.info('Factory reset: deleting all data...');
-
-    final currentUser = _client.auth.currentUser;
-
-    // Delete in order to respect foreign keys
-    final tables = [
-      'account_transactions',
-      'payments',
-      'supplier_payments',
-      'product_returns',
-      'damaged_products',
-      'purchase_orders',
-      'inventory_batches',
-      'expenses',
-      'sales',
-      'purchases',
-      'customers',
-      'suppliers',
-      'products',
-      'accounts',
-    ];
-
-    for (final table in tables) {
-      try {
-        await _client.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        Logger.info('Factory reset: cleared $table');
-      } catch (e) {
-        Logger.warning('Factory reset: failed to clear $table: $e');
-      }
-    }
-
-    // Delete all profiles EXCEPT the current admin
-    try {
-      if (currentUser != null) {
-        await _client.from('profiles').delete().neq('id', currentUser.id);
-        Logger.info('Factory reset: cleared profiles (kept admin)');
-      } else {
-        await _client.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        Logger.info('Factory reset: cleared all profiles');
-      }
-    } catch (e) {
-      Logger.warning('Factory reset: failed to clear profiles: $e');
-    }
-
-    Logger.info('Factory reset: all data cleared');
+    await _client.rpc('factory_reset', params: {'p_confirm': 'RESET', 'p_scope': 'all'});
+    Logger.info('Factory reset done');
   }
 
-  /// Clear only purchases and accounts (keep products and sales)
+  /// Clears purchases, supplier payments and the cash book only; current
+  /// stock is kept as opening stock at its cost price.
   Future<void> clearPurchasesAndAccounts() async {
-    Logger.info('Clearing purchases and accounts...');
-
-    final tables = [
-      'account_transactions',
-      'supplier_payments',
-      'inventory_batches',
-      'purchases',
-      'accounts',
-    ];
-
-    for (final table in tables) {
-      try {
-        await _client.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        Logger.info('Cleared $table');
-      } catch (e) {
-        Logger.warning('Failed to clear $table: $e');
-      }
-    }
-
-    // Recreate default accounts
-    try {
-      await _client.from('accounts').insert([
-        {'name': 'Cash in Hand', 'account_type': 'cash', 'balance': 0},
-        {'name': 'Bank Account', 'account_type': 'bank', 'balance': 0},
-      ]);
-      Logger.info('Created default accounts');
-    } catch (e) {
-      Logger.warning('Failed to create default accounts: $e');
-    }
-
+    await _client.rpc('factory_reset', params: {'p_confirm': 'RESET', 'p_scope': 'purchases_accounts'});
     Logger.info('Purchases and accounts cleared');
   }
 }

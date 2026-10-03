@@ -1,4 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/payment_methods.dart';
+import '../utils/network_errors.dart';
+import '../models/sale.dart' show newDocumentId;
 import '../models/customer.dart';
 import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
@@ -7,7 +10,6 @@ import 'offline_service.dart';
 
 class CustomerService {
   final SupabaseClient _supabase;
-  final AccountService? _accountService;
   final OfflineService _offlineService;
 
   CustomerService({
@@ -15,7 +17,6 @@ class CustomerService {
     AccountService? accountService,
     OfflineService? offlineService,
   }) : _supabase = client ?? Supabase.instance.client,
-       _accountService = accountService,
        _offlineService = offlineService ?? OfflineService();
 
   // Get all customers
@@ -91,27 +92,31 @@ class CustomerService {
     }
   }
 
-  // Add customer
+  // Add customer. Server rejections are thrown; only a network failure is
+  // queued (it used to queue every error and report success).
   Future<Customer?> addCustomer({
     required String name,
     String? phone,
     String? address,
+    String? gstin,
+    String? stateCode,
+    double? creditLimit,
   }) async {
+    final data = <String, dynamic>{
+      'name': name,
+      'phone': phone,
+      'address': address,
+      'gstin': gstin,
+      if (stateCode != null) 'state_code': stateCode,
+      if (creditLimit != null) 'credit_limit': creditLimit,
+    };
     try {
-      final response = await _supabase
-          .from('customers')
-          .insert({'name': name, 'phone': phone, 'address': address})
-          .select()
-          .single();
+      final response = await _supabase.from('customers').insert(data).select().single();
       return Customer.fromJson(response);
     } catch (e) {
-      Logger.error('addCustomer', e);
-      // Queue for offline
-      await _offlineService.queuePendingWrite({
-        'table': 'customers',
-        'operation': 'insert',
-        'data': {'name': name, 'phone': phone, 'address': address},
-      });
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('addCustomer offline, queuing: $e');
+      await _offlineService.queuePendingWrite({'table': 'customers', 'operation': 'insert', 'data': data});
       return null;
     }
   }
@@ -122,18 +127,27 @@ class CustomerService {
     required String name,
     String? phone,
     String? address,
+    String? gstin,
+    String? stateCode,
+    double? creditLimit,
   }) async {
+    final data = <String, dynamic>{
+      'name': name,
+      'phone': phone,
+      'address': address,
+      'gstin': gstin,
+      if (stateCode != null) 'state_code': stateCode,
+      if (creditLimit != null) 'credit_limit': creditLimit,
+    };
     try {
-      await _supabase
-          .from('customers')
-          .update({'name': name, 'phone': phone, 'address': address})
-          .eq('id', id);
+      await _supabase.from('customers').update(data).eq('id', id);
     } catch (e) {
-      Logger.error('updateCustomer', e);
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('updateCustomer offline, queuing: $e');
       await _offlineService.queuePendingWrite({
         'table': 'customers',
         'operation': 'update',
-        'data': {'id': id, 'name': name, 'phone': phone, 'address': address},
+        'data': {'id': id, ...data},
       });
     }
   }
@@ -192,7 +206,11 @@ class CustomerService {
     }
   }
 
-  // Record payment
+  /// Records money collected against a credit sale. The database checks it
+  /// is not more than the amount due, reduces the sale's due and the
+  /// customer's balance, and books it into cash or bank from the payment
+  /// method — all in one step (#10, #12). A server rejection is thrown;
+  /// only a network failure queues the payment (with a stable id).
   Future<void> recordPayment({
     required String customerId,
     required String saleId,
@@ -200,76 +218,21 @@ class CustomerService {
     String paymentMethod = 'cash',
     String? notes,
   }) async {
-    final online = await _offlineService.isOnline();
-    if (!online) {
-      await _offlineService.queuePendingWrite({
-        'table': 'payments',
-        'operation': 'insert',
-        'data': {
-          'customer_id': customerId,
-          'sale_id': saleId,
-          'amount': amount,
-          'payment_method': paymentMethod,
-          'notes': notes,
-        },
-      });
-      return;
-    }
-
+    final data = {
+      'id': newDocumentId(),
+      'customer_id': customerId,
+      'sale_id': saleId,
+      'amount': amount,
+      'payment_method': PaymentMethods.normalize(paymentMethod),
+      'notes': notes,
+    };
     try {
-      final user = _supabase.auth.currentUser;
-      await _supabase.from('payments').insert({
-        'customer_id': customerId,
-        'sale_id': saleId,
-        'amount': amount,
-        'payment_method': paymentMethod,
-        'notes': notes,
-        'created_by': user?.id,
-      });
-
-      // Wire to accounts: credit collection = Money In
-      if (_accountService != null) {
-        try {
-          final accounts = await _accountService.getAccounts();
-          String accountType = paymentMethod == 'upi' ? 'bank' : 'cash';
-          final account = accounts.firstWhere(
-            (a) => a.accountType == accountType,
-            orElse: () => accounts.first,
-          );
-          await _accountService.addTransaction(
-            accountId: account.id,
-            type: 'in',
-            amount: amount,
-            category: 'credit_collection',
-            description: 'Credit collected from customer',
-          );
-        } catch (e) {
-          Logger.warning('Account entry failed for customer payment: $e');
-        }
-      }
+      await _supabase.from('payments').insert({...data, 'created_by': _supabase.auth.currentUser?.id});
     } catch (e) {
-      Logger.error('recordPayment', e);
-      rethrow;
+      if (!isNetworkError(e)) rethrow;
+      Logger.warning('Payment could not reach the server, queuing: $e');
+      await _offlineService.queuePendingWrite({'table': 'payments', 'operation': 'insert', 'data': data});
     }
-  }
-
-  // Update sale credit fields
-  Future<void> updateSaleCredit({
-    required String saleId,
-    required String? customerId,
-    required bool isCredit,
-    required double amountPaid,
-    required double dueAmount,
-  }) async {
-    await _supabase
-        .from('sales')
-        .update({
-          'customer_id': customerId,
-          'is_credit': isCredit,
-          'amount_paid': amountPaid,
-          'due_amount': dueAmount,
-        })
-        .eq('id', saleId);
   }
 
   // Search customers by name or phone

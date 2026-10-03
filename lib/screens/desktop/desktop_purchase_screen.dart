@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/sale.dart' show newDocumentId;
+import '../../utils/payment_methods.dart';
+import '../../utils/error_messages.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/logger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -535,47 +538,13 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         (price != product.purchasePrice || sellPrice != product.sellingPrice)) {
       ref
           .read(productServiceProvider)
-          .updateProduct(
-            Product(
-              id: product.id,
-              name: product.name,
-              barcode: product.barcode,
-              category: product.category,
-              purchasePrice: price,
-              sellingPrice: sellPrice,
-              stock: product.stock,
-              unit: product.unit,
-              lowStockAlert: product.lowStockAlert,
-              shopId: product.shopId,
-              gstRate: product.gstRate,
-              hsnCode: product.hsnCode,
-              expiryDate: product.expiryDate,
-              batchNumber: product.batchNumber,
-              hasVariants: product.hasVariants,
-              variants: product.variants,
-              tamilName: product.tamilName,
-              sfw: product.sfw,
-              unitType: product.unitType,
-              piecesPerUnit: product.piecesPerUnit,
-            ),
-          );
+          .updatePrices(product.id, purchasePrice: price, sellingPrice: sellPrice);
     }
     ref
         .read(desktopPurchaseProvider.notifier)
         .updateItem(
           index,
-          PurchaseItem(
-            productId: item.productId,
-            name: item.name,
-            price: price,
-            qty: item.qty,
-            unit: item.unit,
-            gstRate: item.gstRate,
-            hsnCode: item.hsnCode,
-            tamilName: item.tamilName,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-          ),
+          item.copyWith(price: price),
         );
     Navigator.pop(ctx);
     setState(() {}); // Force rebuild
@@ -604,7 +573,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       final roundedTotal = rawTotal.roundToDouble();
       final roundOffAmount = roundedTotal - rawTotal;
       final purchase = Purchase(
-        id: '',
+        id: newDocumentId(), // same id on retry: never saved twice (#5)
         supplierId: session.supplier?.id,
         supplierName: session.supplier?.name,
         items: List.from(session.items),
@@ -615,7 +584,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         isCredit: session.isCredit,
         amountPaid: session.isCredit ? 0 : roundedTotal,
         dueAmount: session.isCredit ? roundedTotal : 0,
-        paymentMethod: session.paymentMethod,
+        paymentMethod: PaymentMethods.normalize(session.paymentMethod),
         dueDate: session.isCredit
             ? DateTime.now().add(const Duration(days: 30))
             : null,
@@ -664,7 +633,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Purchase failed: $e'),
+            content: Text('Purchase NOT saved: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -963,7 +932,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           children: [
             Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
             const SizedBox(height: 12),
-            Text('Error: $e', style: TextStyle(color: Colors.grey[600])),
+            Text('Error: ${ErrorMessages.parse(e)}', style: TextStyle(color: Colors.grey[600])),
           ],
         ),
       ),
@@ -1245,18 +1214,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     setState(() => _isProcessing = true);
     final items = purchase.items
         .map(
-          (item) => PurchaseItem(
-            productId: item.productId,
-            name: item.name,
-            price: item.price,
-            qty: item.qty,
-            unit: item.unit,
-            gstRate: item.gstRate,
-            hsnCode: item.hsnCode,
-            tamilName: item.tamilName,
-            batchNumber: item.batchNumber,
-            expiryDate: item.expiryDate,
-          ),
+          (item) => item.copyWith(),
         )
         .toList();
 
@@ -1634,19 +1592,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             GestureDetector(
                                               onTap: () => setLocal(() {
                                                 if (item.qty > 1) {
-                                                  items[index] = PurchaseItem(
-                                                    productId: item.productId,
-                                                    name: item.name,
-                                                    price: item.price,
-                                                    qty: item.qty - 1,
-                                                    unit: item.unit,
-                                                    gstRate: item.gstRate,
-                                                    hsnCode: item.hsnCode,
-                                                    tamilName: item.tamilName,
-                                                    batchNumber:
-                                                        item.batchNumber,
-                                                    expiryDate: item.expiryDate,
-                                                  );
+                                                  items[index] = item.copyWith(qty: item.qty - 1);
                                                 }
                                               }),
                                               child: const Icon(
@@ -1670,18 +1616,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             ),
                                             GestureDetector(
                                               onTap: () => setLocal(() {
-                                                items[index] = PurchaseItem(
-                                                  productId: item.productId,
-                                                  name: item.name,
-                                                  price: item.price,
-                                                  qty: item.qty + 1,
-                                                  unit: item.unit,
-                                                  gstRate: item.gstRate,
-                                                  hsnCode: item.hsnCode,
-                                                  tamilName: item.tamilName,
-                                                  batchNumber: item.batchNumber,
-                                                  expiryDate: item.expiryDate,
-                                                );
+                                                items[index] = item.copyWith(qty: item.qty + 1);
                                               }),
                                               child: const Icon(
                                                 Icons.add_circle_outline,
@@ -1748,18 +1683,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                                 );
                                             if (newPrice != null) {
                                               setLocal(() {
-                                                items[index] = PurchaseItem(
-                                                  productId: item.productId,
-                                                  name: item.name,
-                                                  price: newPrice,
-                                                  qty: item.qty,
-                                                  unit: item.unit,
-                                                  gstRate: item.gstRate,
-                                                  hsnCode: item.hsnCode,
-                                                  tamilName: item.tamilName,
-                                                  batchNumber: item.batchNumber,
-                                                  expiryDate: item.expiryDate,
-                                                );
+                                                items[index] = item.copyWith(price: newPrice);
                                               });
                                             }
                                           },
@@ -1833,22 +1757,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                                 );
                                                 if (newBatch != null) {
                                                   setLocal(() {
-                                                    items[index] = PurchaseItem(
-                                                      productId: item.productId,
-                                                      name: item.name,
-                                                      price: item.price,
-                                                      qty: item.qty,
-                                                      unit: item.unit,
-                                                      gstRate: item.gstRate,
-                                                      hsnCode: item.hsnCode,
-                                                      tamilName: item.tamilName,
-                                                      batchNumber:
-                                                          newBatch.isEmpty
-                                                          ? null
-                                                          : newBatch,
-                                                      expiryDate:
-                                                          item.expiryDate,
-                                                    );
+                                                    items[index] = item.copyWith(batchNumber: newBatch.isEmpty ? null : newBatch);
                                                   });
                                                 }
                                               },
@@ -2116,7 +2025,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }

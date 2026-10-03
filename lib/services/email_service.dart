@@ -4,6 +4,7 @@ import 'package:flutter_mailer/flutter_mailer.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/sale.dart';
 import '../utils/logger.dart';
+import '../utils/error_messages.dart';
 
 class EmailService {
   Future<bool> sendInvoiceEmail({
@@ -93,7 +94,7 @@ $shopName
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send email: $e'),
+            content: Text('Failed to send email: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );

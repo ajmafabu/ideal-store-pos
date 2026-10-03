@@ -29,6 +29,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         callback: (payload) {
           ref.invalidate(salesHistoryProvider);
           ref.invalidate(recentSalesProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(todaySalesProvider);
           ref.invalidate(yesterdaySalesProvider);
           ref.invalidate(todayTransactionsProvider);
@@ -42,6 +43,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         callback: (payload) {
           ProductService.invalidateCache();
           ref.invalidate(productsProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(stockValueProvider);
         },
       )
@@ -52,6 +54,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         callback: (payload) {
           ref.invalidate(purchasesProvider);
           ref.invalidate(productsProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(monthlyProfitProvider);
         },
       )
@@ -61,6 +64,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         table: 'expenses',
         callback: (payload) {
           ref.invalidate(expensesProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(todayExpensesProvider);
           ref.invalidate(todayTransactionsProvider);
           ref.invalidate(monthlyProfitProvider);
@@ -72,6 +76,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         table: 'customers',
         callback: (payload) {
           ref.invalidate(customersProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(totalCustomerDuesProvider);
         },
       )
@@ -81,6 +86,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         table: 'suppliers',
         callback: (payload) {
           ref.invalidate(suppliersProvider);
+          ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(totalSupplierDuesProvider);
         },
       )
@@ -123,6 +129,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
   final timer = Timer.periodic(const Duration(seconds: 30), (_) {
     ProductService.invalidateCache();
     ref.invalidate(productsProvider);
+    ref.invalidate(dashboardSummaryProvider);
     ref.invalidate(stockValueProvider);
     ref.invalidate(salesHistoryProvider);
     ref.invalidate(recentSalesProvider);

@@ -312,6 +312,33 @@ class ProductService {
     }
   }
 
+  /// Changes only the price columns. The purchase screens used to send the
+  /// whole (cached) product back, which wiped the second selling rate and
+  /// wrote an old stock figure over newer sales (#8).
+  Future<void> updatePrices(
+    String productId, {
+    double? purchasePrice,
+    double? sellingPrice,
+  }) async {
+    final data = <String, dynamic>{
+      if (purchasePrice != null) 'purchase_price': purchasePrice,
+      if (sellingPrice != null) 'selling_price': sellingPrice,
+    };
+    if (data.isEmpty) return;
+    await _client.from('products').update(data).eq('id', productId);
+    invalidateCache();
+  }
+
+  /// Sets stock to a counted quantity (admin only). Batches are kept in step
+  /// by the database; a plain product update can no longer change stock.
+  Future<void> setPhysicalStock(String productId, num quantity) async {
+    await _client.rpc('reconcile_stock_with_batches', params: {
+      'p_product_id': productId,
+      'p_physical_qty': quantity,
+    });
+    invalidateCache();
+  }
+
   Future<void> deleteProduct(String id) async {
     try {
       await _client.from('product_variants').delete().eq('product_id', id);
@@ -334,58 +361,20 @@ class ProductService {
     }
   }
 
-  Future<void> addStock(String productId, int quantity) async {
-    try {
-      // Get current stock, then use reconcile RPC to sync batches
-      final current = await _client
-          .from('products')
-          .select('stock')
-          .eq('id', productId)
-          .single();
-      final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-      await _client.rpc(
-        'reconcile_stock_with_batches',
-        params: {
-          'p_product_id': productId,
-          'p_physical_qty': currentStock + quantity,
-        },
-      );
-      ProductService.invalidateCache();
-    } catch (e, stackTrace) {
-      Logger.error('addStock', e, stackTrace);
-      await _offlineService.queuePendingWrite({
-        'table': 'products',
-        'operation': 'stock_add',
-        'data': {'product_id': productId, 'qty': quantity},
-      });
-    }
-  }
+  /// Stock In: adds [quantity] in one locked database step (batches kept in
+  /// step). Errors are thrown so the screen can show them (#27).
+  Future<double> addStock(String productId, num quantity) => _adjustStock(productId, quantity);
 
-  Future<void> deductStock(String productId, int quantity) async {
-    try {
-      // Get current stock, then use reconcile RPC to sync batches
-      final current = await _client
-          .from('products')
-          .select('stock')
-          .eq('id', productId)
-          .single();
-      final currentStock = (current['stock'] as num?)?.toInt() ?? 0;
-      await _client.rpc(
-        'reconcile_stock_with_batches',
-        params: {
-          'p_product_id': productId,
-          'p_physical_qty': (currentStock - quantity).clamp(0, 999999),
-        },
-      );
-      ProductService.invalidateCache();
-    } catch (e, stackTrace) {
-      Logger.error('deductStock', e, stackTrace);
-      await _offlineService.queuePendingWrite({
-        'table': 'products',
-        'operation': 'stock_deduct',
-        'data': {'product_id': productId, 'qty': quantity},
-      });
-    }
+  /// Stock Out: removes [quantity]; the database refuses to go below zero.
+  Future<double> deductStock(String productId, num quantity) => _adjustStock(productId, -quantity);
+
+  Future<double> _adjustStock(String productId, num delta) async {
+    final res = await _client.rpc('adjust_stock', params: {
+      'p_product_id': productId,
+      'p_delta': delta,
+    });
+    invalidateCache();
+    return (res as num?)?.toDouble() ?? 0;
   }
 
   /// Returns true if stock was successfully updated, false if reconciliation

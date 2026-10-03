@@ -1,0 +1,119 @@
+-- =====================================================================
+-- verify_schema.sql — READ-ONLY health check of the live database (#1)
+-- Run in the Supabase SQL editor before and after 2026_10_audit_fixes.sql.
+-- Every row should say OK after the migration. Nothing is changed.
+-- =====================================================================
+WITH
+req_cols(tbl, col) AS (VALUES
+  ('sales','invoice_no'),('sales','paid_at_sale'),('sales','taxable_amount'),('sales','cgst_amount'),
+  ('sales','sgst_amount'),('sales','igst_amount'),('sales','due_date'),('sales','extra_charges'),
+  ('sales','round_off'),('sales','updated_at'),('sales','cash_amount'),('sales','digital_amount'),
+  ('purchases','payment_method'),('purchases','round_off'),('purchases','paid_at_purchase'),
+  ('purchases','taxable_amount'),('expenses','payment_method'),('customers','gstin'),
+  ('customers','state_code'),('customers','credit_limit'),('customers','portal_token'),
+  ('products','unit_type'),('products','pieces_per_unit'),('products','selling_price_2'),
+  ('products','sfw'),('products','tamil_name'),('product_returns','original_sale_id'),
+  ('product_returns','return_amount'),('product_returns','credit_adjusted'),('product_returns','refund_method'),
+  ('product_returns','cost_amount'),('account_transactions','ref_type'),('account_transactions','ref_id'),
+  ('account_transactions','source'),('audit_log','entity_type'),('purchase_orders','purchase_id'),
+  ('shop_settings','state_code'),('legacy_postings','amount')),
+req_funcs(sig) AS (VALUES
+  ('delete_sale_atomic(uuid)'),('create_return_atomic(uuid,uuid,uuid,text,numeric,numeric,numeric,text,uuid,text)'),
+  ('return_full_sale(uuid,text)'),('create_damaged_atomic(uuid,uuid,text,numeric,numeric,text,uuid)'),
+  ('delete_purchase_atomic(uuid)'),('receive_purchase_order(uuid,boolean,numeric,text,jsonb)'),
+  ('transfer_between_accounts(uuid,uuid,numeric,text,uuid)'),('get_account_summary(timestamp with time zone,timestamp with time zone,uuid)'),
+  ('merge_duplicate_accounts()'),('get_balance_sheet()'),('get_cash_flow(timestamp with time zone,timestamp with time zone)'),
+  ('get_gstr3b_summary(timestamp with time zone,timestamp with time zone)'),('get_reports_summary(timestamp with time zone,timestamp with time zone)'),
+  ('get_inventory_health()'),('get_receivables_aging()'),('get_dashboard_summary()'),('restore_backup(jsonb,text)'),
+  ('factory_reset(text,text)'),('admin_set_staff(uuid,text,text,boolean,text)'),('admin_delete_staff(uuid)'),
+  ('get_customer_portal(uuid)'),('adjust_stock(uuid,numeric)'),('guard_product_stock()')),
+checks AS (
+  SELECT 1 AS ord, 'migration v100 recorded' AS check_name,
+         CASE WHEN to_regclass('public.schema_migrations') IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM schema_migrations WHERE version = 'v100') THEN 'OK' ELSE 'MISSING' END AS status,
+         '2026_10_audit_fixes.sql applied' AS detail
+  UNION ALL
+  SELECT 2, 'required columns',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'MISSING' END,
+         coalesce(string_agg(tbl || '.' || col, ', '), 'all present')
+  FROM req_cols r
+  WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns c
+                    WHERE c.table_schema = 'public' AND c.table_name = r.tbl AND c.column_name = r.col)
+  UNION ALL
+  SELECT 3, 'required functions',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'MISSING' END,
+         coalesce(string_agg(sig, ', '), 'all present')
+  FROM req_funcs f
+  WHERE NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+                    AND replace(p.oid::regprocedure::text, 'public.', '') = f.sig)
+  UNION ALL
+  SELECT 4, 'no duplicate overloads of report functions',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         coalesce(string_agg(proname || ' x' || n, ', '), 'one definition each')
+  FROM (SELECT proname, count(*) n FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+          AND proname IN ('get_monthly_profit','get_category_sales','get_daily_sales_trend','get_monthly_sales_summary',
+                          'add_inventory_batch','edit_sale_atomic','create_return_atomic','get_receivables_aging')
+        GROUP BY proname HAVING count(*) > 1) d
+  UNION ALL
+  SELECT 5, 'signup ignores client-supplied role',
+         CASE WHEN pg_get_functiondef('public.handle_new_user()'::regprocedure) ILIKE '%raw_user_meta_data->>''role''%'
+              THEN 'PROBLEM' ELSE 'OK' END,
+         'handle_new_user must not read raw_user_meta_data->>role'
+  UNION ALL
+  SELECT 6, 'RLS enabled on every public table',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         coalesce(string_agg(relname, ', '), 'all tables protected')
+  FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' AND NOT relrowsecurity
+  UNION ALL
+  SELECT 7, 'no "allow everything" policies',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         coalesce(string_agg(tablename || ':' || policyname, ', '), 'none')
+  FROM pg_policies
+  WHERE schemaname = 'public' AND (qual = 'true' OR with_check = 'true')
+    AND NOT (tablename = 'app_config' AND cmd = 'SELECT')
+  UNION ALL
+  SELECT 8, 'anon can execute only the allowed functions',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         coalesce(string_agg(proname, ', '), 'only is_admin, is_active_member, get_customer_portal')
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE')
+    AND p.proname NOT IN ('is_admin','is_active_member','get_customer_portal')
+  UNION ALL
+  SELECT 9, 'staff cannot call money/stock mutators directly',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         coalesce(string_agg(proname, ', '), 'internal helpers are not exposed')
+  FROM pg_proc p
+  WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    AND p.proname IN ('increment_stock','decrement_stock','deduct_stock_fifo','restore_stock_fifo','add_inventory_batch',
+                      'resolve_account','reconcile_postings','sale_apply_items','fifo_take','populate_daily_analytics')
+  UNION ALL
+  SELECT 10, 'document triggers installed',
+         CASE WHEN count(*) >= 6 THEN 'OK' ELSE 'MISSING' END,
+         count(*) || ' posting triggers'
+  FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'b\_%postings'
+  UNION ALL
+  SELECT 11, 'stock matches batches',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'INFO' END,
+         count(*) || ' product(s) where stock < units in batches (use Stock Count to fix)'
+  FROM products p
+  WHERE p.stock < coalesce((SELECT sum(remaining) FROM inventory_batches b WHERE b.product_id = p.id), 0) - 0.001
+  UNION ALL
+  SELECT 12, 'cash book: balance vs journal',
+         CASE WHEN bool_and(abs(diff) < 0.01) THEN 'OK' ELSE 'INFO' END,
+         coalesce(string_agg(name || ' differs by ' || round(diff, 2) || ' (opening balance or past drift)', '; ')
+                  FILTER (WHERE abs(diff) >= 0.01), 'balances equal the journal')
+  FROM (SELECT a.name, a.balance - coalesce(sum(CASE WHEN t.type='in' THEN t.amount ELSE -t.amount END), 0) AS diff
+        FROM accounts a LEFT JOIN account_transactions t ON t.account_id = a.id GROUP BY a.id, a.name, a.balance) x
+  UNION ALL
+  SELECT 13, 'customer balances match sales',
+         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         count(*) || ' customer(s) out of step'
+  FROM customers c
+  WHERE abs(coalesce(c.total_credit, 0) - coalesce((SELECT sum(due_amount) FROM sales s WHERE s.customer_id = c.id AND s.due_amount > 0), 0)) > 0.01
+  UNION ALL
+  SELECT 14, 'active admins',
+         CASE WHEN count(*) >= 1 THEN 'OK' ELSE 'PROBLEM' END,
+         count(*) || ' active admin(s)'
+  FROM profiles WHERE role = 'admin' AND coalesce(active, true)
+)
+SELECT check_name, status, detail FROM checks ORDER BY ord;

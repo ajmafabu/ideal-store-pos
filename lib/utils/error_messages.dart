@@ -1,6 +1,15 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'network_errors.dart';
+
 class ErrorMessages {
   /// Parse a raw exception into a user-friendly message
   static String parse(Object error) {
+    // Business-rule errors raised by the database are already worded for
+    // the user ("Payment is more than the amount due", ...).
+    if (error is PostgrestException) {
+      return serverMessage(error);
+    }
     final msg = error.toString();
 
     // Network errors

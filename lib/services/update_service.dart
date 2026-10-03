@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,7 +40,7 @@ class UpdateService {
         final markerContent = await markerFile.readAsString();
         final installTime = DateTime.tryParse(markerContent);
         if (installTime != null && DateTime.now().difference(installTime).inMinutes < 5) {
-          print('[UPDATE] Skipped - just updated ${DateTime.now().difference(installTime).inSeconds}s ago');
+          Logger.info('[UPDATE] Skipped - just updated ${DateTime.now().difference(installTime).inSeconds}s ago');
           await markerFile.delete();
           return null;
         }
@@ -49,7 +50,7 @@ class UpdateService {
       final info = await PackageInfo.fromPlatform();
       final currentVersion = info.version;
       final buildNumber = info.buildNumber;
-      print('[UPDATE] Current version: $currentVersion (build $buildNumber)');
+      Logger.info('[UPDATE] Current version: $currentVersion (build $buildNumber)');
 
       // Write debug to file so user can check
       final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
@@ -57,18 +58,19 @@ class UpdateService {
           'Time: ${DateTime.now()}\n'
           'Current version: $currentVersion (build $buildNumber)\n');
 
-      print('[UPDATE] Calling GitHub API: $_apiUrl');
+      Logger.info('[UPDATE] Calling GitHub API: $_apiUrl');
       await debugFile.writeAsString(
           'API URL: $_apiUrl\n',
           mode: FileMode.append);
 
-      final client = HttpClient()
-        ..badCertificateCallback = (cert, host, port) => true;
+      // normal certificate checking (it used to accept ANY certificate)
+      final client = HttpClient();
       final request = await client.getUrl(Uri.parse(_apiUrl));
+      request.headers.set('Accept', 'application/vnd.github+json');
       final response = await request.close().timeout(const Duration(seconds: 15));
       final body = await response.transform(utf8.decoder).join();
       client.close();
-      print('[UPDATE] API response status: ${response.statusCode}');
+      Logger.info('[UPDATE] API response status: ${response.statusCode}');
       await debugFile.writeAsString(
           'Response status: ${response.statusCode}\n',
           mode: FileMode.append);
@@ -83,7 +85,7 @@ class UpdateService {
       final release = json.decode(body);
       final tagName = release['tag_name'] ?? '';
       final latestVersion = tagName.replaceFirst('v', '');
-      print('[UPDATE] Latest version from GitHub: $latestVersion');
+      Logger.info('[UPDATE] Latest version from GitHub: $latestVersion');
 
       await debugFile.writeAsString(
           'Tag name: $tagName\n'
@@ -95,8 +97,8 @@ class UpdateService {
         await debugFile.writeAsString('Result: empty latest version\n', mode: FileMode.append);
         return null;
       }
-      if (latestVersion == currentVersion) {
-        print('[UPDATE] Versions match - no update needed');
+      if (!isNewer(latestVersion, currentVersion)) {
+        Logger.info('[UPDATE] Versions match - no update needed');
         await debugFile.writeAsString('Result: versions match\n', mode: FileMode.append);
         return null;
       }
@@ -104,29 +106,36 @@ class UpdateService {
       // Check if this version was skipped
       final skippedVersion = await getSkippedVersion();
       if (skippedVersion == latestVersion) {
-        print('[UPDATE] Version $latestVersion was skipped by user');
+        Logger.info('[UPDATE] Version $latestVersion was skipped by user');
         await debugFile.writeAsString('Result: version skipped\n', mode: FileMode.append);
         return null;
       }
 
       final assets = (release['assets'] as List?) ?? [];
-      print('[UPDATE] Assets count: ${assets.length}');
+      Logger.info('[UPDATE] Assets count: ${assets.length}');
       await debugFile.writeAsString('Assets: ${assets.length}\n', mode: FileMode.append);
       for (final a in assets) {
         final name = a['name'] ?? 'unknown';
         final size = a['size'] ?? 0;
-        print('[UPDATE]   - $name ($size bytes)');
+        Logger.info('[UPDATE]   - $name ($size bytes)');
         await debugFile.writeAsString('  - $name ($size bytes)\n', mode: FileMode.append);
       }
       final zipAsset = assets.where((a) => (a['name'] ?? '').toString().endsWith('.zip')).toList();
       if (zipAsset.isEmpty) {
-        print('[UPDATE] No zip asset found');
+        Logger.info('[UPDATE] No zip asset found');
         await debugFile.writeAsString('Result: no zip asset\n', mode: FileMode.append);
         return null;
       }
 
       final downloadUrl = zipAsset.first['browser_download_url'] ?? '';
-      print('[UPDATE] Download URL: $downloadUrl');
+      // "<zip name>.sha256" published by release.ps1 / CI next to the zip
+      final zipName = (zipAsset.first['name'] ?? '').toString();
+      final shaAsset = assets.where((a) {
+        final n = (a['name'] ?? '').toString().toLowerCase();
+        return n == '${zipName.toLowerCase()}.sha256' || n == 'sha256sums.txt' || n == 'sha256sums';
+      }).toList();
+      final checksumUrl = shaAsset.isEmpty ? null : shaAsset.first['browser_download_url']?.toString();
+      Logger.info('[UPDATE] Download URL: $downloadUrl');
       await debugFile.writeAsString(
           'Result: UPDATE AVAILABLE\n'
           'Download URL: $downloadUrl\n',
@@ -137,9 +146,11 @@ class UpdateService {
         latestVersion: latestVersion,
         downloadUrl: downloadUrl,
         releaseNotes: release['body'] ?? '',
+        checksumUrl: checksumUrl,
+        zipName: zipName,
       );
     } catch (e, stackTrace) {
-      print('[UPDATE] Check failed: $e');
+      Logger.info('[UPDATE] Check failed: $e');
       try {
         final debugFile = File('${Directory.systemTemp.path}\\update_debug.log');
         await debugFile.writeAsString(
@@ -157,10 +168,17 @@ class UpdateService {
     final zipPath = '${tempDir.path}\\update.zip';
     final extractDir = '${tempDir.path}\\update_extract';
 
-    // Download zip
+    // Only install what the release says it is (#32): the release must
+    // publish a SHA-256 of the zip, and the download must match it.
+    if (update.checksumUrl == null) {
+      throw Exception('This release has no SHA-256 checksum, so it cannot be installed automatically. '
+          'Download it manually from the releases page.');
+    }
+    final expected = await _fetchChecksum(update.checksumUrl!, update.zipName);
+
+    // Download zip (normal certificate checking)
     Logger.info('Downloading update: ${update.downloadUrl}');
-    final client = HttpClient()
-      ..badCertificateCallback = (cert, host, port) => true;
+    final client = HttpClient();
     final request = await client.getUrl(Uri.parse(update.downloadUrl));
     final response = await request.close().timeout(const Duration(minutes: 5));
 
@@ -180,8 +198,16 @@ class UpdateService {
 
     Logger.info('Download complete: $receivedBytes bytes');
 
-    // Extract zip
+    // Verify before anything is extracted or run
     final bytes = File(zipPath).readAsBytesSync();
+    final actual = sha256.convert(bytes).toString();
+    if (actual.toLowerCase() != expected.toLowerCase()) {
+      await File(zipPath).delete();
+      throw Exception('Update download is corrupted or was changed (checksum mismatch). Nothing was installed.');
+    }
+    Logger.info('Update checksum verified');
+
+    // Extract zip
     final archive = ZipDecoder().decodeBytes(bytes);
 
     // Clear extract directory
@@ -191,9 +217,13 @@ class UpdateService {
     }
     await extractDirObj.create(recursive: true);
 
-    // Extract files
+    // Extract files (refuse paths that would escape the folder)
     for (final file in archive) {
-      final filePath = '$extractDir\\${file.name}';
+      final name = file.name.replaceAll('/', '\\');
+      if (name.startsWith('\\') || name.contains(':') || name.split('\\').contains('..')) {
+        throw Exception('Unsafe path in update package: ${file.name}');
+      }
+      final filePath = '$extractDir\\$name';
       if (file.isFile) {
         final outFile = File(filePath);
         await outFile.create(recursive: true);
@@ -213,6 +243,37 @@ class UpdateService {
 
     Logger.info('Update ready at: $extractDir');
     return extractDir;
+  }
+
+  /// True when [latest] (e.g. 1.1.0) is a higher version than [current].
+  static bool isNewer(String latest, String current) {
+    List<int> parts(String v) => v.split('+').first.split('.').map((x) => int.tryParse(x) ?? 0).toList();
+    final a = parts(latest), b = parts(current);
+    for (var i = 0; i < 3; i++) {
+      final x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return false;
+  }
+
+  Future<String> _fetchChecksum(String url, String zipName) async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(Uri.parse(url));
+      final res = await req.close().timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) throw Exception('Could not download the checksum (${res.statusCode})');
+      final text = await res.transform(utf8.decoder).join();
+      // "<hex>  <file>" lines (sha256sum format) or just "<hex>"
+      for (final line in const LineSplitter().convert(text)) {
+        final m = RegExp(r'\b([0-9a-fA-F]{64})\b\s*\*?(\S+)?').firstMatch(line.trim());
+        if (m == null) continue;
+        final file = m.group(2);
+        if (file == null || file.endsWith(zipName)) return m.group(1)!;
+      }
+      throw Exception('Checksum file does not list $zipName');
+    } finally {
+      client.close();
+    }
   }
 
   /// Install update by replacing current app files and restarting
@@ -327,10 +388,16 @@ class UpdateInfo {
   final String downloadUrl;
   final String releaseNotes;
 
+  /// URL of the published SHA-256 of the zip; null = cannot auto-install.
+  final String? checksumUrl;
+  final String zipName;
+
   const UpdateInfo({
     required this.currentVersion,
     required this.latestVersion,
     required this.downloadUrl,
     required this.releaseNotes,
+    this.checksumUrl,
+    this.zipName = '',
   });
 }

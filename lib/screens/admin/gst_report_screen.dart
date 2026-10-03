@@ -7,6 +7,7 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import '../../utils/error_messages.dart';
 
 class GSTReportScreen extends ConsumerStatefulWidget {
   const GSTReportScreen({super.key});
@@ -100,7 +101,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error loading data: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -150,7 +151,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading GSTR-3B: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error loading GSTR-3B: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
       setState(() => _gstr3bData = null);
@@ -189,7 +190,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Export failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {

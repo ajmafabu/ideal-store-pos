@@ -27,11 +27,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: dart analyze lib/ test/
+      - name: Analyze (warnings fail the build)
+        run: flutter analyze --no-fatal-infos
 
-      - name: Run tests with coverage
-        run: flutter test test/models_test.dart test/service_business_logic_test.dart --coverage
+      - name: Run ALL tests with coverage
+        run: flutter test --coverage
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -50,3 +50,26 @@ jobs:
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false
+
+  database:
+    name: Database migration & scenario tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh database + every business scenario
+        run: bash sql/tests/run_local.sh ci_scenarios
+      - name: Upgrade from the 47 historical SQL files
+        run: bash sql/tests/run_upgrade.sh

@@ -63,20 +63,14 @@ class TodaySummaryInline extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final transactionsAsync = ref.watch(todayTransactionsProvider);
+    final summaryAsync = ref.watch(todaySummaryProvider);
 
-    return transactionsAsync.when(
+    return summaryAsync.when(
       loading: () => const SizedBox(),
       error: (e, _) => const SizedBox(),
-      data: (transactions) {
-        double totalIn = 0, totalOut = 0;
-        for (final t in transactions) {
-          if (t.type == 'in') {
-            totalIn += t.amount;
-          } else {
-            totalOut += t.amount;
-          }
-        }
+      data: (summary) {
+        final totalIn = summary['total_in'] ?? 0;
+        final totalOut = summary['total_out'] ?? 0;
         return Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -133,22 +127,25 @@ class CategoryBreakdown extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final accountService = ref.watch(accountServiceProvider);
-    return FutureBuilder<List<AccountTransaction>>(
-      future: accountService.getTransactions(
+    // category totals from the database: every row in the period, not the
+    // first 100 (#20)
+    return FutureBuilder<AccountSummary>(
+      future: accountService.getSummary(
         startDate: filterStart,
         endDate: filterEnd,
       ),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data == null || snapshot.data!.isEmpty) {
+        if (!snapshot.hasData || snapshot.data == null) {
           return const SizedBox();
         }
-        final transactions = snapshot.data!;
-
         final Map<String, double> breakdown = {};
-        for (final t in transactions) {
-          final key = '${catLabel(t.category)} (${t.type == 'in' ? 'In' : 'Out'})';
-          breakdown[key] = (breakdown[key] ?? 0) + t.amount;
-        }
+        snapshot.data!.byCategory.forEach((key, amount) {
+          final cut = key.lastIndexOf('_');
+          final cat = cut > 0 ? key.substring(0, cut) : key;
+          final type = cut > 0 ? key.substring(cut + 1) : '';
+          if (cat == 'transfer') return; // own-account moves are not income/expense
+          breakdown['${catLabel(cat)} (${type == 'in' ? 'In' : 'Out'})'] = amount;
+        });
 
         if (breakdown.isEmpty) return const SizedBox();
 

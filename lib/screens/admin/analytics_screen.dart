@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/error_messages.dart';
 
 class AnalyticsScreen extends ConsumerStatefulWidget {
   const AnalyticsScreen({super.key});
@@ -139,7 +140,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
       error: (e, _) => Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Error loading metrics: $e'),
+          child: Text('Error loading metrics: ${ErrorMessages.parse(e)}'),
         ),
       ),
       data: (monthlyData) {
@@ -147,8 +148,17 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
         int totalOrders = 0;
         String topCategory = '-';
 
-        for (final row in monthlyData) {
-          totalSales += (row['total_sales'] as num?)?.toDouble() ?? 0;
+        // revenue and orders from the SAME daily rows, so the average order
+        // value uses one period (#16); months only when daily data is missing
+        final dailyRows = dailyAsync.value;
+        if (dailyRows != null && dailyRows.isNotEmpty) {
+          for (final row in dailyRows) {
+            totalSales += (row['total_sales'] as num?)?.toDouble() ?? 0;
+          }
+        } else {
+          for (final row in monthlyData) {
+            totalSales += (row['total_sales'] as num?)?.toDouble() ?? 0;
+          }
         }
 
         categoryAsync.whenData((catData) {
@@ -215,7 +225,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (e, _) =>
-              SizedBox(height: 200, child: Center(child: Text('Error: $e'))),
+              SizedBox(height: 200, child: Center(child: Text('Error: ${ErrorMessages.parse(e)}'))),
           data: (data) {
             if (data.isEmpty) {
               return const SizedBox(
@@ -307,7 +317,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                   meta: meta,
                                   child: Text(
                                     parts.isNotEmpty ? parts[0] : '',
-                                    style: const TextStyle(fontSize: 9),
+                                    style: const TextStyle(fontSize: 10),
                                   ),
                                 );
                               }
@@ -408,7 +418,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (e, _) =>
-              SizedBox(height: 200, child: Center(child: Text('Error: $e'))),
+              SizedBox(height: 200, child: Center(child: Text('Error: ${ErrorMessages.parse(e)}'))),
           data: (data) {
             if (data.isEmpty) {
               return const SizedBox(
@@ -514,7 +524,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (e, _) =>
-              SizedBox(height: 200, child: Center(child: Text('Error: $e'))),
+              SizedBox(height: 200, child: Center(child: Text('Error: ${ErrorMessages.parse(e)}'))),
           data: (data) {
             if (data.isEmpty) {
               return const SizedBox(
@@ -574,7 +584,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                                   meta: meta,
                                   child: Text(
                                     labels[idx]!,
-                                    style: const TextStyle(fontSize: 9),
+                                    style: const TextStyle(fontSize: 10),
                                   ),
                                 );
                               }

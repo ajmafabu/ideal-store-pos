@@ -41,19 +41,19 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     // Phase 1: Products fall (7s)
     _productFallController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 7000),
+      duration: const Duration(milliseconds: 900),
     );
 
     // Phase 2: Products fade/scatter (2.5s, starts after fall)
     _productFadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 300),
     );
 
     // Logo zoom-out (3s)
     _logoController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 600),
     );
     _logoScale = Tween<double>(begin: 3.0, end: 1.0).animate(
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
@@ -65,7 +65,7 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     // Text fade + slide
     _textController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 300),
     );
     _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _textController, curve: Curves.easeOut),
@@ -132,11 +132,23 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
   }
 
   Future<void> _preloadImages() async {
-    for (final p in _products) {
-      await precacheImage(AssetImage(p.asset), context);
-    }
+    // load in parallel and never wait more than 400 ms for images
+    await Future.any([
+      Future.wait(_products.map((p) => precacheImage(AssetImage(p.asset), context))),
+      Future.delayed(const Duration(milliseconds: 400)),
+    ]);
+    if (!mounted) return;
     setState(() => _imagesLoaded = true);
     _startAnimations();
+  }
+
+  bool _left = false;
+
+  /// Leave the splash (once) — at the end of the animation or on a tap.
+  void _go() {
+    if (_left || !mounted) return;
+    _left = true;
+    context.go('/login');
   }
 
   Future<void> _startAnimations() async {
@@ -145,24 +157,20 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     // Phase 1: Products fall (0 - 7s)
     _productFallController.forward();
 
-    // Phase 2: Products scatter/fade (at 7s)
-    await Future.delayed(const Duration(milliseconds: 7000));
+    // The whole intro takes about 1.4 s (it was 12.5 s on every launch) and
+    // any tap skips it (#26).
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (_left || !mounted) return;
     _productFadeController.forward();
-
-    // Logo starts zooming at 7.3s
-    await Future.delayed(const Duration(milliseconds: 300));
     _logoController.forward();
 
-    // Text at 9.5s
-    await Future.delayed(const Duration(milliseconds: 2200));
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (_left || !mounted) return;
     _textController.forward();
     _shimmerController.repeat();
 
-    // Navigate at 12.5s
-    await Future.delayed(const Duration(milliseconds: 3000));
-    if (mounted) {
-      context.go('/login');
-    }
+    await Future.delayed(const Duration(milliseconds: 400));
+    _go();
   }
 
   @override
@@ -187,7 +195,10 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
     }
 
     return Scaffold(
-      body: AnimatedBuilder(
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _go,
+        child: AnimatedBuilder(
         animation: _gradientController,
         builder: (context, _) {
           return Container(
@@ -286,6 +297,7 @@ class _AnimatedSplashScreenState extends State<AnimatedSplashScreen>
             ),
           );
         },
+      ),
       ),
     );
   }

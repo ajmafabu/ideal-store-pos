@@ -21,14 +21,14 @@ class CustomerPortalScreen extends ConsumerWidget {
       ),
       body: customerAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => const Center(child: Text('Could not load this account. Check the link and your connection.')),
         data: (customer) {
           if (customer == null) {
             return const Center(child: Text('Customer not found'));
           }
 
           return RefreshIndicator(
-            onRefresh: () => ref.refresh(_customerPortalProvider(customerId).future),
+            onRefresh: () => ref.refresh(_portalDataProvider(customerId).future),
             child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
@@ -157,7 +157,7 @@ class _TransactionList extends ConsumerWidget {
 
     return salesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => const Center(child: Text('Could not load this account. Check the link and your connection.')),
       data: (sales) {
         if (sales.isEmpty) {
           return const Center(child: Text('No transactions yet'));
@@ -217,30 +217,33 @@ class _TransactionList extends ConsumerWidget {
   }
 }
 
-final _customerPortalProvider = FutureProvider.family<Customer?, String>((ref, customerId) async {
+// Read-only portal: the database returns data only for a valid, unguessable
+// portal token (customers.portal_token); tables are not readable anonymously.
+final _portalDataProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, token) async {
   try {
-    final response = await Supabase.instance.client
-        .from('customers')
-        .select()
-        .eq('id', customerId)
-        .maybeSingle();
-    if (response != null) return Customer.fromJson(response);
+    final res = await Supabase.instance.client.rpc('get_customer_portal', params: {'p_token': token});
+    if (res is Map) return Map<String, dynamic>.from(res);
     return null;
   } catch (e) {
     return null;
   }
 });
 
-final _customerSalesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, customerId) async {
-  try {
-    final response = await Supabase.instance.client
-        .from('sales')
-        .select('id, final_amount, is_credit, amount_paid, due_amount, created_at')
-        .eq('customer_id', customerId)
-        .order('created_at', ascending: false)
-        .limit(20);
-    return (response as List).cast<Map<String, dynamic>>();
-  } catch (e) {
-    return [];
+final _customerPortalProvider = FutureProvider.family<Customer?, String>((ref, token) async {
+  final data = await ref.watch(_portalDataProvider(token).future);
+  if (data == null) return null;
+  return Customer.fromJson({
+    'id': token,
+    'name': data['name'] ?? '',
+    'total_credit': data['total_credit'],
+  });
+});
+
+final _customerSalesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, token) async {
+  final data = await ref.watch(_portalDataProvider(token).future);
+  final sales = data?['sales'];
+  if (sales is List) {
+    return sales.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
+  return [];
 });

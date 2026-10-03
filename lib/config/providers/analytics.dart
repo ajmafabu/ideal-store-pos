@@ -21,14 +21,16 @@ final monthlySalesSummaryProvider =
               .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
               .toList();
           if (dateRange != null) {
-            final startUtc = AppTimezone.toUtc(dateRange.start);
-            final endUtc = AppTimezone.toUtc(dateRange.end);
+            // month_start is an ISO date ("2026-10-01"); keep every month
+            // that overlaps the chosen range (#16 — the old filter parsed
+            // "Oct 2026", failed, and kept everything)
+            final start = DateTime(dateRange.start.year, dateRange.start.month, dateRange.start.day);
+            final end = DateTime(dateRange.end.year, dateRange.end.month, dateRange.end.day);
             data = data.where((row) {
-              final monthStr = row['month'] as String? ?? '';
-              final monthDate = DateTime.tryParse(monthStr);
-              if (monthDate == null) return true;
-              return !monthDate.isBefore(startUtc) &&
-                  !monthDate.isAfter(endUtc);
+              final monthStart = DateTime.tryParse(row['month_start']?.toString() ?? '');
+              if (monthStart == null) return false;
+              final nextMonth = DateTime(monthStart.year, monthStart.month + 1, 1);
+              return !monthStart.isAfter(end) && nextMonth.isAfter(start);
             }).toList();
           }
           return data;

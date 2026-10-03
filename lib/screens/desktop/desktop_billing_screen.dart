@@ -16,6 +16,8 @@ import '../../config/desktop_billing_provider.dart';
 import '../../models/sale.dart';
 import '../../models/product.dart';
 import '../../services/email_service.dart';
+import '../../services/sale_service.dart';
+import '../../utils/payment_methods.dart';
 
 import '../../services/thermal_printer_service.dart';
 import '../../utils/app_timezone.dart';
@@ -28,6 +30,7 @@ import '../admin/barcode_label_screen.dart';
 
 import '../../utils/error_messages.dart';
 import 'billing_shortcuts_mixin.dart';
+import '../../widgets/billing/billing_shortcuts_help.dart';
 import 'widgets/billing_bottom_bar.dart';
 import 'widgets/billing_processing_overlay.dart';
 import 'widgets/billing_sale_tabs.dart';
@@ -119,6 +122,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   // ── Mixin abstract method implementations ──
   @override
   bool get isProcessing => _isProcessing;
+
+  bool get _isAdmin => ref.watch(profileProvider).value?.isAdmin ?? false;
   @override
   bool get hasActiveSessionItems {
     final session = ref.read(desktopBillingProvider).elementAt(
@@ -143,6 +148,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   bool get hasSelectedCartIndex => _selectedCartIndex >= 0;
   @override
   bool get showResults => _showResults;
+
+  @override
+  void onF1() => BillingShortcutsHelp.show(context);
 
   @override
   void onF2() {
@@ -464,21 +472,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       for (final e in list) {
         final m = e as Map<String, dynamic>;
         final s = m['session'] as Map<String, dynamic>;
-        final items = (s['items'] as List).map((i) {
-          final im = i as Map<String, dynamic>;
-          return DesktopCartItem(
-            productId: im['product_id'] as String,
-            name: im['name'] as String,
-            price: (im['price'] as num).toDouble(),
-            qty: (im['qty'] as num).toInt(),
-            unit: im['unit'] as String? ?? 'pcs',
-            purchasePrice: (im['purchase_price'] as num?)?.toDouble() ?? 0,
-            gstRate: (im['gst_rate'] as num?)?.toDouble() ?? 0,
-            hsnCode: im['hsn_code'] as String?,
-            tamilName: im['tamil_name'] as String?,
-            discount: (im['discount'] as num?)?.toDouble() ?? 0,
-          );
-        }).toList();
+        final items = (s['items'] as List)
+            .map((i) => DesktopCartItem.fromHeldJson(Map<String, dynamic>.from(i as Map)))
+            .toList();
         notifier.heldBills.add(HeldBill(
           session: SaleSession(
             id: s['id'] as String,
@@ -507,20 +503,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         return {
           'session': {
             'id': session.id,
-            'items': session.items
-                .map((i) => {
-                      'product_id': i.productId,
-                      'name': i.name,
-                      'price': i.price,
-                      'qty': i.qty,
-                      'unit': i.unit,
-                      'purchase_price': i.purchasePrice,
-                      'gst_rate': i.gstRate,
-                      'hsn_code': i.hsnCode,
-                      'tamil_name': i.tamilName,
-                      'discount': i.discount,
-                    })
-                .toList(),
+            'items': session.items.map((i) => i.toHeldJson()).toList(),
             'customer_id': session.customerId,
             'customer_name': session.customerName,
             'total_discount': session.totalDiscount,
@@ -873,24 +856,28 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             .read(desktopBillingProvider.notifier)
             .updateItem(
               _editingCartIndex,
-              DesktopCartItem(
-                productId: oldItem.productId,
-                name: oldItem.name,
+              // keep the line's unit, tier and stock factor (#22)
+              oldItem.copyWith(
                 price: effectivePrice,
                 qty: qty,
-                unit: oldItem.unit,
                 purchasePrice: costPrice,
-                gstRate: oldItem.gstRate,
-                hsnCode: oldItem.hsnCode,
-                tamilName: oldItem.tamilName,
                 discount: itemDiscount,
                 rateLabel: _selectedRateLabel,
               ),
             );
     } else {
       // ADD new item
+      final product = _selectedProduct!;
+      // stock is counted in the product's own unit; a box line of a
+      // piece-counted product consumes pieces_per_unit pieces (#22)
+      final stockFactor = CartItem.stockFactorFor(
+        lineUnitType: _selectedUnitType,
+        linePiecesPerUnit: _piecesPerUnit,
+        productUnitType: product.unitType,
+        productPiecesPerUnit: product.piecesPerUnit,
+      );
       final existingIndex = session.items.indexWhere(
-        (i) => i.productId == (_selectedProduct?.id ?? ''),
+        (i) => i.productId == product.id && i.unitType == _selectedUnitType && i.stockFactor == stockFactor,
       );
       if (existingIndex >= 0) {
         final existingItem = session.items[existingIndex];
@@ -915,6 +902,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                 unitType: _selectedUnitType,
                 piecesPerUnit: _piecesPerUnit,
                 rateLabel: _selectedRateLabel,
+                stockFactor: stockFactor,
               ),
             );
       }
@@ -1027,25 +1015,35 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   void _deleteSelectedCartItem() {
-    final session = ref
-        .read(desktopBillingProvider)
-        .elementAt(
-          ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-        );
-    if (_selectedCartIndex >= 0 && _selectedCartIndex < session.items.length) {
-      ref.read(desktopBillingProvider.notifier).removeItem(_selectedCartIndex);
-      setState(() {
-        // Re-read session after removal to get correct length
-        final updatedSession = ref
-            .read(desktopBillingProvider)
-            .elementAt(
-              ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-            );
-        if (_selectedCartIndex >= updatedSession.items.length) {
-          _selectedCartIndex = updatedSession.items.length - 1;
-        }
-      });
-    }
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    final session = ref.read(desktopBillingProvider).elementAt(notifier.activeSessionIndex);
+    if (_selectedCartIndex < 0 || _selectedCartIndex >= session.items.length) return;
+    final index = _selectedCartIndex;
+    final removed = session.items[index];
+    final sessionIndex = notifier.activeSessionIndex;
+    notifier.removeItem(index);
+    setState(() {
+      final updated = ref.read(desktopBillingProvider).elementAt(notifier.activeSessionIndex);
+      if (_selectedCartIndex >= updated.items.length) {
+        _selectedCartIndex = updated.items.length - 1;
+      }
+    });
+    // A stray Backspace must not silently lose a line (#28)
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Removed ${removed.name}'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'UNDO',
+          onPressed: () {
+            if (!mounted || notifier.activeSessionIndex != sessionIndex) return;
+            notifier.insertItem(index, removed);
+            setState(() => _selectedCartIndex = index);
+          },
+        ),
+      ),
+    );
   }
 
   void _adjustCartQty(int index, int delta) {
@@ -1158,16 +1156,35 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         notifier.setEditingSale(savedEditingSale);
         _billDiscountController.text = savedEditingSale.discount > 0 ? savedEditingSale.discount.toStringAsFixed(0) : '';
         _extraChargesController.text = savedEditingSale.extraCharges > 0 ? savedEditingSale.extraCharges.toStringAsFixed(0) : '';
-        _selectedPayment = savedEditingSale.paymentMethod.isNotEmpty ? savedEditingSale.paymentMethod : 'cash';
-        _creditFull = savedEditingSale.amountPaid == 0;
-        if (savedEditingSale.isCredit && savedEditingSale.amountPaid > 0) {
-          _paidController.text = savedEditingSale.amountPaid.toStringAsFixed(0);
-        }
+        _applySalePaymentToForm(savedEditingSale);
       });
     }
     notifier.heldBills.removeAt(index);
     setState(() {});
     _saveHeldBills();
+  }
+
+  /// Put a saved sale's payment back into the form when it is edited, so a
+  /// split or part-paid sale is not silently turned into a credit sale.
+  void _applySalePaymentToForm(Sale sale) {
+    final method = PaymentMethods.normalize(sale.paymentMethod);
+    _splitCashController.clear();
+    _splitUpiController.clear();
+    _paidController.clear();
+    if (method == PaymentMethods.split) {
+      _selectedPayment = 'split';
+      _isSplitPayment = true;
+      _splitCashController.text = sale.cashAmount > 0 ? sale.cashAmount.toStringAsFixed(0) : '';
+      _splitUpiController.text = sale.digitalAmount > 0 ? sale.digitalAmount.toStringAsFixed(0) : '';
+    } else if (sale.isCredit || method == PaymentMethods.credit) {
+      _selectedPayment = 'credit';
+      _creditFull = sale.amountPaid <= 0;
+      if (sale.amountPaid > 0) _paidController.text = sale.amountPaid.toStringAsFixed(0);
+    } else if (method == PaymentMethods.upi || method == PaymentMethods.bank) {
+      _selectedPayment = 'upi';
+    } else {
+      _selectedPayment = 'cash';
+    }
   }
 
   void _resetSaleState() {
@@ -1241,7 +1258,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
   void _retrieveBill() {
     final notifier = ref.read(desktopBillingProvider.notifier);
-    print('[HOLD] _retrieveBill called, heldBills.length=${notifier.heldBills.length}');
     if (notifier.heldBills.isEmpty) return;
     int heldSelectedIndex = 0;
 
@@ -1318,131 +1334,128 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   // ── SALE COMPLETION ──
+  void _warn(String message, {Color color = Colors.orange}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
+  /// Validates and saves the active bill. `_isProcessing` is always reset in
+  /// `finally`, so a validation message can never freeze the till (#4).
   Future<void> _completeSale() async {
-    final session = ref
-        .read(desktopBillingProvider)
-        .elementAt(
-          ref.read(desktopBillingProvider.notifier).activeSessionIndex,
-        );
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    final session = ref.read(desktopBillingProvider).elementAt(notifier.activeSessionIndex);
     if (session.items.isEmpty || _isProcessing) return;
     setState(() => _isProcessing = true);
-
-    // Check connectivity before attempting sale
-    final offlineService = ref.read(offlineServiceProvider);
-    final isOnline = await offlineService.isOnline();
-    if (!isOnline) {
-      if (mounted) {
-        final proceed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('No Internet Connection'),
-            content: const Text(
-              'You are offline. The sale will be saved locally and synced when you reconnect.\n\n'
-              'Do you want to proceed?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: TextButton.styleFrom(foregroundColor: Colors.orange),
-                child: const Text('Save Offline'),
-              ),
-            ],
-          ),
-        );
-        if (proceed != true) return;
-      }
+    try {
+      await _validateAndSave(session);
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
+  }
 
-    // Credit validation: customer required
-    if (_selectedPayment == 'credit' &&
-        (session.customerId == null || session.customerId!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select a customer for credit sale'),
-          backgroundColor: Colors.orange,
+  Future<void> _validateAndSave(SaleSession session) async {
+    // Offline: confirm before saving locally
+    final offlineService = ref.read(offlineServiceProvider);
+    if (!await offlineService.isOnline()) {
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No Internet Connection'),
+          content: const Text(
+            'You are offline. The sale will be saved on this computer and synced when you reconnect.\n\n'
+            'Do you want to proceed?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.orange),
+              child: const Text('Save Offline'),
+            ),
+          ],
         ),
       );
+      if (proceed != true) return;
+    }
+
+    final hasCustomer = session.customerId != null && session.customerId!.isNotEmpty;
+    if (_selectedPayment == 'credit' && !hasCustomer) {
+      _warn('Select a customer for credit sale');
       return;
     }
 
     final discount = _billDiscount;
     final extraCharges = double.tryParse(_extraChargesController.text) ?? 0;
+    if (discount < 0 || extraCharges < 0) {
+      _warn('Discount and extra charges cannot be negative');
+      return;
+    }
     final rawTotal = session.total - discount + extraCharges;
+    if (rawTotal < 0) {
+      _warn('Discount is more than the bill total');
+      return;
+    }
     // Half-up rounding (not banker's rounding)
-    final roundedTotal = (rawTotal + 0.5).floorToDouble();
-    final roundOffAmount = roundedTotal - rawTotal;
-    final total = roundedTotal;
-    final double paid = _selectedPayment == 'credit'
-        ? (_creditFull ? 0 : double.tryParse(_paidController.text) ?? 0)
-        : total;
-    final double credit = _selectedPayment == 'credit' ? (total - paid) : 0;
+    final total = (rawTotal + 0.5).floorToDouble();
+    final roundOffAmount = total - rawTotal;
 
-    // Validate split payment
-    double splitCash = 0;
-    double splitUpi = 0;
-    double splitCredit = 0;
-    bool splitIsCredit = false;
-    if (_selectedPayment == 'split') {
-      splitCash = double.tryParse(_splitCashController.text) ?? 0;
-      splitUpi = double.tryParse(_splitUpiController.text) ?? 0;
-      if (splitCash < 0 || splitUpi < 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Split amounts cannot be negative'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      final splitTotal = splitCash + splitUpi;
-      if (splitTotal > total + 0.5) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Split amounts (Rs${splitCash.toStringAsFixed(0)} + Rs${splitUpi.toStringAsFixed(0)} = Rs${splitTotal.toStringAsFixed(0)}) exceed total Rs${total.toStringAsFixed(0)}',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      // If split doesn't cover full amount, remainder goes to credit
-      if ((total - splitTotal) > 0.5) {
-        splitCredit = total - splitTotal;
-        splitIsCredit = true;
-        // Require customer for credit portion
-        if (session.customerId == null || session.customerId!.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Select a customer — remaining balance goes to credit'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+    double amountPaid = total;
+    double creditAmount = 0;
+    bool isCredit = false;
+    double cashAmt = 0;
+    double digitalAmt = 0;
+
+    switch (_selectedPayment) {
+      case 'credit':
+        isCredit = true;
+        amountPaid = _creditFull ? 0 : (double.tryParse(_paidController.text) ?? -1);
+        if (amountPaid < 0 || amountPaid >= total) {
+          _warn('Paid amount must be between 0 and the bill total');
           return;
         }
-      }
+        creditAmount = total - amountPaid;
+        cashAmt = amountPaid; // money taken at the till on a credit bill
+        break;
+      case 'split':
+        final splitCash = double.tryParse(_splitCashController.text) ?? 0;
+        final splitUpi = double.tryParse(_splitUpiController.text) ?? 0;
+        if (splitCash < 0 || splitUpi < 0) {
+          _warn('Split amounts cannot be negative');
+          return;
+        }
+        final splitTotal = splitCash + splitUpi;
+        if (splitTotal > total + 0.5) {
+          _warn('Split amounts (Rs${splitCash.toStringAsFixed(0)} + Rs${splitUpi.toStringAsFixed(0)} = '
+              'Rs${splitTotal.toStringAsFixed(0)}) exceed total Rs${total.toStringAsFixed(0)}');
+          return;
+        }
+        cashAmt = splitCash;
+        digitalAmt = splitUpi;
+        amountPaid = splitTotal;
+        // remainder goes to the customer's credit
+        if ((total - splitTotal) > 0.5) {
+          if (!hasCustomer) {
+            _warn('Select a customer — the remaining balance goes to credit');
+            return;
+          }
+          isCredit = true;
+          creditAmount = total - splitTotal;
+        } else {
+          amountPaid = total;
+        }
+        break;
+      case 'upi':
+        digitalAmt = total;
+        break;
+      default:
+        cashAmt = total;
     }
 
-    // Validate partial credit payment
-    if (_selectedPayment == 'credit' && !_creditFull) {
-      if (paid < 0 || paid >= total) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Paid amount must be between 0 and total'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (_selectedPayment == 'credit' &&
-        session.customerId != null &&
-        session.customerId!.isNotEmpty) {
+    // Credit limit
+    if (isCredit && hasCustomer) {
       try {
         final custRes = await Supabase.instance.client
             .from('customers')
@@ -1450,22 +1463,15 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             .eq('id', session.customerId!)
             .maybeSingle();
         if (custRes != null) {
-          final currentCredit =
-              (custRes['total_credit'] as num?)?.toDouble() ?? 0;
-          final creditLimit =
-              (custRes['credit_limit'] as num?)?.toDouble() ?? 0;
-          final newTotalCredit = currentCredit + credit;
+          final currentCredit = (custRes['total_credit'] as num?)?.toDouble() ?? 0;
+          final creditLimit = (custRes['credit_limit'] as num?)?.toDouble() ?? 0;
+          final newTotalCredit = currentCredit + creditAmount;
           if (creditLimit > 0 && newTotalCredit > creditLimit) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Credit limit exceeded! Limit: Rs${creditLimit.toStringAsFixed(0)}, Current: Rs${currentCredit.toStringAsFixed(0)}, New total: Rs${newTotalCredit.toStringAsFixed(0)}',
-                  ),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+            _warn(
+              'Credit limit exceeded! Limit: Rs${creditLimit.toStringAsFixed(0)}, '
+              'Current: Rs${currentCredit.toStringAsFixed(0)}, New total: Rs${newTotalCredit.toStringAsFixed(0)}',
+              color: Colors.red,
+            );
             return;
           }
         }
@@ -1474,260 +1480,177 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       }
     }
 
-    // Re-validate stock before saving
+    // Every line must still be a known product
     for (final item in session.items) {
-      final product = _allProducts.where((p) => p.id == item.productId).firstOrNull;
-      if (product == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${item.name} no longer exists'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      if (!_allProducts.any((p) => p.id == item.productId)) {
+        _warn('${item.name} no longer exists', color: Colors.red);
         return;
       }
     }
 
     await _saveSale(
-      _selectedPayment,
-      splitIsCredit ? (splitCash + splitUpi) : paid,
-      splitIsCredit ? true : _selectedPayment == 'credit',
-      splitIsCredit ? splitCredit : credit,
-      roundOffAmount,
+      paymentMethod: _selectedPayment,
+      amountPaid: amountPaid,
+      isCredit: isCredit,
+      creditAmount: creditAmount,
+      cashAmount: cashAmt,
+      digitalAmount: digitalAmt,
+      roundOffAmount: roundOffAmount,
+      finalAmount: total,
+      discount: discount,
+      extraCharges: extraCharges,
     );
   }
 
-  Future<void> _saveSale(
-    String paymentMethod,
-    double amountPaid,
-    bool isCredit,
-    double creditAmount, [
-    double roundOffAmount = 0,
-  ]) async {
-    final sessionIndex = ref
-        .read(desktopBillingProvider.notifier)
-        .activeSessionIndex;
+  Future<void> _saveSale({
+    required String paymentMethod,
+    required double amountPaid,
+    required bool isCredit,
+    required double creditAmount,
+    required double cashAmount,
+    required double digitalAmount,
+    required double roundOffAmount,
+    required double finalAmount,
+    required double discount,
+    required double extraCharges,
+  }) async {
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    final sessionIndex = notifier.activeSessionIndex;
     final session = ref.read(desktopBillingProvider).elementAt(sessionIndex);
     if (session.items.isEmpty) return;
 
-    setState(() => _isProcessing = true);
-
-    final auth = ref.read(authServiceProvider);
-    final user = auth.currentUser;
-    final discount = _billDiscount;
-    final extraCharges = double.tryParse(_extraChargesController.text) ?? 0;
-    final rawTotal = session.total - discount + extraCharges;
-    final roundedTotal = (rawTotal + 0.5).floorToDouble();
-    final finalAmount = roundedTotal;
-
-    double totalItemDiscount = 0;
-    for (final item in session.items) {
-      final itemTotal = item.price * item.qty;
-      totalItemDiscount += itemTotal * (item.discount / 100);
-    }
-
-    double cashAmt = 0;
-    double digitalAmt = 0;
-    if (paymentMethod == 'split') {
-      cashAmt = double.tryParse(_splitCashController.text) ?? 0;
-      digitalAmt = double.tryParse(_splitUpiController.text) ?? 0;
-    } else if (paymentMethod == 'cash') {
-      cashAmt = amountPaid;
-    } else if (!isCredit) {
-      digitalAmt = amountPaid;
-    }
+    final user = ref.read(authServiceProvider).currentUser;
+    final totalItemDiscount = session.items.fold<double>(0, (sum, i) => sum + i.discountAmount);
+    final editing = notifier.editingSale;
 
     final sale = Sale(
-      id: '',
-      items: session.items
-          .map(
-            (item) => CartItem(
-              productId: item.productId,
-              name: item.name,
-              price: item.price,
-              qty: item.qty,
-              unit: item.unit,
-              purchasePrice: item.purchasePrice,
-              gstRate: item.gstRate,
-              hsnCode: item.hsnCode,
-              tamilName: item.tamilName,
-              discount: item.discount,
-              tier: _selectedTier,
-            ),
-          )
-          .toList(),
+      // one id for online, offline and retries: a timed-out save that did
+      // reach the server is recognised instead of billed twice (#5)
+      id: editing?.id ?? newDocumentId(),
+      items: session.items.map((item) => item.toCartItem(tier: _selectedTier)).toList(),
       totalAmount: session.subtotal,
       totalDiscount: totalItemDiscount,
       discount: discount,
       finalAmount: finalAmount,
       roundOff: roundOffAmount,
-      paymentMethod: paymentMethod,
+      paymentMethod: PaymentMethods.normalize(paymentMethod),
       createdBy: user?.id ?? '',
       createdAt: DateTime.now(),
       customerId: session.customerId,
+      customerName: session.customerName,
       isCredit: isCredit,
       amountPaid: amountPaid,
       dueAmount: creditAmount,
-      cashAmount: cashAmt,
-      digitalAmount: digitalAmt,
+      cashAmount: cashAmount,
+      digitalAmount: digitalAmount,
       extraCharges: extraCharges,
       dueDate: isCredit ? DateTime.now().add(const Duration(days: 30)) : null,
     );
 
+    if (editing != null) {
+      await _saveEdit(sale, sessionIndex);
+      return;
+    }
+
     try {
-
-      // If editing an existing sale, update it instead of creating new
-      if (ref.read(desktopBillingProvider.notifier).editingSale != null) {
-        try {
-          final reasonCtrl = TextEditingController();
-          final reason = await showDialog<String>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Reason for Edit'),
-              content: TextField(
-                controller: reasonCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Reason *',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    if (reasonCtrl.text.trim().isEmpty) return;
-                    Navigator.pop(ctx, reasonCtrl.text.trim());
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          );
-          if (reason == null || reason.isEmpty) {
-            if (mounted) setState(() => _isProcessing = false);
-            return;
-          }
-          await ref
-              .read(saleServiceProvider)
-              .editSaleAtomic(
-                saleId: ref.read(desktopBillingProvider.notifier).editingSale!.id,
-                items: sale.items,
-                totalAmount: sale.totalAmount,
-                discount: sale.discount,
-                finalAmount: sale.finalAmount,
-                customerId: sale.customerId,
-                isCredit: sale.isCredit,
-                amountPaid: sale.amountPaid,
-                dueAmount: sale.dueAmount,
-                paymentMethod: sale.paymentMethod,
-                cashAmount: sale.cashAmount,
-                digitalAmount: sale.digitalAmount,
-                reason: reason,
-              );
-          ref
-              .read(desktopBillingProvider.notifier)
-              .resetAfterSale(sessionIndex);
-          ref.invalidate(salesHistoryProvider);
-          ref.invalidate(productsProvider);
-          ref.read(desktopBillingProvider.notifier).clearEditingSale();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Sale updated'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            _resetSaleState();
-          }
-          return; // Don't create new sale
-        } catch (e) {
-          // BUG 4 FIX: Clear cart on failure to prevent duplicate sale creation
-          ref.read(desktopBillingProvider.notifier).clearEditingSale();
-          ref
-              .read(desktopBillingProvider.notifier)
-              .resetAfterSale(sessionIndex);
-          _resetSaleState();
-          if (mounted) {
-            setState(() => _isProcessing = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Edit failed: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return; // Don't create new sale on failure
-        }
-      }
-
-      final offlineService = ref.read(offlineServiceProvider);
-      final isOnline = await offlineService.isOnline();
-      if (!isOnline) {
-        final saleJson = sale.toInsertJson();
-        saleJson['id'] = sale.id.isNotEmpty
-            ? sale.id
-            : DateTime.now().millisecondsSinceEpoch.toString();
-        await offlineService.saveSaleOffline(saleJson);
-        // Stock deduction handled by DB trigger on_sale_created when sale syncs
-        ref.invalidate(salesHistoryProvider);
-        ref.invalidate(productsProvider);
-        ref.read(desktopBillingProvider.notifier).resetAfterSale(sessionIndex);
-        if (mounted) {
-          _resetSaleState();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sale saved offline, will sync when online'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        return;
-      }
-
-      await ref.read(saleServiceProvider).createSale(sale);
-      ref.read(desktopBillingProvider.notifier).resetAfterSale(sessionIndex);
+      final saved = await ref.read(saleServiceProvider).createSale(sale);
+      notifier.resetAfterSale(sessionIndex);
       ref.invalidate(salesHistoryProvider);
       ref.invalidate(productsProvider);
-
       if (mounted) {
         _resetSaleState();
-
-        // Show invoice options (non-blocking)
-        _showInvoiceOptions(sale);
+        // print what the database stored (invoice number, GST) (#19)
+        _showInvoiceOptions(saved);
       }
-    } catch (e) {
-      try {
-        final offlineService = ref.read(offlineServiceProvider);
-        final saleJson = sale.toInsertJson();
-        saleJson['id'] = sale.id.isNotEmpty
-            ? sale.id
-            : DateTime.now().millisecondsSinceEpoch.toString();
-        await offlineService.saveSaleOffline(saleJson);
-        // Stock deduction handled by DB trigger on_sale_created when sale syncs
-        ref.invalidate(salesHistoryProvider);
-        ref.invalidate(productsProvider);
-      } catch (e) {
-        Logger.warning('Failed to save sale offline: $e');
-      }
+    } on SaleSavedOffline {
+      notifier.resetAfterSale(sessionIndex);
+      ref.invalidate(salesHistoryProvider);
+      ref.invalidate(productsProvider);
       if (mounted) {
+        _resetSaleState();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Sale saved offline, will sync when online'),
+            content: Text('No connection — sale saved on this computer and will sync automatically'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 3),
           ),
         );
       }
-      ref.read(desktopBillingProvider.notifier).resetAfterSale(sessionIndex);
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+    } catch (e) {
+      // The server refused the sale (e.g. account inactive). Keep the bill
+      // on screen so nothing is lost, and say why.
+      Logger.error('Sale save failed', e);
+      _warn('Sale NOT saved: ${ErrorMessages.parse(e)}', color: Colors.red);
+    }
+  }
+
+  Future<void> _saveEdit(Sale sale, int sessionIndex) async {
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reason for Edit'),
+        content: TextField(
+          controller: reasonCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Reason *', border: OutlineInputBorder()),
+          onSubmitted: (v) {
+            if (v.trim().isNotEmpty) Navigator.pop(ctx, v.trim());
+          },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              if (reasonCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, reasonCtrl.text.trim());
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || reason.isEmpty) return;
+
+    try {
+      final outcome = await ref.read(saleServiceProvider).editSaleAtomic(
+        saleId: sale.id,
+        items: sale.items,
+        totalAmount: sale.totalAmount,
+        discount: sale.discount,
+        finalAmount: sale.finalAmount,
+        customerId: sale.customerId,
+        isCredit: sale.isCredit,
+        amountPaid: sale.amountPaid,
+        dueAmount: sale.dueAmount,
+        paymentMethod: sale.paymentMethod,
+        cashAmount: sale.cashAmount,
+        digitalAmount: sale.digitalAmount,
+        reason: reason,
+        extraCharges: sale.extraCharges,
+        roundOff: sale.roundOff,
+      );
+      notifier.resetAfterSale(sessionIndex);
+      notifier.clearEditingSale();
+      ref.invalidate(salesHistoryProvider);
+      ref.invalidate(productsProvider);
+      if (mounted) {
+        _resetSaleState();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(outcome == EditOutcome.saved
+                ? 'Sale updated'
+                : 'No connection — the edit will be applied when you are back online'),
+            backgroundColor: outcome == EditOutcome.saved ? Colors.green : Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      // Server refused (e.g. "Admin permission required", "This sale has
+      // returns"). Nothing changed: keep the cart so the user can fix it (#7).
+      Logger.error('Sale edit failed', e);
+      _warn('Edit NOT saved: ${ErrorMessages.parse(e)}', color: Colors.red);
     }
   }
 
@@ -1919,7 +1842,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Email failed: $e'),
+            content: Text('Email failed: ${ErrorMessages.parse(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -2093,20 +2016,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     }
                     ntf.setEditingSale(sale);
                     for (final item in sale.items) {
-                      ntf.addItem(DesktopCartItem(
-                        productId: item.productId,
-                        name: item.name,
-                        price: item.price,
-                        qty: item.qty,
-                        unit: item.unit,
-                        purchasePrice: item.purchasePrice,
-                        gstRate: item.gstRate,
-                        hsnCode: item.hsnCode,
-                        tamilName: item.tamilName,
-                        discount: item.discount,
-                        unitType: item.unitType,
-                        piecesPerUnit: item.piecesPerUnit,
-                      ));
+                      ntf.addItem(DesktopCartItem.fromCartItem(item));
                     }
                     if (sale.customerId != null && sale.customerId!.isNotEmpty) {
                       ntf.setCustomer(sale.customerId, sale.customerName);
@@ -2114,11 +2024,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     setState(() {
                       _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
                       _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
-                      _selectedPayment = sale.paymentMethod.isNotEmpty ? sale.paymentMethod : 'cash';
-                      _creditFull = sale.amountPaid == 0;
-                      if (sale.isCredit && sale.amountPaid > 0) {
-                        _paidController.text = sale.amountPaid.toStringAsFixed(0);
-                      }
+                      _applySalePaymentToForm(sale);
                       _editingCartIndex = -1;
                       _selectedCartIndex = -1;
                       _selectedProduct = null;
@@ -2246,7 +2152,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               child: Text(
                 shortcut,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'monospace',
                   color: enabled ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
@@ -2514,6 +2420,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     onChanged: (_) => _syncPriceFromTotal(),
                   ),
                 ),
+                // cost price is admin-only (#28)
+                if (_isAdmin) ...[
                 const SizedBox(width: 6),
                 SizedBox(
                   width: 90,
@@ -2545,6 +2453,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     onSubmitted: (_) => _confirmTotal(),
                   ),
                 ),
+                ],
                 if (_editingCartIndex >= 0) ...[
                   const SizedBox(width: 6),
                   IconButton(
@@ -3552,7 +3461,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   Text(
                     'SHIFT+ENTER',
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       color: Colors.white.withValues(alpha: 0.7),
                       fontFamily: 'monospace',
                     ),

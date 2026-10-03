@@ -131,32 +131,50 @@ class _CashFlowScreenState extends State<CashFlowScreen> {
                         _buildNetCashFlowCard(),
                         const SizedBox(height: 16),
                         
-                        // Cash inflows
+                        // Cash inflows (all money that came in, from the cash book)
                         _buildSection(
                           title: 'CASH INFLOWS',
                           icon: Icons.arrow_downward,
                           color: Colors.green,
                           items: [
-                            _buildItem('Cash Sales', _data!['cash_sales'] ?? 0),
-                            _buildItem('Digital Sales', _data!['digital_sales'] ?? 0),
-                            _buildItem('Credit Collections', _data!['cash_received_customers'] ?? 0),
+                            _buildItem('Cash Sales', _n('cash_sales')),
+                            _buildItem('UPI / Bank Sales', _n('digital_sales')),
+                            _buildItem('Credit Collections', _n('cash_received_customers')),
+                            _buildItem('Other Money In', _n('other_in')),
                           ],
-                          total: _data!['total_sales_inflow'] ?? 0,
+                          total: _n('total_sales_inflow') + _n('other_in'),
                           totalLabel: 'Total Inflows',
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Cash outflows
                         _buildSection(
                           title: 'CASH OUTFLOWS',
                           icon: Icons.arrow_upward,
                           color: Colors.red,
                           items: [
-                            _buildItem('Purchase Payments', _data!['purchase_payments'] ?? 0),
-                            _buildItem('Expense Payments', _data!['expense_payments'] ?? 0),
+                            _buildItem('Purchases paid at billing', _n('purchase_payments') - _n('cash_paid_suppliers')),
+                            _buildItem('Payments to Suppliers', _n('cash_paid_suppliers')),
+                            _buildItem('Expense Payments', _n('expense_payments')),
+                            _buildItem('Refunds to Customers', _n('refunds_paid')),
+                            _buildItem('Other Money Out', _n('other_out')),
                           ],
-                          total: _data!['total_outflow'] ?? 0,
+                          total: _n('total_outflow'),
                           totalLabel: 'Total Outflows',
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Opening and closing balance of cash + bank
+                        _buildSection(
+                          title: 'CASH + BANK BALANCE',
+                          icon: Icons.account_balance_wallet,
+                          color: Colors.blue,
+                          items: [
+                            _buildItem('Opening Balance', _n('opening_balance')),
+                            _buildItem('Net Change', _n('net_cash_flow')),
+                          ],
+                          total: _n('closing_balance'),
+                          totalLabel: 'Closing Balance',
                         ),
                       ],
                     ),
@@ -164,6 +182,9 @@ class _CashFlowScreenState extends State<CashFlowScreen> {
                 ),
     );
   }
+
+  /// Numbers arrive as int or double from the database.
+  double _n(String key) => (_data?[key] as num?)?.toDouble() ?? 0;
 
   Widget _buildPeriodSelector() {
     return Card(

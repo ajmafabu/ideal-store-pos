@@ -15,6 +15,7 @@ import '../../../models/sale.dart';
 import '../../../services/offline_service.dart';
 import '../../../services/thermal_printer_service.dart';
 import '../../../utils/app_timezone.dart';
+import '../../../utils/error_messages.dart';
 import '../../../utils/logger.dart';
 import '../../../utils/thermal_invoice.dart';
 
@@ -437,12 +438,10 @@ class _DesktopSalesHistoryDialogState
                                     ),
                                   );
                                   if (confirm == true) {
-                                    print('[DELETE-UI-DESKTOP] Confirmed delete for ${sale.id}');
                                     try {
                                       await ref
                                           .read(saleServiceProvider)
                                           .deleteSale(sale.id);
-                                      print('[DELETE-UI-DESKTOP] deleteSale completed');
                                       ref.invalidate(salesHistoryProvider);
                                       ref.invalidate(productsProvider);
                                       _loadOfflineSales();
@@ -455,11 +454,10 @@ class _DesktopSalesHistoryDialogState
                                         );
                                       }
                                     } catch (e) {
-                                      print('[DELETE-UI-DESKTOP] ERROR: $e');
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           SnackBar(
-                                            content: Text('Delete failed: $e'),
+                                            content: Text('Delete failed: ${ErrorMessages.parse(e)}'),
                                             backgroundColor: Colors.red,
                                           ),
                                         );
@@ -553,9 +551,10 @@ class _DesktopSalesHistoryDialogState
       builder: (ctx) => AlertDialog(
         title: const Text('Process Return?'),
         content: Text(
-          'Return entire sale #${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}?\n\n'
+          'Return everything left on sale #${sale.invoiceLabel}?\n\n'
           'Amount: Rs${sale.finalAmount.toStringAsFixed(2)}\n'
-          'This will restore stock for all ${sale.items.length} items.',
+          'Return records are created for all ${sale.items.length} items: stock goes back, '
+          'the customer\'s due is reduced and any refund is paid the way the bill was paid.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -570,13 +569,15 @@ class _DesktopSalesHistoryDialogState
     if (confirmed != true || !mounted) return;
 
     try {
-      await ref.read(saleServiceProvider).deleteSale(sale.id);
+      // proper return records instead of deleting the sale (#14)
+      final lines = await ref.read(saleServiceProvider).returnFullSale(sale.id);
       ref.invalidate(salesHistoryProvider);
       ref.invalidate(productsProvider);
+      ref.invalidate(returnsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Return processed — Rs${sale.finalAmount.toStringAsFixed(2)} refunded, stock restored'),
+            content: Text('Return recorded for $lines line(s) — stock restored'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -584,7 +585,7 @@ class _DesktopSalesHistoryDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Return failed: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Return failed: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     }

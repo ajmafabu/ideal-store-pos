@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../models/product.dart';
 import '../../models/damaged_product.dart';
+import '../../utils/error_messages.dart';
 
 class DamagedScreen extends ConsumerStatefulWidget {
   const DamagedScreen({super.key});
@@ -31,7 +32,7 @@ class _DamagedScreenState extends ConsumerState<DamagedScreen> {
         onRefresh: () async => ref.invalidate(damagedProvider),
         child: damagedAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
           data: (items) {
             if (items.isEmpty) {
               return const Center(child: Text('No damaged products recorded'));
@@ -161,7 +162,7 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
             // Product selection
             productsAsync.when(
               loading: () => const CircularProgressIndicator(),
-              error: (e, _) => Text('Error: $e'),
+              error: (e, _) => Text('Error: ${ErrorMessages.parse(e)}'),
               data: (products) {
                 final available = products.where((p) => p.stock > 0).toList();
                 return DropdownButtonFormField<Product>(
@@ -301,7 +302,7 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {

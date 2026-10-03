@@ -538,7 +538,7 @@ void main() {
       expect(service.pendingCount, 0);
 
       await service.saveSaleOffline({
-        'id': 'offline-sale-1',
+        'id': '00000000-0000-4000-8000-000000000003',
         'total_amount': 500,
         'final_amount': 480,
         'items': [],
@@ -547,7 +547,7 @@ void main() {
       expect(service.pendingCount, 1);
 
       await service.saveSaleOffline({
-        'id': 'offline-sale-2',
+        'id': '00000000-0000-4000-8000-000000000004',
         'total_amount': 300,
         'final_amount': 300,
         'items': [],
@@ -560,7 +560,7 @@ void main() {
       final service = OfflineService();
 
       await service.saveSaleOffline({
-        'id': 'dual-box-sale',
+        'id': '00000000-0000-4000-8000-000000000001',
         'total_amount': 100,
         'final_amount': 100,
       });
@@ -569,42 +569,42 @@ void main() {
 
       final cachedSales = service.getCachedSalesHistory();
       expect(cachedSales.length, 1);
-      expect(cachedSales.first['id'], 'dual-box-sale');
+      expect(cachedSales.first['id'], '00000000-0000-4000-8000-000000000001');
     });
 
     test('removePendingSale decrements pendingCount', () async {
       final service = OfflineService();
 
       await service.saveSaleOffline({
-        'id': 'to-remove-1',
+        'id': '00000000-0000-4000-8000-000000000007',
         'total_amount': 100,
         'final_amount': 100,
       });
       await service.saveSaleOffline({
-        'id': 'to-remove-2',
+        'id': '00000000-0000-4000-8000-000000000008',
         'total_amount': 200,
         'final_amount': 200,
       });
       expect(service.pendingCount, 2);
 
-      await service.removePendingSale('to-remove-1');
+      await service.removePendingSale('00000000-0000-4000-8000-000000000007');
       expect(service.pendingCount, 1);
 
       final pending = service.getPendingSales();
       expect(pending.length, 1);
-      expect(pending.first['id'], 'to-remove-2');
+      expect(pending.first['id'], '00000000-0000-4000-8000-000000000008');
     });
 
     test('getPendingSales returns all pending sales', () async {
       final service = OfflineService();
 
       await service.saveSaleOffline({
-        'id': 'ps-1',
+        'id': '00000000-0000-4000-8000-000000000005',
         'total_amount': 100,
         'final_amount': 100,
       });
       await service.saveSaleOffline({
-        'id': 'ps-2',
+        'id': '00000000-0000-4000-8000-000000000006',
         'total_amount': 200,
         'final_amount': 200,
       });
@@ -613,7 +613,7 @@ void main() {
       expect(pending.length, 2);
 
       final ids = pending.map((s) => s['id']).toSet();
-      expect(ids, containsAll(['ps-1', 'ps-2']));
+      expect(ids, containsAll(['00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000006']));
     });
 
     test('getPendingOperations returns sorted list by timestamp', () async {
@@ -880,7 +880,7 @@ void main() {
       final offlineService = OfflineService();
 
       await offlineService.saveSaleOffline({
-        'id': 'offline-fallback-sale',
+        'id': '00000000-0000-4000-8000-000000000002',
         'total_amount': 750,
         'final_amount': 750,
         'items': [],
@@ -889,7 +889,7 @@ void main() {
 
       final cached = offlineService.getCachedSalesHistory();
       expect(cached.length, 1);
-      expect(cached.first['id'], 'offline-fallback-sale');
+      expect(cached.first['id'], '00000000-0000-4000-8000-000000000002');
 
       final pending = offlineService.getPendingSales();
       expect(pending.length, 1);
