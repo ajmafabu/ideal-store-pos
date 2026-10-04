@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -35,7 +36,6 @@ import 'ai_insights_screen.dart';
 import 'backup_screen.dart';
 import 'gst_filing_screen.dart';
 import 'slow_moving_screen.dart';
-import '../../utils/error_messages.dart';
 
 class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key});
@@ -909,7 +909,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
   Future<void> _checkForUpdates() async {
     try {
       final service = UpdateService();
-      final update = await service.checkForUpdate();
+      final update = await service.checkForUpdate(manual: true);
       if (!context.mounted) return;
 
       if (update == null) {
@@ -955,7 +955,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update check failed: ${ErrorMessages.parse(e)}')),
+          SnackBar(content: Text(e is SocketException || e is TimeoutException || e is HandshakeException
+              ? 'Could not check for updates: no internet connection. Try again later.'
+              : 'Could not check for updates: ${e.toString().replaceFirst('Exception: ', '')}')),
         );
       }
     }
@@ -1367,10 +1369,14 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _status = 'Failed: $e');
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: ${ErrorMessages.parse(e)}')),
+        messenger.showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 10),
+            content: Text('Update failed: ${e.toString().replaceFirst('Exception: ', '')}\n'
+                'Your current version is unchanged.'),
+          ),
         );
       }
     }

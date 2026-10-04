@@ -32,7 +32,11 @@ class UpdateService {
   }
 
   /// Check GitHub for a newer version. Returns null if up-to-date or skipped.
-  Future<UpdateInfo?> checkForUpdate() async {
+  /// Returns the newer release, or null when there is none.
+  /// [manual] = the admin pressed "Check for Updates": a skipped version is
+  /// offered again, and a failed check throws instead of looking like
+  /// "you are on the latest version".
+  Future<UpdateInfo?> checkForUpdate({bool manual = false}) async {
     try {
       // Skip if we just installed an update (avoids loop when Windows caches old version info)
       final markerFile = File('${Directory.systemTemp.path}\\pos_just_updated');
@@ -79,6 +83,7 @@ class UpdateService {
         await debugFile.writeAsString(
             'Response body: $body\n',
             mode: FileMode.append);
+        if (manual) throw Exception('Could not reach GitHub (status ${response.statusCode}). Try again later.');
         return null;
       }
 
@@ -105,7 +110,7 @@ class UpdateService {
 
       // Check if this version was skipped
       final skippedVersion = await getSkippedVersion();
-      if (skippedVersion == latestVersion) {
+      if (!manual && skippedVersion == latestVersion) {
         Logger.info('[UPDATE] Version $latestVersion was skipped by user');
         await debugFile.writeAsString('Result: version skipped\n', mode: FileMode.append);
         return null;
@@ -158,7 +163,27 @@ class UpdateService {
             'Stack: $stackTrace\n',
             mode: FileMode.append);
       } catch (_) {}
+      if (manual) rethrow;
       return null;
+    }
+  }
+
+  /// Where the new version is unpacked: a "_update" folder inside the app's
+  /// own folder, which is the folder excluded from antivirus scanning.
+  /// Unpacking into %TEMP% let Windows Security quarantine the new .exe
+  /// half-way through an update. Falls back to %TEMP% if the app folder
+  /// cannot be written to.
+  Future<String> _stagingDir(String tempPath) async {
+    final appDir = Directory(Platform.resolvedExecutable).parent.path;
+    final staging = Directory('$appDir\\_update');
+    try {
+      await staging.create(recursive: true);
+      final probe = File('${staging.path}\\.write_test');
+      await probe.writeAsString('ok');
+      await probe.delete();
+      return staging.path;
+    } catch (_) {
+      return '$tempPath\\update_extract';
     }
   }
 
@@ -166,7 +191,7 @@ class UpdateService {
   Future<String> downloadAndInstall(UpdateInfo update, {void Function(double progress)? onProgress}) async {
     final tempDir = await getTemporaryDirectory();
     final zipPath = '${tempDir.path}\\update.zip';
-    final extractDir = '${tempDir.path}\\update_extract';
+    final extractDir = await _stagingDir(tempDir.path);
 
     // Only install what the release says it is (#32): the release must
     // publish a SHA-256 of the zip, and the download must match it.
@@ -329,31 +354,47 @@ timeout /t 2 /nobreak >nul
 :: Kill again in case it lingered
 taskkill /f /im "%EXE%" >nul 2>&1
 
-:: Remove old files
-echo [%date% %time%] Deleting old files... >> "%LOG%"
-del /Q "%DEST%\\*.dll" 2>>"%LOG%"
-del /Q "%DEST%\\*.exe" 2>>"%LOG%"
-del /Q "%DEST%\\*.dat" 2>>"%LOG%"
-del /Q "%DEST%\\*.json" 2>>"%LOG%"
-timeout /t 1 /nobreak >nul
+:: The new version must be complete before the old one is touched
+if not exist "%SOURCE%\\%EXE%" (
+    echo [%date% %time%] ERROR: new %EXE% missing from the update - antivirus? Old version kept. >> "%LOG%"
+    goto :KEEP_OLD
+)
 
-:: Copy new files
+:: Keep the old exe until the new one is in place
+echo [%date% %time%] Backing up old exe... >> "%LOG%"
+if exist "%DEST%\\%EXE%.old" del /Q "%DEST%\\%EXE%.old" 2>>"%LOG%"
+ren "%DEST%\\%EXE%" "%EXE%.old" 2>>"%LOG%"
+
+:: Copy new files over the old ones
 echo [%date% %time%] Copying new files... >> "%LOG%"
 xcopy /E /Y /I "%SOURCE%" "%DEST%" >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo [%date% %time%] ERROR: xcopy failed with errorlevel %errorlevel% >> "%LOG%"
-    goto :ERROR
+    goto :RESTORE
 )
 
 :: Verify exe exists after copy
 if not exist "%DEST%\\%EXE%" (
     echo [%date% %time%] ERROR: exe not found after copy >> "%LOG%"
-    goto :ERROR
+    goto :RESTORE
 )
 
+del /Q "%DEST%\\%EXE%.old" 2>>"%LOG%"
+if exist "%DEST%\\_update" rmdir /S /Q "%DEST%\\_update" 2>>"%LOG%"
 echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
 start "" "%DEST%\\%EXE%"
 goto :DONE
+
+:RESTORE
+echo [%date% %time%] Restoring the old version... >> "%LOG%"
+if exist "%DEST%\\%EXE%.old" (
+    if exist "%DEST%\\%EXE%" del /Q "%DEST%\\%EXE%" 2>>"%LOG%"
+    ren "%DEST%\\%EXE%.old" "%EXE%" 2>>"%LOG%"
+)
+
+:KEEP_OLD
+if exist "%DEST%\\_update" rmdir /S /Q "%DEST%\\_update" 2>>"%LOG%"
+if exist "%DEST%\\%EXE%" start "" "%DEST%\\%EXE%"
 
 :ERROR
 echo [%date% %time%] ====== UPDATE FAILED ======>> "%LOG%"

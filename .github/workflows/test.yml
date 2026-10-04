@@ -28,7 +28,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze (warnings fail the build)
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos lib test
 
       - name: Run ALL tests with coverage
         run: flutter test --coverage

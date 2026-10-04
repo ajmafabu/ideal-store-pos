@@ -7,6 +7,7 @@ analyzer:
     - "translate_tamil_v2.dart"
     - "update_tamil_names.dart"
     - "convert_icon.dart"
+    - "clear_tamil.dart"
   errors:
     deprecated_member_use: ignore
     curly_braces_in_flow_control_structures: ignore

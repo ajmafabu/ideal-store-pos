@@ -232,10 +232,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   double _progress = 0;
   String _status = 'Preparing...';
   bool _downloading = false;
+  String? _error;
 
   Future<void> _download() async {
     setState(() {
       _downloading = true;
+      _error = null;
       _status = 'Downloading...';
     });
 
@@ -260,7 +262,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       if (mounted) {
         setState(() {
           _downloading = false;
-          _status = 'Failed: $e';
+          _error = e.toString().replaceFirst('Exception: ', '');
         });
       }
     }
@@ -310,6 +312,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             const SizedBox(height: 8),
             Text(_status, style: const TextStyle(fontSize: 12)),
           ],
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Text('Update failed: $_error',
+                style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
+            const SizedBox(height: 4),
+            Text('Your current version is unchanged and keeps working. Press Update Now to try again.',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+          ],
         ],
       ),
       actions: [
@@ -332,7 +342,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           FilledButton.icon(
             onPressed: Platform.isWindows ? _download : null,
             icon: const Icon(Icons.download, size: 18),
-            label: Text(Platform.isWindows ? 'Update Now' : 'Visit GitHub'),
+            label: Text(!Platform.isWindows ? 'Visit GitHub' : (_error != null ? 'Try Again' : 'Update Now')),
           ),
       ],
     );
