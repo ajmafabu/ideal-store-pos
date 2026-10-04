@@ -39,3 +39,17 @@ SELECT add_account_transaction('a0000000-0000-0000-0000-000000000001', 'out', 70
 INSERT INTO payments (id, customer_id, sale_id, amount, payment_method) VALUES
   ('aa000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000002', 100, 'bank');
 SELECT add_account_transaction('a0000000-0000-0000-0000-000000000001', 'in', 100, 'credit_collection', 'Collection');
+
+-- Dal: bought 10 (cash), sold 7 by the old app, but its batches still say 10
+INSERT INTO products (id, name, purchase_price, selling_price, stock) VALUES ('b0000000-0000-0000-0000-000000000009', 'Dal', 80, 100, 0);
+INSERT INTO purchases (id, supplier_name, items, total_amount)
+VALUES ('d0000000-0000-0000-0000-000000000009', 'Mill', '[{"product_id":"b0000000-0000-0000-0000-000000000009","name":"Dal","qty":10,"price":80}]', 800);
+SELECT increment_stock('b0000000-0000-0000-0000-000000000009', 10);
+SELECT add_inventory_batch('b0000000-0000-0000-0000-000000000009', 'd0000000-0000-0000-0000-000000000009', 10, 80, NULL, NULL);
+SELECT add_account_transaction('a0000000-0000-0000-0000-000000000001', 'out', 800, 'purchase', 'Purchase Dal');
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method)
+VALUES ('e0000000-0000-0000-0000-000000000009', '[{"product_id":"b0000000-0000-0000-0000-000000000009","name":"Dal","qty":7,"price":100,"total":700,"purchase_price":80}]', 700, 700, 'cash');
+SELECT add_account_transaction('a0000000-0000-0000-0000-000000000001', 'in', 700, 'sale', 'Sale Dal');
+-- the old app left the batch untouched: 10 in batches, 3 in stock
+UPDATE inventory_batches SET remaining = 10 WHERE product_id = 'b0000000-0000-0000-0000-000000000009';
+UPDATE products SET stock = 3 WHERE id = 'b0000000-0000-0000-0000-000000000009';

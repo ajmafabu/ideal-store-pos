@@ -3184,6 +3184,31 @@ DO $$ BEGIN
 EXCEPTION WHEN insufficient_privilege THEN NULL;
 END $$;
 
+-- 16j. Batches that hold MORE units than the product's stock: the old app
+--      sometimes deducted stock without consuming batches. Those extra units
+--      were sold long ago; left in place they would be costed again and
+--      inflate stock value. Remove the excess from the OLDEST batches (what
+--      FIFO would have used) and log each fix in stock_reconciliation.
+--      Re-running finds nothing to do.
+DO $$
+DECLARE r record; v_fix record;
+BEGIN
+  FOR r IN
+    SELECT p.id, greatest(coalesce(p.stock, 0), 0) AS stock, b.qty
+    FROM products p
+    JOIN (SELECT product_id, sum(remaining) AS qty FROM inventory_batches
+          WHERE remaining > 0 GROUP BY product_id) b ON b.product_id = p.id
+    WHERE NOT coalesce(p.has_variants, false)
+      AND b.qty > greatest(coalesce(p.stock, 0), 0) + 0.0005
+  LOOP
+    SELECT * INTO v_fix FROM public.fifo_take(r.id, r.qty - r.stock, 0);
+    INSERT INTO stock_reconciliation (product_id, system_qty, physical_qty, notes)
+    VALUES (r.id, r.qty, r.stock,
+            format('2026-10 upgrade: removed %s batch unit(s) already sold by the old app (batches %s, stock %s)',
+                   r.qty - r.stock, r.qty, r.stock));
+  END LOOP;
+END $$;
+
 -- ---------------------------------------------------------------------
 -- 17. Triggers — the complete, intended set
 -- ---------------------------------------------------------------------
