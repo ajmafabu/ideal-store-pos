@@ -205,7 +205,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Text('${ErrorMessages.parse(e)}',
+              Text(ErrorMessages.parse(e),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
                 textAlign: TextAlign.center,
               ),

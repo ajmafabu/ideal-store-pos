@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_ce/hive.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -34,6 +35,10 @@ class HiveAdapter {
     }
     return _currentCipher!;
   }
+
+  /// Tests only: use an in-memory key instead of the device key file.
+  @visibleForTesting
+  static void useCipherForTests(HiveAesCipher cipher) => _currentCipher = cipher;
 
   static Future<Uint8List> _getOrCreateKey() async {
     final dir = await getApplicationDocumentsDirectory();

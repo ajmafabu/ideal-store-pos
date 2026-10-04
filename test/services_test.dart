@@ -13,6 +13,7 @@ void main() {
   setUpAll(() async {
     tempDir = Directory.systemTemp.createTempSync('hive_test_');
     Hive.init(tempDir.path);
+    HiveAdapter.useCipherForTests(HiveAesCipher(List<int>.generate(32, (i) => i)));
   });
 
   setUp(() async {
