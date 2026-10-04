@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ideal_store_pos/config/desktop_billing_provider.dart';
+import 'package:ideal_store_pos/config/supabase_config.dart';
 import 'package:ideal_store_pos/models/purchase.dart';
 import 'package:ideal_store_pos/models/sale.dart';
 import 'package:ideal_store_pos/services/gst_export_service.dart';
@@ -224,6 +225,15 @@ void main() {
     test('place of supply uses the portal format', () {
       expect(GstExportService.placeOfSupply('33'), '33-Tamil Nadu');
       expect(GstExportService.placeOfSupply('7'), '07-Delhi');
+    });
+  });
+
+  group('Supabase config', () {
+    test('URL and anon key are the right kind of value', () {
+      expect(SupabaseConfig.supabaseUrl, startsWith('https://'));
+      // the anon key is a JWT, never the URL
+      expect(SupabaseConfig.supabaseAnonKey, startsWith('eyJ'));
+      expect(SupabaseConfig.supabaseAnonKey.split('.').length, 3);
     });
   });
 }
