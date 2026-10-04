@@ -29,8 +29,9 @@ req_funcs(sig) AS (VALUES
   ('get_customer_portal(uuid)'),('adjust_stock(uuid,numeric)'),('guard_product_stock()')),
 checks AS (
   SELECT 1 AS ord, 'migration v100 recorded' AS check_name,
-         CASE WHEN to_regclass('public.schema_migrations') IS NOT NULL
-                   AND EXISTS (SELECT 1 FROM schema_migrations WHERE version = 'v100') THEN 'OK' ELSE 'MISSING' END AS status,
+         CASE WHEN (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('schema_migrations','version'))) = 1
+                   AND (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.schema_migrations WHERE version = ''v100''', false, true, '')))[1]::text::int > 0
+              THEN 'OK' ELSE 'MISSING' END AS status,
          '2026_10_audit_fixes.sql applied' AS detail
   UNION ALL
   SELECT 2, 'required columns',
@@ -56,7 +57,8 @@ checks AS (
         GROUP BY proname HAVING count(*) > 1) d
   UNION ALL
   SELECT 5, 'signup ignores client-supplied role',
-         CASE WHEN pg_get_functiondef('public.handle_new_user()'::regprocedure) ILIKE '%raw_user_meta_data->>''role''%'
+         CASE WHEN to_regprocedure('public.handle_new_user()') IS NULL THEN 'MISSING'
+              WHEN pg_get_functiondef(to_regprocedure('public.handle_new_user()')) ILIKE '%raw_user_meta_data->>''role''%'
               THEN 'PROBLEM' ELSE 'OK' END,
          'handle_new_user must not read raw_user_meta_data->>role'
   UNION ALL
@@ -93,27 +95,28 @@ checks AS (
   FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE 'b\_%postings'
   UNION ALL
   SELECT 11, 'stock matches batches',
-         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'INFO' END,
-         count(*) || ' product(s) where stock < units in batches (use Stock Count to fix)'
-  FROM products p
-  WHERE p.stock < coalesce((SELECT sum(remaining) FROM inventory_batches b WHERE b.product_id = p.id), 0) - 0.001
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('products','stock'),('products','id'),('inventory_batches','remaining'),('inventory_batches','product_id'))) = 4 THEN 'MISSING'
+              WHEN (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.products p WHERE p.stock < coalesce((SELECT sum(remaining) FROM public.inventory_batches b WHERE b.product_id = p.id), 0) - 0.001', false, true, '')))[1]::text::int = 0 THEN 'OK' ELSE 'INFO' END,
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('products','stock'),('products','id'),('inventory_batches','remaining'),('inventory_batches','product_id'))) = 4 THEN 'products/inventory_batches not set up yet'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.products p WHERE p.stock < coalesce((SELECT sum(remaining) FROM public.inventory_batches b WHERE b.product_id = p.id), 0) - 0.001', false, true, '')))[1]::text || ' product(s) where stock < units in batches (use Stock Count to fix)' END
   UNION ALL
   SELECT 12, 'cash book: balance vs journal',
-         CASE WHEN bool_and(abs(diff) < 0.01) THEN 'OK' ELSE 'INFO' END,
-         coalesce(string_agg(name || ' differs by ' || round(diff, 2) || ' (opening balance or past drift)', '; ')
-                  FILTER (WHERE abs(diff) >= 0.01), 'balances equal the journal')
-  FROM (SELECT a.name, a.balance - coalesce(sum(CASE WHEN t.type='in' THEN t.amount ELSE -t.amount END), 0) AS diff
-        FROM accounts a LEFT JOIN account_transactions t ON t.account_id = a.id GROUP BY a.id, a.name, a.balance) x
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('accounts','id'),('accounts','name'),('accounts','balance'),('account_transactions','account_id'),('account_transactions','type'),('account_transactions','amount'))) = 6 THEN 'MISSING'
+              WHEN coalesce((xpath('//v/text()', query_to_xml('SELECT coalesce(string_agg(name || '' differs by '' || round(diff, 2), ''; ''), '''') AS v FROM (SELECT a.name, a.balance - coalesce(sum(CASE WHEN t.type=''in'' THEN t.amount ELSE -t.amount END), 0) AS diff FROM public.accounts a LEFT JOIN public.account_transactions t ON t.account_id = a.id GROUP BY a.id, a.name, a.balance) x WHERE abs(diff) >= 0.01', false, true, '')))[1]::text, '') = '' THEN 'OK' ELSE 'INFO' END,
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('accounts','id'),('accounts','name'),('accounts','balance'),('account_transactions','account_id'),('account_transactions','type'),('account_transactions','amount'))) = 6 THEN 'accounts/account_transactions not set up yet'
+              WHEN coalesce((xpath('//v/text()', query_to_xml('SELECT coalesce(string_agg(name || '' differs by '' || round(diff, 2), ''; ''), '''') AS v FROM (SELECT a.name, a.balance - coalesce(sum(CASE WHEN t.type=''in'' THEN t.amount ELSE -t.amount END), 0) AS diff FROM public.accounts a LEFT JOIN public.account_transactions t ON t.account_id = a.id GROUP BY a.id, a.name, a.balance) x WHERE abs(diff) >= 0.01', false, true, '')))[1]::text, '') = '' THEN 'balances equal the journal'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT coalesce(string_agg(name || '' differs by '' || round(diff, 2), ''; ''), '''') AS v FROM (SELECT a.name, a.balance - coalesce(sum(CASE WHEN t.type=''in'' THEN t.amount ELSE -t.amount END), 0) AS diff FROM public.accounts a LEFT JOIN public.account_transactions t ON t.account_id = a.id GROUP BY a.id, a.name, a.balance) x WHERE abs(diff) >= 0.01', false, true, '')))[1]::text || ' (opening balance or past drift)' END
   UNION ALL
   SELECT 13, 'customer balances match sales',
-         CASE WHEN count(*) = 0 THEN 'OK' ELSE 'PROBLEM' END,
-         count(*) || ' customer(s) out of step'
-  FROM customers c
-  WHERE abs(coalesce(c.total_credit, 0) - coalesce((SELECT sum(due_amount) FROM sales s WHERE s.customer_id = c.id AND s.due_amount > 0), 0)) > 0.01
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('customers','id'),('customers','total_credit'),('sales','customer_id'),('sales','due_amount'))) = 4 THEN 'MISSING'
+              WHEN (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.customers c WHERE abs(coalesce(c.total_credit, 0) - coalesce((SELECT sum(due_amount) FROM public.sales s WHERE s.customer_id = c.id AND s.due_amount > 0), 0)) > 0.01', false, true, '')))[1]::text::int = 0 THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('customers','id'),('customers','total_credit'),('sales','customer_id'),('sales','due_amount'))) = 4 THEN 'customers/sales columns not set up yet'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.customers c WHERE abs(coalesce(c.total_credit, 0) - coalesce((SELECT sum(due_amount) FROM public.sales s WHERE s.customer_id = c.id AND s.due_amount > 0), 0)) > 0.01', false, true, '')))[1]::text || ' customer(s) out of step' END
   UNION ALL
   SELECT 14, 'active admins',
-         CASE WHEN count(*) >= 1 THEN 'OK' ELSE 'PROBLEM' END,
-         count(*) || ' active admin(s)'
-  FROM profiles WHERE role = 'admin' AND coalesce(active, true)
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('profiles','role'),('profiles','active'))) = 2 THEN 'MISSING'
+              WHEN (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.profiles WHERE role = ''admin'' AND coalesce(active, true)', false, true, '')))[1]::text::int >= 1 THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('profiles','role'),('profiles','active'))) = 2 THEN 'profiles.role/active missing'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.profiles WHERE role = ''admin'' AND coalesce(active, true)', false, true, '')))[1]::text || ' active admin(s)' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;
