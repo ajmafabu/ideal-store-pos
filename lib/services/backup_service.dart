@@ -34,12 +34,24 @@ class BackupService {
     'damaged_products', 'stock_reconciliation', 'payment_reminders', 'transaction_edits',
   ];
 
+  /// Primary key of each table: pages are read in key order, so a backup
+  /// taken while the shop is billing cannot skip or repeat rows.
+  static List<String> orderColumns(String table) => switch (table) {
+        'app_config' => ['key'],
+        'legacy_postings' => ['ref_type', 'ref_id', 'account_id'],
+        _ => ['id'],
+      };
+
   Future<List<Map<String, dynamic>>> _readAll(String table) async {
     final rows = <Map<String, dynamic>>[];
     const page = 1000;
     var from = 0;
     while (true) {
-      final res = await _client.from(table).select().range(from, from + page - 1);
+      PostgrestTransformBuilder<PostgrestList> query = _client.from(table).select();
+      for (final column in orderColumns(table)) {
+        query = query.order(column, ascending: true);
+      }
+      final res = await query.range(from, from + page - 1);
       final list = (res as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
       rows.addAll(list);
       if (list.length < page) break;

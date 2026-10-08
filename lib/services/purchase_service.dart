@@ -292,6 +292,7 @@ class PurchaseService {
         final page = await _client
             .from('purchases')
             .select('total_amount')
+            .order('id')
             .range(offset, offset + 999);
         for (final e in page as List) {
           total += (e['total_amount'] as num?)?.toDouble() ?? 0;

@@ -6,6 +6,7 @@ import '../../models/sale.dart';
 import '../../models/product_return.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 
 class ReturnsScreen extends ConsumerStatefulWidget {
   const ReturnsScreen({super.key});
@@ -474,7 +475,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey.shade600)),
-                              Text('Qty: ${item.qty}',
+                              Text('Qty: ${formatQty(item.qty)}',
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey.shade600)),
@@ -555,7 +556,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                       )
                     else
                       Text(
-                        'Max: ${item.qty}',
+                        'Max: ${formatQty(item.qty)}',
                         style:
                             TextStyle(fontSize: 11, color: Colors.grey.shade500),
                       ),

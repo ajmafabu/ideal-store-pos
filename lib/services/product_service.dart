@@ -381,7 +381,7 @@ class ProductService {
   /// record was saved but stock update failed (manual intervention needed).
   Future<bool> reconcileStock(
     String productId,
-    int physicalQty, {
+    double physicalQty, {
     String? notes,
   }) async {
     try {

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'qty_format.dart';
 
 class ThermalColumnLayout {
   ThermalColumnLayout._();
@@ -11,7 +12,7 @@ class ThermalColumnLayout {
 class ThermalRow {
   final int sNo;
   final String productName;
-  final int qty;
+  final double qty;
   final double rate;
   final double amount;
 
@@ -182,7 +183,7 @@ class TamilBitmapRenderer {
 
     for (final row in rows) {
       final sno = _makeTp('${row.sNo}', 26, true);
-      final qty = _makeTp('${row.qty}', 26, true);
+      final qty = _makeTp(formatQty(row.qty), 26, true);
       final rate = _makeTp(row.rate.toStringAsFixed(2), 26, true);
       final amt = _makeTp(row.amount.toStringAsFixed(2), 26, true);
 

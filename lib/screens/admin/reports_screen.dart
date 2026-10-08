@@ -16,6 +16,7 @@ import 'receivables_aging_screen.dart';
 import 'cash_flow_screen.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/logger.dart';
+import '../../utils/paged_query.dart';
 
 class ReportData {
   final double totalSales;
@@ -170,11 +171,11 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   }
 
   // Fallback: client-side aggregation (original code)
-  final salesResponse = await client
+  final salesResponse = await fetchAllRows(() => client
       .from('sales')
       .select()
       .gte('created_at', range.start.toUtc().toIso8601String())
-      .lt('created_at', endExclusive.toUtc().toIso8601String());
+      .lt('created_at', endExclusive.toUtc().toIso8601String()));
 
   double totalSales = 0;
   double totalPurchaseCost = 0;
@@ -210,9 +211,9 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   }
 
   // Get category data from products
-  final productsRes = await client
+  final productsRes = await fetchAllRows(() => client
       .from('products')
-      .select('id, name, category');
+      .select('id, name, category'));
   Map<String, String> productCategory = {};
   for (final p in productsRes as List) {
     productCategory[p['id'] as String] = p['category'] as String? ?? 'Other';
@@ -232,11 +233,11 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   double totalPurchases = totalPurchaseCost;
 
   // Expenses
-  final expensesResponse = await client
+  final expensesResponse = await fetchAllRows(() => client
       .from('expenses')
       .select('amount, category')
       .gte('created_at', range.start.toUtc().toIso8601String())
-      .lt('created_at', endExclusive.toUtc().toIso8601String());
+      .lt('created_at', endExclusive.toUtc().toIso8601String()));
 
   double totalExpenses = 0;
   Map<String, double> expensesByCategory = {};
@@ -252,11 +253,11 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   final prevEnd = DateTime(range.start.year, range.start.month, 0);
   final prevEndExcl = prevEnd.add(const Duration(days: 1));
 
-  final prevSales = await client
+  final prevSales = await fetchAllRows(() => client
       .from('sales')
       .select('final_amount, items')
       .gte('created_at', prevStart.toUtc().toIso8601String())
-      .lt('created_at', prevEndExcl.toUtc().toIso8601String());
+      .lt('created_at', prevEndExcl.toUtc().toIso8601String()));
 
   double prevMonthSales = 0;
   double prevMonthPurchases = 0;
@@ -270,11 +271,11 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
     }
   }
 
-  final prevExpenses = await client
+  final prevExpenses = await fetchAllRows(() => client
       .from('expenses')
       .select('amount')
       .gte('created_at', prevStart.toUtc().toIso8601String())
-      .lt('created_at', prevEndExcl.toUtc().toIso8601String());
+      .lt('created_at', prevEndExcl.toUtc().toIso8601String()));
 
   double prevMonthExpenses = 0;
   for (final e in prevExpenses as List) {
@@ -475,6 +476,9 @@ class ReportsScreen extends ConsumerWidget {
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
+                            }
+                            if (snap.hasError) {
+                              return Text('Could not load: ${ErrorMessages.parse(snap.error!)}');
                             }
                             final data = snap.data ?? [];
                             if (data.isEmpty) {
@@ -1451,6 +1455,10 @@ class _BalanceSheetSection extends ConsumerWidget {
                     return FutureBuilder<double>(
                       future: CustomerService().getTotalDebt(),
                       builder: (ctx, snap) {
+                        // an error used to show as "receivables 0"
+                        if (snap.hasError) {
+                          return Text('Could not load receivables: ${ErrorMessages.parse(snap.error!)}');
+                        }
                         final receivables = snap.data ?? 0;
                         final totalAssets =
                             cashBalance +

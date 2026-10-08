@@ -13,7 +13,8 @@ class VersionCheckService {
           .from('app_config')
           .select('value')
           .eq('key', 'min_version')
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(const Duration(seconds: 5));
 
       if (response == null) return false;
 

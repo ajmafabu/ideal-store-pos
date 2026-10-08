@@ -23,6 +23,7 @@ import '../../utils/app_timezone.dart';
 import '../../widgets/empty_state.dart';
 import 'cart_screen.dart';
 import 'product_form_screen.dart';
+import '../../utils/qty_format.dart';
 
 class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
@@ -706,7 +707,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                           .map(
                             (item) => [
                               item.name,
-                              '${item.qty}',
+                              formatQty(item.qty),
                               'Rs${item.price.toStringAsFixed(2)}',
                               'Rs${item.total.toStringAsFixed(2)}',
                             ],
@@ -1088,7 +1089,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${item.name} x${item.qty}'),
+                            Text('${item.name} x${formatQty(item.qty)}'),
                             if (item.discount > 0)
                               Text(
                                 'Rs${item.total.toStringAsFixed(2)} (-${item.discount.toStringAsFixed(0)}%)',
@@ -1404,7 +1405,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
 
   void _editQty(int index) {
     final item = _items[index];
-    final controller = TextEditingController(text: item.qty.toString());
+    final controller = TextEditingController(text: formatQty(item.qty));
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1425,7 +1426,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
           ),
           TextButton(
             onPressed: () {
-              final newQty = int.tryParse(controller.text);
+              final newQty = double.tryParse(controller.text);
               if (newQty != null && newQty > 0) {
                 setState(
                   () => _items[index] = item.copyWith(qty: newQty),
@@ -1495,7 +1496,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                     return ListTile(
                       title: Text(product.name),
                       subtitle: Text(
-                        'Rs${product.sellingPrice} | Stock: ${product.stock}',
+                        'Rs${product.sellingPrice} | Stock: ${formatQty(product.stock)}',
                       ),
                       trailing: const Icon(
                         Icons.add_circle,
@@ -1641,7 +1642,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                                       horizontal: 4,
                                     ),
                                     child: Text(
-                                      '${item.qty}',
+                                      formatQty(item.qty),
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,

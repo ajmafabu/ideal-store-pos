@@ -42,7 +42,12 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 

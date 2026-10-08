@@ -1,3 +1,4 @@
+import '../../../utils/qty_format.dart';
 import 'package:flutter/material.dart';
 
 import '../../../config/desktop_billing_provider.dart';
@@ -33,7 +34,7 @@ class BillingBottomBar extends StatelessWidget {
             children: [
               _buildStat('TOTAL ITEMS', '${session.itemCount}'),
               const SizedBox(width: 32),
-              _buildStat('TOTAL QTY', '${session.totalQty}'),
+              _buildStat('TOTAL QTY', formatQty(session.totalQty)),
               const Spacer(),
               if (billDiscount > 0) ...[
                 Text(

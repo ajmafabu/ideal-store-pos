@@ -46,6 +46,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
       _isScanning = true;
       _devices = [];
     });
+    await ThermalPrinterService.requestBluetoothPermissions(scan: true);
 
     try {
       _discoverySubscription?.cancel();

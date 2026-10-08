@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../utils/error_messages.dart';
+import '../../services/gst_export_service.dart';
 
 class GSTReportScreen extends ConsumerStatefulWidget {
   const GSTReportScreen({super.key});
@@ -25,8 +26,9 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
   double _totalGST = 0;
   double _totalCGST = 0;
   double _totalSGST = 0;
+  double _totalIGST = 0;
   double _totalExclGST = 0;
-  int _totalItems = 0;
+  double _totalItems = 0;
   int _selectedTab = 0;
   Map<String, dynamic>? _gstr3bData;
 
@@ -42,61 +44,46 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
       final start = _startDate.toUtc();
       final end = DateTime(_endDate.year, _endDate.month, _endDate.day + 1).toUtc();
 
-      final response = await Supabase.instance.client
-          .from('sales')
-          .select('items, total_amount, discount, final_amount')
-          .gte('created_at', start.toIso8601String())
-          .lt('created_at', end.toIso8601String());
+      // the same figures as the GSTR-1 export: the CGST/SGST/IGST the
+      // database stored on each sale (after bill discount, tax-exempt bills)
+      final hsnRows = await GstExportService().hsnSummary(start, end);
 
-      Map<String, Map<String, dynamic>> hsnMap = {};
       double totalSales = 0;
-      double totalGST = 0;
-      int totalItems = 0;
-
-      for (final sale in response as List) {
-        final items = sale['items'] as List? ?? [];
-        totalSales += (sale['final_amount'] as num?)?.toDouble() ?? 0;
-
-        for (final item in items) {
-          final gstRate = (item['gst_rate'] as num?)?.toDouble() ?? 0;
-          final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final hsnCode = item['hsn_code'] as String? ?? '';
-          final name = item['name'] as String? ?? '';
-          final total = (item['total'] as num?)?.toDouble() ?? 0;
-
-          final gstAmount = total * gstRate / (100 + gstRate);
-          totalGST += gstAmount;
-          totalItems += qty;
-
-          final hsnKey = hsnCode.isEmpty ? 'NO-HSN' : hsnCode;
-          if (!hsnMap.containsKey(hsnKey)) {
-            hsnMap[hsnKey] = {
-              'hsn': hsnKey,
-              'name': name,
-              'rate': gstRate,
-              'qty': 0,
-              'taxable_value': 0.0,
-              'cgst': 0.0,
-              'sgst': 0.0,
-              'total': 0.0,
-            };
-          }
-          hsnMap[hsnKey]!['qty'] += qty;
-          hsnMap[hsnKey]!['taxable_value'] += total - gstAmount;
-          hsnMap[hsnKey]!['cgst'] += gstAmount / 2;
-          hsnMap[hsnKey]!['sgst'] += gstAmount / 2;
-          hsnMap[hsnKey]!['total'] += total;
-        }
+      double totalCgst = 0;
+      double totalSgst = 0;
+      double totalIgst = 0;
+      double totalQty = 0;
+      final hsnData = <Map<String, dynamic>>[];
+      for (final h in hsnRows) {
+        final hsn = (h['hsn'] as String?) ?? '';
+        totalSales += h['value'] as double;
+        totalCgst += h['cgst'] as double;
+        totalSgst += h['sgst'] as double;
+        totalIgst += h['igst'] as double;
+        totalQty += h['qty'] as double;
+        hsnData.add({
+          'hsn': hsn.isEmpty ? 'NO-HSN' : hsn,
+          'name': h['desc'] ?? '',
+          'rate': h['rate'],
+          'qty': h['qty'],
+          'taxable_value': h['taxable'],
+          'cgst': h['cgst'],
+          'sgst': h['sgst'],
+          'igst': h['igst'],
+          'total': h['value'],
+        });
       }
+      final totalGst = totalCgst + totalSgst + totalIgst;
 
       setState(() {
-        _hsnData = hsnMap.values.toList();
+        _hsnData = hsnData;
         _totalSales = totalSales;
-        _totalGST = totalGST;
-        _totalCGST = totalGST / 2;
-        _totalSGST = totalGST / 2;
-        _totalExclGST = totalSales - totalGST;
-        _totalItems = totalItems;
+        _totalGST = totalGst;
+        _totalCGST = totalCgst;
+        _totalSGST = totalSgst;
+        _totalIGST = totalIgst;
+        _totalExclGST = totalSales - totalGst;
+        _totalItems = totalQty;
       });
     } catch (e) {
       if (mounted) {
@@ -160,11 +147,13 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
     }
   }
 
+  static String _qty(double q) => q == q.roundToDouble() ? q.toStringAsFixed(0) : q.toStringAsFixed(2);
+
   Future<void> _exportGSTR1() async {
     setState(() => _loading = true);
     try {
       List<List<dynamic>> rows = [
-        ['HSN Code', 'Description', 'GST Rate (%)', 'Quantity', 'Taxable Value', 'CGST', 'SGST', 'Total'],
+        ['HSN Code', 'Description', 'GST Rate (%)', 'Quantity', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total'],
       ];
       for (final h in _hsnData) {
         rows.add([
@@ -175,11 +164,12 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
           (h['taxable_value'] as double).toStringAsFixed(2),
           (h['cgst'] as double).toStringAsFixed(2),
           (h['sgst'] as double).toStringAsFixed(2),
+          (h['igst'] as double).toStringAsFixed(2),
           (h['total'] as double).toStringAsFixed(2),
         ]);
       }
-      rows.add(['', '', '', '', '', '', '', '']);
-      rows.add(['TOTAL', '', '', _totalItems, _totalExclGST.toStringAsFixed(2), _totalCGST.toStringAsFixed(2), _totalSGST.toStringAsFixed(2), _totalSales.toStringAsFixed(2)]);
+      rows.add(['', '', '', '', '', '', '', '', '']);
+      rows.add(['TOTAL', '', '', _totalItems, _totalExclGST.toStringAsFixed(2), _totalCGST.toStringAsFixed(2), _totalSGST.toStringAsFixed(2), _totalIGST.toStringAsFixed(2), _totalSales.toStringAsFixed(2)]);
 
       final csv = const ListToCsvConverter().convert(rows);
       final dir = await getTemporaryDirectory();
@@ -332,6 +322,14 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                           _summaryCard('SGST', 'Rs${_totalSGST.toStringAsFixed(0)}', const Color(0xFFf44336)),
                         ],
                       ),
+                      if (_totalIGST > 0) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _summaryCard('IGST (other states)', 'Rs${_totalIGST.toStringAsFixed(0)}', const Color(0xFFFF9800)),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // HSN Summary
@@ -548,10 +546,11 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _miniStat('Qty', '${h['qty']}'),
+              _miniStat('Qty', _qty(h['qty'] as double)),
               _miniStat('Taxable', 'Rs${(h['taxable_value'] as double).toStringAsFixed(0)}'),
               _miniStat('CGST', 'Rs${(h['cgst'] as double).toStringAsFixed(0)}'),
               _miniStat('SGST', 'Rs${(h['sgst'] as double).toStringAsFixed(0)}'),
+              if ((h['igst'] as double) > 0) _miniStat('IGST', 'Rs${(h['igst'] as double).toStringAsFixed(0)}'),
               _miniStat('Total', 'Rs${(h['total'] as double).toStringAsFixed(0)}'),
             ],
           ),

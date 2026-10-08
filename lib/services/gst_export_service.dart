@@ -53,6 +53,16 @@ class GstExportService {
     final end = AppTimezone.toUtc(DateTime(year, month + 1, 1));
 
     final shop = await supabase.from('shop_settings').select().eq('id', 1).maybeSingle();
+    final rows = await _salesBetween(start, end);
+    return _MonthData(
+      sales: rows,
+      shopState: (shop?['state_code'] as String?)?.trim().isNotEmpty == true ? shop!['state_code'] as String : '33',
+    );
+  }
+
+  /// Every sale in [startUtc, endUtc), all pages.
+  Future<List<Map<String, dynamic>>> _salesBetween(DateTime startUtc, DateTime endUtc) async {
+    final supabase = Supabase.instance.client;
     final rows = <Map<String, dynamic>>[];
     var offset = 0;
     while (true) {
@@ -60,19 +70,23 @@ class GstExportService {
           .from('sales')
           .select('id, invoice_no, created_at, final_amount, items, place_of_supply, tax_exempt, '
               'cgst_amount, sgst_amount, igst_amount, taxable_amount, customers(name, gstin)')
-          .gte('created_at', start.toIso8601String())
-          .lt('created_at', end.toIso8601String())
+          .gte('created_at', startUtc.toIso8601String())
+          .lt('created_at', endUtc.toIso8601String())
           .order('created_at')
+          .order('id')
           .range(offset, offset + 999);
       rows.addAll((page as List).map((e) => Map<String, dynamic>.from(e as Map)));
       if (page.length < 1000) break;
       offset += 1000;
     }
-    return _MonthData(
-      sales: rows,
-      shopState: (shop?['state_code'] as String?)?.trim().isNotEmpty == true ? shop!['state_code'] as String : '33',
-    );
+    return rows;
   }
+
+  /// HSN-wise summary for any date range, from the tax the database stored
+  /// on each sale (after bill discount, IGST for other states, tax-exempt
+  /// bills). The GST Report screen shows exactly what the export files say.
+  Future<List<Map<String, dynamic>>> hsnSummary(DateTime startUtc, DateTime endUtc) async =>
+      hsnRows(await _salesBetween(startUtc, endUtc));
 
   /// Splits one sale into per-rate taxable values and tax, scaled so the
   /// totals equal the CGST/SGST/IGST the database stored on the sale.
@@ -220,8 +234,22 @@ class GstExportService {
   /// HSN-wise summary of outward supplies (Table 12).
   Future<File?> exportHsnSummary({required int month, required int year}) async {
     final data = await _load(month, year);
+    final rows = <List<dynamic>>[
+      ['HSN', 'Description', 'UQC', 'Total Quantity', 'Total Value', 'Rate', 'Taxable Value',
+       'Integrated Tax Amount', 'Central Tax Amount', 'State/UT Tax Amount', 'Cess Amount'],
+      for (final h in hsnRows(data.sales))
+        [h['hsn'], h['desc'], h['uqc'], (h['qty'] as double).toStringAsFixed(2), _m(h['value'] as double),
+         _rate(h['rate'] as double), _m(h['taxable'] as double), _m(h['igst'] as double),
+         _m(h['cgst'] as double), _m(h['sgst'] as double), '0.00'],
+    ];
+    return _write('gstr1_hsn_${_suffix(month, year)}.csv', rows);
+  }
+
+  /// HSN rows (hsn, desc, uqc, rate, qty, value, taxable, igst, cgst, sgst)
+  /// for [sales] as returned by the database.
+  List<Map<String, dynamic>> hsnRows(List<Map<String, dynamic>> sales) {
     final byHsn = <String, Map<String, dynamic>>{};
-    for (final s in data.sales) {
+    for (final s in sales) {
       final items = (s['items'] as List? ?? const []).whereType<Map>().toList();
       double lineSum = 0;
       for (final it in items) {
@@ -255,15 +283,7 @@ class GstExportService {
         h['sgst'] = (h['sgst'] as double) + tax * (1 - igstShare) / 2;
       }
     }
-    final rows = <List<dynamic>>[
-      ['HSN', 'Description', 'UQC', 'Total Quantity', 'Total Value', 'Rate', 'Taxable Value',
-       'Integrated Tax Amount', 'Central Tax Amount', 'State/UT Tax Amount', 'Cess Amount'],
-      for (final h in byHsn.values)
-        [h['hsn'], h['desc'], h['uqc'], (h['qty'] as double).toStringAsFixed(2), _m(h['value'] as double),
-         _rate(h['rate'] as double), _m(h['taxable'] as double), _m(h['igst'] as double),
-         _m(h['cgst'] as double), _m(h['sgst'] as double), '0.00'],
-    ];
-    return _write('gstr1_hsn_${_suffix(month, year)}.csv', rows);
+    return byHsn.values.toList();
   }
 
   /// Share every GSTR-1 file for the month.

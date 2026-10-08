@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/providers.dart';
 import '../../admin/all_low_stock_screen.dart';
 import '../../admin/slow_moving_screen.dart';
+import '../../../utils/qty_format.dart';
 
 class LowStockSection extends ConsumerWidget {
   const LowStockSection({super.key});
@@ -307,7 +308,7 @@ class _StockTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          '${product.stock} ${product.unit}',
+          '${formatQty(product.stock)} ${product.unit}',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,

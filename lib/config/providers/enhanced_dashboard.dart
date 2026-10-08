@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
 import 'products.dart';
+import '../../utils/paged_query.dart';
 
 // ============================================
 // ENHANCED DASHBOARD — TODAY CATEGORY/GST/SPARK
@@ -15,11 +16,11 @@ final todayCategorySalesProvider = FutureProvider<Map<String, double>>((
     final start = AppTimezone.todayStartUtc();
     final end = AppTimezone.todayEndUtc();
 
-    final salesRes = await client
+    final salesRes = await fetchAllRows(() => client
         .from('sales')
         .select('items')
         .gte('created_at', start.toIso8601String())
-        .lt('created_at', end.toIso8601String());
+        .lt('created_at', end.toIso8601String()));
 
     final products = await ref.watch(productsProvider.future);
     final productCat = <String, String>{};
@@ -49,11 +50,11 @@ final todayGstTotalProvider = FutureProvider<double>((ref) async {
     final start = AppTimezone.todayStartUtc();
     final end = AppTimezone.todayEndUtc();
 
-    final salesRes = await client
+    final salesRes = await fetchAllRows(() => client
         .from('sales')
         .select('items')
         .gte('created_at', start.toIso8601String())
-        .lt('created_at', end.toIso8601String());
+        .lt('created_at', end.toIso8601String()));
 
     double totalGst = 0;
     for (final sale in salesRes as List) {
@@ -87,11 +88,11 @@ final weeklySalesSparkProvider = FutureProvider<List<double>>((ref) async {
       now.day + 1,
     ).subtract(AppTimezone.localOffset);
 
-    final response = await Supabase.instance.client
+    final response = await fetchAllRows(() => Supabase.instance.client
         .from('sales')
         .select('final_amount, created_at')
         .gte('created_at', dayStartUtc.toIso8601String())
-        .lt('created_at', endUtc.toIso8601String());
+        .lt('created_at', endUtc.toIso8601String()));
 
     Map<String, double> daily = {};
     for (int i = 0; i < 7; i++) {

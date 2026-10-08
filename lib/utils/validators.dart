@@ -28,6 +28,14 @@ class Validators {
     return null;
   }
 
+  /// Stock or a sold quantity, which can be decimal for loose goods (2.5 kg).
+  static String? decimalQuantity(String? v, {double min = 0}) {
+    final n = double.tryParse((v ?? '').trim());
+    if (n == null) return 'Enter a number';
+    if (n < min) return 'Must be at least ${min == min.roundToDouble() ? min.toInt() : min}';
+    return null;
+  }
+
   /// Indian mobile number (10 digits starting 6–9, optional +91). Empty is allowed.
   static String? phone(String? v) {
     final t = (v ?? '').replaceAll(' ', '');

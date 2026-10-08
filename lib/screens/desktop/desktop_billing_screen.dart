@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pdf/pdf.dart';
@@ -37,6 +38,7 @@ import 'widgets/billing_sale_tabs.dart';
 import '../../widgets/rate_picker_dialog.dart';
 import 'dialogs/customer_picker_dialog.dart';
 import 'dialogs/invoice_options_dialog.dart';
+import '../../utils/qty_format.dart';
 
 class DesktopBillingScreen extends ConsumerStatefulWidget {
   const DesktopBillingScreen({super.key});
@@ -372,6 +374,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
   void _onInactivityTimeout() {
     if (_isProcessing) return;
+    // a user without a PIN could never unlock: don't lock them out
+    final profile = ref.read(profileProvider).value ?? ref.read(authServiceProvider).cachedProfile();
+    if (profile?.pin == null || profile!.pin!.isEmpty) {
+      _startInactivityTimer();
+      return;
+    }
     final session = ref.read(desktopBillingProvider).elementAt(
         ref.read(desktopBillingProvider.notifier).activeSessionIndex);
     if (session.items.isNotEmpty) {
@@ -421,12 +429,15 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             ],
           ),
           actions: [
+            // no "Cancel": it closed the lock without a PIN
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                _startInactivityTimer();
+                ref.invalidate(profileProvider);
+                await ref.read(authServiceProvider).signOut();
+                if (mounted) context.go('/login');
               },
-              child: const Text('Cancel'),
+              child: const Text('Sign out'),
             ),
             TextButton(
               onPressed: () => _verifyUnlockPin(ctx, pinController, setDialogState),
@@ -442,7 +453,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     final pin = controller.text.trim();
     if (pin.isEmpty) return;
 
-    final profile = ref.read(profileProvider).value;
+    final profile = ref.read(profileProvider).value ?? ref.read(authServiceProvider).cachedProfile();
     if (profile == null) {
       setDialogState(() => _unlockErrorText = 'Profile not loaded');
       return;
@@ -470,24 +481,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       final notifier = ref.read(desktopBillingProvider.notifier);
       notifier.heldBills.clear();
       for (final e in list) {
-        final m = e as Map<String, dynamic>;
-        final s = m['session'] as Map<String, dynamic>;
-        final items = (s['items'] as List)
-            .map((i) => DesktopCartItem.fromHeldJson(Map<String, dynamic>.from(i as Map)))
-            .toList();
-        notifier.heldBills.add(HeldBill(
-          session: SaleSession(
-            id: s['id'] as String,
-            items: items,
-            customerId: s['customer_id'] as String?,
-            customerName: s['customer_name'] as String?,
-            totalDiscount: (s['total_discount'] as num?)?.toDouble() ?? 0,
-            paymentMethod: s['payment_method'] as String? ?? 'cash',
-            isCredit: s['is_credit'] as bool? ?? false,
-            amountPaid: (s['amount_paid'] as num?)?.toDouble() ?? 0,
-          ),
-          time: DateTime.tryParse(m['time'] as String? ?? '') ?? DateTime.now(),
-        ));
+        notifier.heldBills.add(HeldBill.fromJson(Map<String, dynamic>.from(e as Map)));
       }
     } catch (e) {
       Logger.warning('Failed to load held bills: $e');
@@ -498,22 +492,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     try {
       final prefs = await SharedPreferences.getInstance();
       final heldBills = ref.read(desktopBillingProvider.notifier).heldBills;
-      final data = heldBills.map((bill) {
-        final session = bill.session;
-        return {
-          'session': {
-            'id': session.id,
-            'items': session.items.map((i) => i.toHeldJson()).toList(),
-            'customer_id': session.customerId,
-            'customer_name': session.customerName,
-            'total_discount': session.totalDiscount,
-            'payment_method': session.paymentMethod,
-            'is_credit': session.isCredit,
-            'amount_paid': session.amountPaid,
-          },
-          'time': bill.time.toIso8601String(),
-        };
-      }).toList();
+      final data = heldBills.map((bill) => bill.toJson()).toList();
       await prefs.setString('desktop_held_bills', jsonEncode(data));
     } catch (e) {
       Logger.warning('Failed to save held bills: $e');
@@ -743,12 +722,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         : (product.variants.isNotEmpty
             ? product.variants.first.purchasePrice
             : 0.0);
-    final qty = int.tryParse(_qtyController.text) ?? 1;
+    final qty = double.tryParse(_qtyController.text) ?? 1;
 
     setState(() {
       _selectedUnitType = product.unitType;
       _piecesPerUnit = product.piecesPerUnit;
-      _qtyController.text = qty.toString();
+      _qtyController.text = formatQty(qty);
       _costController.text = cost.toStringAsFixed(2);
       _searchController.clear();
       _searchResults = [];
@@ -778,7 +757,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   void _syncTotalFromPrice() {
     if (_isSyncing) return;
     _isSyncing = true;
-    final qty = int.tryParse(_qtyController.text) ?? 1;
+    final qty = double.tryParse(_qtyController.text) ?? 1;
     final price = double.tryParse(_priceController.text) ?? 0;
     _totalController.text = (price * qty).toStringAsFixed(2);
     _isSyncing = false;
@@ -787,7 +766,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   void _syncPriceFromTotal() {
     if (_isSyncing) return;
     _isSyncing = true;
-    final qty = int.tryParse(_qtyController.text) ?? 1;
+    final qty = double.tryParse(_qtyController.text) ?? 1;
     final total = double.tryParse(_totalController.text) ?? 0;
     if (qty > 0) {
       _priceController.text = (total / qty).toStringAsFixed(2);
@@ -817,7 +796,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   void _confirmTotal() {
     if (_selectedProduct == null && _editingCartIndex < 0) return;
 
-    final qty = int.tryParse(_qtyController.text) ?? 1;
+    final qty = double.tryParse(_qtyController.text) ?? 1;
     final total = double.tryParse(_totalController.text) ?? 0;
     final double effectivePrice = qty > 0 ? total / qty : 0;
     final itemDiscount = double.tryParse(_itemDiscountController.text) ?? 0;
@@ -948,7 +927,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       _searchController.clear();
       _searchResults = [];
       _showResults = false;
-      _qtyController.text = item.qty.toString();
+      _qtyController.text = formatQty(item.qty);
       _priceController.text = item.price.toStringAsFixed(2);
       _totalController.text = (item.qty * item.price).toStringAsFixed(2);
       _itemDiscountController.text = item.discount > 0
@@ -1562,7 +1541,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         // print what the database stored (invoice number, GST) (#19)
         _showInvoiceOptions(saved);
       }
-    } on SaleSavedOffline {
+    } on SaleSavedOffline catch (offline) {
       notifier.resetAfterSale(sessionIndex);
       ref.invalidate(salesHistoryProvider);
       ref.invalidate(productsProvider);
@@ -1575,6 +1554,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             duration: Duration(seconds: 3),
           ),
         );
+        // the customer still gets a bill (marked provisional until it syncs)
+        _showInvoiceOptions(offline.sale);
       }
     } catch (e) {
       // The server refused the sale (e.g. account inactive). Keep the bill
@@ -1981,6 +1962,14 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
   @override
   Widget build(BuildContext context) {
+    // follow price/stock changes made on other devices while the till is open
+    // (the list used to be loaded once, when the screen opened)
+    ref.listen<AsyncValue<List<Product>>>(productsProvider, (_, next) {
+      final products = next.value;
+      if (products != null && products.isNotEmpty && mounted) {
+        setState(() => _allProducts = products);
+      }
+    });
     final sessions = ref.watch(desktopBillingProvider);
     final notifier = ref.read(desktopBillingProvider.notifier);
     ref.watch(desktopBillingProvider.notifier.select((n) => n.heldBillVersion));
@@ -2330,7 +2319,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   child: TextField(
                     controller: _qtyController,
                     focusNode: _qtyFocusNode,
-                    keyboardType: TextInputType.number,
+                    // decimal for loose goods (1.5 kg)
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     textAlign: TextAlign.center,
                     decoration: InputDecoration(
                       labelText: 'Qty',
@@ -2573,7 +2563,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                               ),
                             ),
                           Text(
-                            'Rs${product.sellingPrice.toStringAsFixed(0)} | Stock: ${product.stock}',
+                            'Rs${product.sellingPrice.toStringAsFixed(0)} | Stock: ${formatQty(product.stock)}',
                           ),
                         ],
                       ),
@@ -2827,7 +2817,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             SizedBox(
                               width: 60,
                               child: Text(
-                                '${item.qty}',
+                                formatQty(item.qty),
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   fontSize: 14,

@@ -18,6 +18,8 @@ import '../models/profile.dart';
 import '../services/auth_service.dart';
 
 bool _needsUpdate = false;
+// the minimum-version check runs once per app session, not on every screen change
+bool _versionChecked = false;
 
 // The signed-in user's profile, loaded once per login for the role guard.
 Profile? _profileCache;
@@ -65,7 +67,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (path == '/splash') return null;
 
       // Version check (only once per app session) — skip on Windows (handled by UpdateService)
-      if (!_needsUpdate && user != null && path != '/login' && !Platform.isWindows) {
+      if (!_versionChecked && user != null && path != '/login' && !Platform.isWindows) {
+        _versionChecked = true;
         try {
           final needsUpdate = await VersionCheckService().checkForUpdate();
           if (needsUpdate) {

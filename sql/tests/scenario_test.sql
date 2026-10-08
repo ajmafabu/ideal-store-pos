@@ -331,4 +331,20 @@ RESET ROLE;
 SELECT t.eq((SELECT sum(balance) FROM accounts WHERE account_type='cash'), (SELECT s FROM b2), 'merge keeps the signed total');
 SELECT t.eq((SELECT count(*) FROM account_transactions), (SELECT n FROM b2), 'merge keeps every journal row');
 
+-- a wrong PC clock cannot misdate a bill (2026_10_sale_time_guard.sql)
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, created_at) VALUES
+  ('50000000-0000-0000-0000-0000000000f1', '[{"product_id":"10000000-0000-0000-0000-000000000003","name":"Biscuit","qty":1,"price":10,"total":10}]', 10, 10, now() + interval '2 days'),
+  ('50000000-0000-0000-0000-0000000000f2', '[{"product_id":"10000000-0000-0000-0000-000000000003","name":"Biscuit","qty":1,"price":10,"total":10}]', 10, 10, now() - interval '400 days'),
+  ('50000000-0000-0000-0000-0000000000f3', '[{"product_id":"10000000-0000-0000-0000-000000000003","name":"Biscuit","qty":1,"price":10,"total":10}]', 10, 10, now() - interval '2 days');
+RESET ROLE;
+SELECT t.ok((SELECT created_at FROM sales WHERE id='50000000-0000-0000-0000-0000000000f1') <= now() + interval '1 minute', 'a bill dated in the future gets the server time');
+SELECT t.ok((SELECT created_at FROM sales WHERE id='50000000-0000-0000-0000-0000000000f2') > now() - interval '1 day', 'a bill dated over a year back (reset PC clock) gets the server time');
+SELECT t.ok((SELECT created_at FROM sales WHERE id='50000000-0000-0000-0000-0000000000f3') < now() - interval '1 day', 'an offline bill from 2 days ago keeps its time');
+SELECT set_config('app.bulk_mode', 'on', false);   -- what restore_backup does
+INSERT INTO sales (id, items, total_amount, final_amount, created_at) VALUES
+  ('50000000-0000-0000-0000-0000000000f4', '[]', 10, 10, now() - interval '400 days');
+SELECT set_config('app.bulk_mode', 'off', false);
+SELECT t.ok((SELECT created_at FROM sales WHERE id='50000000-0000-0000-0000-0000000000f4') < now() - interval '399 days', 'a restore keeps old bills on their own dates');
+
 \echo ALL SCENARIO TESTS PASSED

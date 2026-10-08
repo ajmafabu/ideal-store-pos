@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/paged_query.dart';
 
 // ============================================
 // ANALYTICS
@@ -141,11 +142,11 @@ final monthlyGstProvider = FutureProvider<double>((ref) async {
     final start = AppTimezone.monthStartUtc();
     final end = AppTimezone.monthEndUtc();
 
-    final salesRes = await client
+    final salesRes = await fetchAllRows(() => client
         .from('sales')
         .select('items')
         .gte('created_at', start.toIso8601String())
-        .lt('created_at', end.toIso8601String());
+        .lt('created_at', end.toIso8601String()));
 
     double totalGst = 0;
     for (final sale in salesRes as List) {

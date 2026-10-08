@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/paged_query.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -33,15 +34,15 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
       final start = DateTime.utc(now.year, now.month, 1).subtract(AppTimezone.localOffset);
       final end = DateTime.utc(now.year, now.month, now.day + 1).subtract(AppTimezone.localOffset);
 
-      final salesRes = await client
+      final salesRes = await fetchAllRows(() => client
           .from('sales')
           .select('items')
           .gte('created_at', start.toIso8601String())
-          .lt('created_at', end.toIso8601String());
+          .lt('created_at', end.toIso8601String()));
 
-      final productsRes = await client
+      final productsRes = await fetchAllRows(() => client
           .from('products')
-          .select('id, purchase_price');
+          .select('id, purchase_price'));
       final costMap = <String, double>{};
       for (final p in productsRes as List) {
         costMap[p['id'] as String] = (p['purchase_price'] as num?)?.toDouble() ?? 0;

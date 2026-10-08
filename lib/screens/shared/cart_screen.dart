@@ -23,6 +23,7 @@ import '../../widgets/cart/cart_item_tile.dart';
 import '../../widgets/cart/customer_picker.dart';
 import '../../widgets/cart/payment_section.dart';
 import '../../widgets/rate_picker_dialog.dart';
+import '../../utils/qty_format.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -187,8 +188,9 @@ class CartScreenState extends ConsumerState<CartScreen>
             const SizedBox(height: 12),
             StatefulBuilder(
               builder: (ctx, setDialogState) => TextField(
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                // decimal for loose goods (1.5 kg)
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))],
                 decoration: const InputDecoration(
                   labelText: 'Quantity',
                   border: OutlineInputBorder(),
@@ -198,7 +200,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                 autofocus: true,
                 onChanged: (v) => qtyText = v,
                 onSubmitted: (_) {
-                  final qty = int.tryParse(qtyText) ?? 0;
+                  final qty = double.tryParse(qtyText) ?? 0;
                   if (qty > 0) {
                     _addToCartWithQty(product, qty);
                     Navigator.pop(ctx);
@@ -215,7 +217,7 @@ class CartScreenState extends ConsumerState<CartScreen>
           ),
           FilledButton(
             onPressed: () {
-              final qty = int.tryParse(qtyText) ?? 0;
+              final qty = double.tryParse(qtyText) ?? 0;
               if (qty > 0) {
                 _addToCartWithQty(product, qty);
                 Navigator.pop(ctx);
@@ -228,7 +230,7 @@ class CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  Future<void> _addToCartWithQty(Product product, int qty) async {
+  Future<void> _addToCartWithQty(Product product, double qty) async {
     final picked = await RatePickerDialog.show(context, product);
     final price = picked?.price ?? product.sellingPrice;
     final rateLabel = picked?.label;
@@ -370,7 +372,7 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   void _editItemQty(int index) {
     final item = _cart[index];
-    String qtyText = '${item.qty}';
+    String qtyText = formatQty(item.qty);
 
     showDialog(
       context: context,
@@ -398,7 +400,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                       ),
                     ),
                     Text(
-                      '= Rs${(item.price * (int.tryParse(qtyText) ?? 0)).toStringAsFixed(0)}',
+                      '= Rs${(item.price * (double.tryParse(qtyText) ?? 0)).toStringAsFixed(0)}',
                       style: const TextStyle(fontSize: 14, color: Colors.blue),
                     ),
                   ],
@@ -418,7 +420,7 @@ class CartScreenState extends ConsumerState<CartScreen>
             ),
             ElevatedButton(
               onPressed: () {
-                final newQty = int.tryParse(qtyText);
+                final newQty = double.tryParse(qtyText);
                 if (newQty != null && newQty > 0) {
                   final delta = newQty - item.qty;
                   ref.read(cartProvider.notifier).updateQty(index, delta);
@@ -461,6 +463,8 @@ class CartScreenState extends ConsumerState<CartScreen>
         Row(
           children: [
             _numPadBtn('C', currentVal, onChanged, isAction: true),
+            // decimal point for loose goods (1.5 kg)
+            _numPadBtn('.', currentVal, onChanged),
             _numPadBtn('0', currentVal, onChanged),
             _numPadBtn('⌫', currentVal, onChanged, isAction: true),
           ],
@@ -497,6 +501,8 @@ class CartScreenState extends ConsumerState<CartScreen>
                 } else {
                   onChanged('0');
                 }
+              } else if (label == '.') {
+                if (!currentVal.contains('.')) onChanged('$currentVal.');
               } else {
                 if (currentVal == '0') {
                   onChanged(label);
@@ -530,7 +536,7 @@ class CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  void _updateQty(int index, int delta) {
+  void _updateQty(int index, double delta) {
     ref.read(cartProvider.notifier).updateQty(index, delta);
     setState(() {});
   }
@@ -811,14 +817,15 @@ class CartScreenState extends ConsumerState<CartScreen>
   }
 
   void _addVoiceItem(Product product, double qty) {
-    final intQty = qty <= 0 ? 1 : (qty < 1 ? 1 : qty.round());
+    // voice can say "one and a half kilo": keep the decimal (it was rounded)
+    final lineQty = qty <= 0 ? 1.0 : qty;
     ref.read(cartProvider.notifier).addItem(
       CartItem(
         productId: product.id,
         name: product.name,
         tamilName: product.tamilName,
         price: product.sellingPrice,
-        qty: intQty,
+        qty: lineQty,
         unit: product.unit,
         purchasePrice: _effectivePurchasePrice(product),
         gstRate: product.gstRate,
@@ -832,8 +839,8 @@ class CartScreenState extends ConsumerState<CartScreen>
       SnackBar(
         content: Text(
           _useTamilVoice
-              ? '${product.tamilName ?? product.name} × $intQty சேர்க்கப்பட்டது'
-              : '${product.name} × $intQty added',
+              ? '${product.tamilName ?? product.name} × ${formatQty(lineQty)} சேர்க்கப்பட்டது'
+              : '${product.name} × ${formatQty(lineQty)} added',
         ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 1),
@@ -871,16 +878,27 @@ class CartScreenState extends ConsumerState<CartScreen>
           ),
           TextButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (nameController.text.trim().isEmpty) return;
+              try {
+                // offline, the customer is saved on this phone and synced
+                // before the bills that use it
                 final customer = await ref
                     .read(customerServiceProvider)
                     .addCustomer(
-                      name: nameController.text,
+                      name: nameController.text.trim(),
                       phone: phoneController.text.isNotEmpty
                           ? phoneController.text
                           : null,
                     );
-                Navigator.pop(ctx, customer);
+                if (ctx.mounted) Navigator.pop(ctx, customer);
+              } catch (e) {
+                // a refusal (e.g. no permission) used to leave the dialog
+                // open with no message
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
+                  );
+                }
               }
             },
             child: const Text('Add'),
@@ -1105,16 +1123,15 @@ class CartScreenState extends ConsumerState<CartScreen>
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text(_isCredit ? 'Credit Sale!' : 'Sale Completed!'),
-            content: _isCredit
-                ? Text(
-                    'Total: ₹${_total.toStringAsFixed(2)}\nDue: ₹${_dueAmount.toStringAsFixed(2)}',
-                  )
-                : Column(
+            // credit customers get a bill too (it used to show only "OK")
+            content: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Total: ₹${_total.toStringAsFixed(2)}${savedOffline ? "\n(Saved offline)" : ""}',
+                        'Total: ₹${_total.toStringAsFixed(2)}'
+                        '${_isCredit ? '\nDue: ₹${_dueAmount.toStringAsFixed(2)}' : ''}'
+                        '${savedOffline ? "\n(Saved offline)" : ""}',
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -1203,13 +1220,6 @@ class CartScreenState extends ConsumerState<CartScreen>
                       ),
                     ],
                   ),
-            actions: [
-              if (_isCredit)
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('OK'),
-                ),
-            ],
           ),
         );
 
@@ -1648,7 +1658,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                       itemCount: _filteredProducts.length,
                       itemBuilder: (context, index) {
                         final product = _filteredProducts[index];
-                        final inCart = _cart.where((c) => c.productId == product.id).fold<int>(0, (sum, c) => sum + c.qty);
+                        final inCart = _cart.where((c) => c.productId == product.id).fold<double>(0, (sum, c) => sum + c.qty);
                         return ListTile(
                           dense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 8),

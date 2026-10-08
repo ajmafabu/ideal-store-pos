@@ -6,6 +6,8 @@ import '../models/supplier.dart';
 import '../utils/logger.dart';
 import 'account_service.dart';
 import 'offline_service.dart';
+import '../utils/paged_query.dart';
+import '../utils/search_term.dart';
 
 class SupplierService {
   final SupabaseClient _supabase;
@@ -160,15 +162,14 @@ class SupplierService {
     String supplierId,
   ) async {
     try {
-      final response = await _supabase
-          .from('purchases')
-          .select()
-          .eq('supplier_id', supplierId)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      return await fetchAllRows(
+        () => _supabase.from('purchases').select().eq('supplier_id', supplierId),
+        orderBy: 'created_at',
+        ascending: false,
+      );
     } catch (e) {
       Logger.error('getPurchasesBySupplier', e);
-      return [];
+      rethrow;
     }
   }
 
@@ -176,15 +177,14 @@ class SupplierService {
     String supplierId,
   ) async {
     try {
-      final response = await _supabase
-          .from('supplier_payments')
-          .select()
-          .eq('supplier_id', supplierId)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      return await fetchAllRows(
+        () => _supabase.from('supplier_payments').select().eq('supplier_id', supplierId),
+        orderBy: 'created_at',
+        ascending: false,
+      );
     } catch (e) {
       Logger.error('getPaymentsBySupplier', e);
-      return [];
+      rethrow;
     }
   }
 
@@ -218,11 +218,12 @@ class SupplierService {
   }
 
   Future<List<Supplier>> searchSuppliers(String query) async {
+    final q = searchTerm(query);
     try {
       final response = await _supabase
           .from('suppliers')
           .select()
-          .or('name.ilike.%$query%,phone.ilike.%$query%')
+          .or('name.ilike.%$q%,phone.ilike.%$q%')
           .order('name')
           .limit(20);
       return (response as List).map((json) => Supplier.fromJson(json)).toList();

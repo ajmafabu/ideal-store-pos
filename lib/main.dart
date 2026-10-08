@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_theme.dart';
 import 'config/desktop_billing_provider.dart';
@@ -87,25 +86,19 @@ void main() async {
         Logger.warning('Supabase init failed (possibly offline): $e');
       }
 
-      try {
-        await [
-          Permission.bluetooth,
-          Permission.bluetoothScan,
-          Permission.bluetoothConnect,
-          Permission.locationWhenInUse,
-        ].request().timeout(const Duration(seconds: 5));
-      } catch (e) {
-        Logger.warning('Failed to request Bluetooth/location permissions: $e');
-      }
+      // Bluetooth/location permissions are asked in Printer Setup and when
+      // printing, not on every start.
 
-      // Sync on startup if online
-      try {
-        if (await offlineService.isOnline()) {
-          await offlineService.syncPendingSales();
+      // First sync in the background: the window must not wait for it
+      unawaited(() async {
+        try {
+          if (await offlineService.isOnline()) {
+            await offlineService.syncPendingSales();
+          }
+        } catch (e) {
+          Logger.warning('Failed to sync offline sales on startup: $e');
         }
-      } catch (e) {
-        Logger.warning('Failed to sync offline sales on startup: $e');
-      }
+      }());
 
       // Auto-sync when connectivity is restored
       connectivityService.connectionStream.listen((isConnected) {

@@ -18,6 +18,7 @@ import '../../../utils/app_timezone.dart';
 import '../../../utils/error_messages.dart';
 import '../../../utils/logger.dart';
 import '../../../utils/thermal_invoice.dart';
+import '../../../utils/qty_format.dart';
 
 class DesktopSalesHistoryDialog extends ConsumerStatefulWidget {
   final Function(Sale)? onEditSale;
@@ -611,7 +612,7 @@ class _DesktopSalesHistoryDialogState
                   dense: true,
                   title: Text(item.name),
                   subtitle: Text(
-                    '${item.qty} × Rs${item.price.toStringAsFixed(2)}',
+                    '${formatQty(item.qty)} × Rs${item.price.toStringAsFixed(2)}',
                   ),
                   trailing: Text('Rs${item.total.toStringAsFixed(2)}'),
                 ),

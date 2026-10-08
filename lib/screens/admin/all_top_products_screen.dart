@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/product.dart';
+import '../../utils/qty_format.dart';
 
 class AllTopProductsScreen extends StatefulWidget {
   const AllTopProductsScreen({super.key});
@@ -87,7 +88,7 @@ class _AllTopProductsScreenState extends State<AllTopProductsScreen> {
                 p.name,
                 'Rs${p.sellingPrice.toStringAsFixed(0)}',
                 'Rs${p.purchasePrice.toStringAsFixed(0)}',
-                '${p.stock}',
+                formatQty(p.stock),
                 'Rs${profit.toStringAsFixed(0)}',
                 '${margin.toStringAsFixed(0)}%',
               ];
@@ -157,7 +158,7 @@ class _AllTopProductsScreenState extends State<AllTopProductsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    'Rs${product.sellingPrice.toStringAsFixed(0)} | Stock: ${product.stock} | Margin: ${margin.toStringAsFixed(0)}%',
+                    'Rs${product.sellingPrice.toStringAsFixed(0)} | Stock: ${formatQty(product.stock)} | Margin: ${margin.toStringAsFixed(0)}%',
                   ),
                   trailing: Text(
                     'Rs${profit.toStringAsFixed(0)}',

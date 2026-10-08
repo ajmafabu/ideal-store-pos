@@ -3,12 +3,18 @@ import '../config/supabase_config.dart';
 import '../models/profile.dart';
 import '../utils/pin_auth.dart';
 import '../utils/logger.dart';
+import '../utils/network_errors.dart';
 import 'audit_service.dart';
+import 'profile_cache.dart';
 
 class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
+
+  /// The profile saved at the last successful load, if it belongs to the
+  /// signed-in user. Used only when the server cannot be reached.
+  Profile? cachedProfile() => ProfileCache.read(currentUser?.id);
 
   Future<Profile?> getCurrentProfile() async {
     if (currentUser == null) return null;
@@ -17,19 +23,24 @@ class AuthService {
       final response = await _client
           .from('profiles')
           .select('id, name, role, pin, shop_id, active, gstin, shop_name, shop_address, shop_phone')
-          .eq('id', currentUser!.id);
+          .eq('id', currentUser!.id)
+          .timeout(const Duration(seconds: 8));
 
       if (response.isEmpty) {
         // Profile doesn't exist yet — this happens if the Supabase
         // on_auth_user_created trigger hasn't fired or was removed.
         // Return null and let the UI handle it (login screen shows error).
         Logger.warning('No profile found for user ${currentUser!.id}');
+        await ProfileCache.clear();
         return null;
       }
-      return Profile.fromJson(response.first);
+      final profile = Profile.fromJson(response.first);
+      await ProfileCache.save(profile);
+      return profile;
     } catch (e) {
       Logger.error('getCurrentProfile', e);
-      return null;
+      // offline: the last known profile; a server refusal never uses it
+      return isNetworkError(e) ? cachedProfile() : null;
     }
   }
 
@@ -242,6 +253,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    await ProfileCache.clear();
     await _client.auth.signOut();
 
     AuditService().log(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/providers.dart';
 import '../../../utils/app_timezone.dart';
+import '../../../utils/qty_format.dart';
 
 class ExpiringProductsSection extends ConsumerWidget {
   const ExpiringProductsSection({super.key});
@@ -230,7 +231,7 @@ class _ExpiryTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          '${product.stock} ${product.unit}',
+          '${formatQty(product.stock)} ${product.unit}',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,

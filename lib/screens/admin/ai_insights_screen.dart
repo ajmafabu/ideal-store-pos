@@ -908,7 +908,7 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
               damagedProducts[dmg.productName] = (damagedProducts[dmg.productName] ?? 0) + dmg.quantity;
             }
 
-            final totalSold = salesHistory.value?.fold(0, (sum, s) => sum + s.items.fold(0, (isum, i) => isum + i.qty)) ?? 0;
+            final totalSold = salesHistory.value?.fold<double>(0, (sum, s) => sum + s.items.fold<double>(0, (isum, i) => isum + i.qty)) ?? 0;
             final returnRate = totalSold > 0 ? (totalReturnQty / totalSold * 100) : 0.0;
 
             final topReturns = returnProducts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));

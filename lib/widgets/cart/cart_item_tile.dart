@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/sale.dart';
+import '../../utils/qty_format.dart';
 
 class CartItemTile extends StatelessWidget {
   final CartItem item;
@@ -179,8 +180,8 @@ class CartItemTile extends StatelessWidget {
                   onTap: onEditPrice,
                   child: Text(
                     hasDiscount
-                        ? 'Rs${item.price.toStringAsFixed(0)} x ${item.qty} = Rs${item.total.toStringAsFixed(0)}'
-                        : 'Rs${item.price.toStringAsFixed(0)} x ${item.qty} = Rs${item.total.toStringAsFixed(0)}',
+                        ? 'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}'
+                        : 'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}',
                     style: TextStyle(
                       color: hasDiscount ? Colors.green : Colors.blue,
                       fontSize: 11,
@@ -202,7 +203,7 @@ class CartItemTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                '×${item.qty}',
+                '×${formatQty(item.qty)}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,

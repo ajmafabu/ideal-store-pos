@@ -6,6 +6,7 @@ import '../../models/product.dart';
 import '../../config/providers.dart';
 import '../../widgets/barcode_scanner.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 
 class ProductFormScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -88,7 +89,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
       text: widget.product?.sellingPrice2Label ?? '',
     );
     _stockController = TextEditingController(
-      text: widget.product != null ? widget.product!.stock.toString() : '0',
+      text: widget.product != null ? formatQty(widget.product!.stock) : '0',
     );
     _lowStockAlertController = TextEditingController(
       text: widget.product != null
@@ -187,7 +188,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         sellingPrice2Label: _sellingPrice2LabelController.text.trim().isEmpty
             ? null
             : _sellingPrice2LabelController.text.trim(),
-        stock: int.tryParse(_stockController.text) ?? 0,
+        stock: double.tryParse(_stockController.text) ?? 0,
         unit: _unit,
         unitType: _unitType,
         piecesPerUnit: int.tryParse(_piecesPerUnitController.text) ?? 1,
@@ -427,8 +428,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                         labelText: 'Stock',
                         border: OutlineInputBorder(),
                       ),
-                      keyboardType: TextInputType.number,
-                      validator: (v) => Validators.quantity(v, min: 0),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => Validators.decimalQuantity(v),
                     ),
                   ),
                   const SizedBox(width: 12),

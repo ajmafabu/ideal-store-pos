@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 
 class AllLowStockScreen extends ConsumerWidget {
   const AllLowStockScreen({super.key});
@@ -154,7 +155,7 @@ class _StockTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         subtitle: Text(
-          'Stock: ${product.stock} ${product.unit} | Price: Rs${product.sellingPrice.toStringAsFixed(0)}',
+          'Stock: ${formatQty(product.stock)} ${product.unit} | Price: Rs${product.sellingPrice.toStringAsFixed(0)}',
           style: const TextStyle(fontSize: 12),
         ),
         trailing: Container(
@@ -164,7 +165,7 @@ class _StockTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            '${product.stock}',
+            formatQty(product.stock),
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: color,

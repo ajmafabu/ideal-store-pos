@@ -14,6 +14,7 @@ import '../../models/purchase.dart';
 import '../../models/supplier.dart';
 import '../shared/product_form_screen.dart';
 import '../../utils/purchase_invoice_generator.dart';
+import '../../utils/qty_format.dart';
 
 class DesktopPurchaseScreen extends ConsumerStatefulWidget {
   const DesktopPurchaseScreen({super.key});
@@ -1348,7 +1349,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  'Purchase: Rs${product.purchasePrice} | Sell: Rs${product.sellingPrice} | Stock: ${product.stock}',
+                                  'Purchase: Rs${product.purchasePrice} | Sell: Rs${product.sellingPrice} | Stock: ${formatQty(product.stock)}',
                                   style: TextStyle(
                                     color: isSel
                                         ? const Color(0xFF065F46)
@@ -2180,7 +2181,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               const SizedBox(width: 8),
                               _buildInfoChip('Sell', '₹${_results[index].sellingPrice}'),
                               const SizedBox(width: 8),
-                              _buildInfoChip('Stock', '${_results[index].stock}'),
+                              _buildInfoChip('Stock', formatQty(_results[index].stock)),
                             ],
                           ),
                         ],
