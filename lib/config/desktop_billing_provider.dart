@@ -361,6 +361,15 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   }
 
   final List<HeldBill> heldBills = [];
+
+  /// A bill on screen or on hold. Both live only in memory, so restarting the
+  /// app (e.g. to install an update) would lose them.
+  bool get hasOpenBills => heldBills.isNotEmpty || state.any((s) => s.items.isNotEmpty);
+
+  static const openBillsUpdateMessage =
+      'A bill is open or on hold on the Billing screen. Save or clear it first: '
+      'installing the update restarts the app and would lose it.';
+
   int _heldBillVersion = 0;
   int get heldBillVersion => _heldBillVersion;
 

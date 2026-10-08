@@ -6,6 +6,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/app_theme.dart';
+import 'config/desktop_billing_provider.dart';
 import 'config/hive_adapter.dart';
 import 'config/providers.dart';
 import 'config/supabase_config.dart';
@@ -283,9 +284,16 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   String _status = 'Preparing...';
   bool _downloading = false;
   String? _error;
+  String? _notice;
 
   Future<void> _download() async {
+    final billing = ProviderScope.containerOf(context, listen: false).read(desktopBillingProvider.notifier);
+    if (billing.hasOpenBills) {
+      setState(() => _notice = DesktopBillingNotifier.openBillsUpdateMessage);
+      return;
+    }
     setState(() {
+      _notice = null;
       _downloading = true;
       _error = null;
       _status = 'Downloading...';
@@ -361,6 +369,10 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             LinearProgressIndicator(value: _progress > 0 && _progress < 1 ? _progress : null),
             const SizedBox(height: 8),
             Text(_status, style: const TextStyle(fontSize: 12)),
+          ],
+          if (_notice != null) ...[
+            const SizedBox(height: 16),
+            Text(_notice!, style: TextStyle(color: Colors.orange.shade900, fontSize: 13)),
           ],
           if (_error != null) ...[
             const SizedBox(height: 16),

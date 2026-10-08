@@ -52,6 +52,20 @@ jobs:
           files: coverage/lcov.info
           fail_ci_if_error: false
 
+  updater-windows:
+    name: Updater script on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.3   # same as the test job
+          cache: true
+      - run: flutter pub get
+      - name: Run the real install .bat (normal, failed copy, missing exe)
+        run: flutter test test/update_script_test.dart
+
   database:
     name: Database migration & scenario tests
     runs-on: ubuntu-latest

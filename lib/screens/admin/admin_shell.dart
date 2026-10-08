@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_colors.dart';
+import '../../config/desktop_billing_provider.dart';
 import '../../services/update_service.dart';
 import '../../config/providers.dart';
 import '../../config/theme_provider.dart';
@@ -957,6 +958,12 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
       );
 
       if (shouldUpdate == true && context.mounted) {
+        if (ref.read(desktopBillingProvider.notifier).hasOpenBills) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text(DesktopBillingNotifier.openBillsUpdateMessage)),
+          );
+          return;
+        }
         showDialog(
           context: context,
           barrierDismissible: false,
