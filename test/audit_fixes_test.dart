@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ideal_store_pos/config/desktop_billing_provider.dart';
 import 'package:ideal_store_pos/config/supabase_config.dart';
@@ -218,6 +219,16 @@ void main() {
       expect(UpdateService.isNewer('1.0.122', '1.0.122'), isFalse);
       expect(UpdateService.isNewer('1.0.9', '1.0.10'), isFalse);
       expect(UpdateService.isNewer('2.0.0', '1.9.9'), isTrue);
+    });
+
+    test('bundled trusted certificate list loads (fresh-laptop TLS fix)', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final data = await rootBundle.load(UpdateService.certsAsset);
+      final pem = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final count = RegExp('BEGIN CERTIFICATE').allMatches(String.fromCharCodes(pem)).length;
+      expect(count, greaterThan(100));
+      // throws if any certificate in the list is unreadable
+      expect(UpdateService.securityContextFor(pem), isNotNull);
     });
   });
 

@@ -19,6 +19,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.38.3   # same as the shop PC (flutter --version); newer ones add analyzer warnings
           cache: true
 
       - name: Flutter version

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/app_colors.dart';
 import '../../services/update_service.dart';
 import '../../config/providers.dart';
@@ -907,6 +908,16 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
   }
 
   Future<void> _checkForUpdates() async {
+    // The updater only installs the Windows zip; elsewhere open the releases page.
+    if (!Platform.isWindows) {
+      final opened = await launchUrl(Uri.parse(UpdateService.releasesPageUrl), mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open ${UpdateService.releasesPageUrl}')),
+        );
+      }
+      return;
+    }
     try {
       final service = UpdateService();
       final update = await service.checkForUpdate(manual: true);

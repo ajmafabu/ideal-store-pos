@@ -20,6 +20,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.38.3   # same as the shop PC (flutter --version); newer ones add analyzer warnings
           cache: true
 
       - name: Flutter version
@@ -44,6 +45,10 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.VERSION }}"
+          # VC++ 2015-2022 x64 runtime next to the exe, so new PCs need no separate install
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:SystemRoot\System32\$dll" "build\windows\x64\runner\Release\" -ErrorAction Stop
+          }
           Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "ideal-store-pos-${version}-windows.zip"
           # checksum the app verifies before installing an update
           $hash = (Get-FileHash "ideal-store-pos-${version}-windows.zip" -Algorithm SHA256).Hash.ToLower()

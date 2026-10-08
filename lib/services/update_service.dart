@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,36 @@ class UpdateService {
   static const _repo = 'ajmafabu/ideal-store-pos';
   static const _apiUrl = 'https://api.github.com/repos/$_repo/releases/latest';
   static const _skipVersionKey = 'skipped_update_version';
+  static const releasesPageUrl = 'https://github.com/$_repo/releases/latest';
+
+  /// Mozilla's trusted root list (curl.se/ca/cacert.pem), bundled with the app.
+  static const certsAsset = 'assets/certs/cacert.pem';
+  static SecurityContext? _context;
+
+  /// Windows' own trusted roots PLUS the bundled list. A fresh Windows
+  /// install may not have GitHub's root CA yet, and Dart cannot make Windows
+  /// download it (CERTIFICATE_VERIFY_FAILED). Certificates are still fully
+  /// checked: never add a badCertificateCallback.
+  static SecurityContext securityContextFor(List<int> pemBytes) {
+    final context = SecurityContext(withTrustedRoots: true);
+    context.setTrustedCertificatesBytes(pemBytes);
+    return context;
+  }
+
+  /// HttpClient for every GitHub request (check, checksum, download).
+  /// If the bundled list cannot be loaded, falls back to Windows' roots only.
+  static Future<HttpClient> _httpClient() async {
+    try {
+      if (_context == null) {
+        final data = await rootBundle.load(certsAsset);
+        _context = securityContextFor(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
+      }
+      return HttpClient(context: _context);
+    } catch (e) {
+      Logger.info('[UPDATE] Bundled certificates not loaded, using Windows roots only: $e');
+      return HttpClient();
+    }
+  }
 
   /// Save a version to skip (won't show update dialog for this version)
   Future<void> skipVersion(String version) async {
@@ -68,7 +99,7 @@ class UpdateService {
           mode: FileMode.append);
 
       // normal certificate checking (it used to accept ANY certificate)
-      final client = HttpClient();
+      final client = await _httpClient();
       final request = await client.getUrl(Uri.parse(_apiUrl));
       request.headers.set('Accept', 'application/vnd.github+json');
       final response = await request.close().timeout(const Duration(seconds: 15));
@@ -203,7 +234,7 @@ class UpdateService {
 
     // Download zip (normal certificate checking)
     Logger.info('Downloading update: ${update.downloadUrl}');
-    final client = HttpClient();
+    final client = await _httpClient();
     final request = await client.getUrl(Uri.parse(update.downloadUrl));
     final response = await request.close().timeout(const Duration(minutes: 5));
 
@@ -282,7 +313,7 @@ class UpdateService {
   }
 
   Future<String> _fetchChecksum(String url, String zipName) async {
-    final client = HttpClient();
+    final client = await _httpClient();
     try {
       final req = await client.getUrl(Uri.parse(url));
       final res = await req.close().timeout(const Duration(seconds: 30));

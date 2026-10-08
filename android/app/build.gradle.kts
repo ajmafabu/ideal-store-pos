@@ -24,8 +24,9 @@ android {
         applicationId = "com.idealstore.pos"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 14
-        versionName = "1.0.120"
+        // from pubspec.yaml "version: x.y.z+build" (bumped by release.ps1)
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
         multiDexEnabled = true
     }
 

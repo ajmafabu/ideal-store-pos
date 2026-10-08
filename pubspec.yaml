@@ -90,6 +90,7 @@ flutter:
     - assets/app_logo.png
     - assets/fonts/
     - assets/products/
+    - assets/certs/cacert.pem
 
   fonts:
     - family: NotoSansTamil
