@@ -96,7 +96,8 @@ test_tamil.txt
 test_utf8.ps1
 
 # Screenshots
-screenshot.png
+screenshot*.png
+ui.xml
 
 # Hive encryption key (per-installation)
 .hive_key

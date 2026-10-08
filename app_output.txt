@@ -1,2 +1,0 @@
-SpeechToTextWindowsPlugin created
-SpeechToTextWindowsPlugin destroyed
