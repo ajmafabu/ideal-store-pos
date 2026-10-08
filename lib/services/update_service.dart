@@ -332,24 +332,19 @@ class UpdateService {
     }
   }
 
-  /// Install update by replacing current app files and restarting
-  Future<void> installUpdate(String extractDir) async {
-    final appDir = Directory(Platform.resolvedExecutable).parent.path;
-    final exeName = Platform.resolvedExecutable.split('\\').last;
-    final extractDirObj = Directory(extractDir);
-
-    Logger.info('Installing update to: $appDir');
-
-    // Find the actual app files in extracted directory
-    String sourceDir = extractDir;
-    final exeFiles = await extractDirObj.list(recursive: true).where((f) => f.path.endsWith('.exe')).toList();
-    if (exeFiles.isNotEmpty) {
-      sourceDir = exeFiles.first.parent.path;
-    }
-
-    // Create a robust batch script — uses set variables, proper error handling
-    // NOTE: In batch files, variables use %VAR% (single percent), not %%VAR%%
-    final batScript = '''
+  /// The detached .bat that swaps in the new version (tested on Windows in
+  /// test/update_script_test.dart).
+  ///
+  /// The whole app folder is copied to `_backup` first, so an update that
+  /// fails half-way (antivirus locking a file, disk full) puts every old file
+  /// back, not only the exe. If the backup itself fails, nothing is touched.
+  /// In batch files variables are %VAR%; `\\` below is one backslash.
+  static String buildInstallScript({
+    required String sourceDir,
+    required String appDir,
+    required String exeName,
+  }) =>
+      '''
 @echo off
 title Ideal Store POS Updater
 set "LOG=%TEMP%\\update_install.log"
@@ -358,6 +353,7 @@ set "LOG=%TEMP%\\update_install.log"
 set "SOURCE=$sourceDir"
 set "DEST=$appDir"
 set "EXE=$exeName"
+set "BACKUP=%DEST%\\_backup"
 
 echo [%date% %time%] ====== UPDATE STARTED ======>> "%LOG%"
 echo [%date% %time%] Source: %SOURCE% >> "%LOG%"
@@ -391,8 +387,17 @@ if not exist "%SOURCE%\\%EXE%" (
     goto :KEEP_OLD
 )
 
-:: Keep the old exe until the new one is in place
-echo [%date% %time%] Backing up old exe... >> "%LOG%"
+:: Copy the whole old version aside, so a failed update can be fully undone
+echo [%date% %time%] Backing up the app folder... >> "%LOG%"
+if exist "%BACKUP%" rmdir /S /Q "%BACKUP%" 2>>"%LOG%"
+robocopy "%DEST%" "%BACKUP%" /E /R:2 /W:1 /NP /NFL /NDL /XD "%DEST%\\_update" "%BACKUP%" >> "%LOG%" 2>&1
+if errorlevel 8 (
+    echo [%date% %time%] ERROR: backup failed. Old version kept. >> "%LOG%"
+    if exist "%BACKUP%" rmdir /S /Q "%BACKUP%" 2>>"%LOG%"
+    goto :KEEP_OLD
+)
+
+:: Move the old exe aside (works even if it is still closing)
 if exist "%DEST%\\%EXE%.old" del /Q "%DEST%\\%EXE%.old" 2>>"%LOG%"
 ren "%DEST%\\%EXE%" "%EXE%.old" 2>>"%LOG%"
 
@@ -400,7 +405,7 @@ ren "%DEST%\\%EXE%" "%EXE%.old" 2>>"%LOG%"
 echo [%date% %time%] Copying new files... >> "%LOG%"
 xcopy /E /Y /I "%SOURCE%" "%DEST%" >> "%LOG%" 2>&1
 if errorlevel 1 (
-    echo [%date% %time%] ERROR: xcopy failed with errorlevel %errorlevel% >> "%LOG%"
+    echo [%date% %time%] ERROR: xcopy failed >> "%LOG%"
     goto :RESTORE
 )
 
@@ -411,6 +416,7 @@ if not exist "%DEST%\\%EXE%" (
 )
 
 del /Q "%DEST%\\%EXE%.old" 2>>"%LOG%"
+if exist "%BACKUP%" rmdir /S /Q "%BACKUP%" 2>>"%LOG%"
 if exist "%DEST%\\_update" rmdir /S /Q "%DEST%\\_update" 2>>"%LOG%"
 echo [%date% %time%] Update successful, restarting app... >> "%LOG%"
 start "" "%DEST%\\%EXE%"
@@ -418,10 +424,14 @@ goto :DONE
 
 :RESTORE
 echo [%date% %time%] Restoring the old version... >> "%LOG%"
-if exist "%DEST%\\%EXE%.old" (
-    if exist "%DEST%\\%EXE%" del /Q "%DEST%\\%EXE%" 2>>"%LOG%"
-    ren "%DEST%\\%EXE%.old" "%EXE%" 2>>"%LOG%"
+if exist "%DEST%\\%EXE%" del /Q "%DEST%\\%EXE%" 2>>"%LOG%"
+if exist "%DEST%\\%EXE%.old" ren "%DEST%\\%EXE%.old" "%EXE%" 2>>"%LOG%"
+robocopy "%BACKUP%" "%DEST%" /E /R:2 /W:1 /NP /NFL /NDL >> "%LOG%" 2>&1
+if errorlevel 8 (
+    echo [%date% %time%] ERROR: restore incomplete - the old files are kept in %BACKUP% >> "%LOG%"
+    goto :KEEP_OLD
 )
+if exist "%BACKUP%" rmdir /S /Q "%BACKUP%" 2>>"%LOG%"
 
 :KEEP_OLD
 if exist "%DEST%\\_update" rmdir /S /Q "%DEST%\\_update" 2>>"%LOG%"
@@ -436,6 +446,23 @@ echo Please download manually from: https://github.com/ajmafabu/ideal-store-pos/
 timeout /t 3 /nobreak >nul
 del "%~f0"
 ''';
+
+  /// Install update by replacing current app files and restarting
+  Future<void> installUpdate(String extractDir) async {
+    final appDir = Directory(Platform.resolvedExecutable).parent.path;
+    final exeName = Platform.resolvedExecutable.split('\\').last;
+    final extractDirObj = Directory(extractDir);
+
+    Logger.info('Installing update to: $appDir');
+
+    // Find the actual app files in extracted directory
+    String sourceDir = extractDir;
+    final exeFiles = await extractDirObj.list(recursive: true).where((f) => f.path.endsWith('.exe')).toList();
+    if (exeFiles.isNotEmpty) {
+      sourceDir = exeFiles.first.parent.path;
+    }
+
+    final batScript = buildInstallScript(sourceDir: sourceDir, appDir: appDir, exeName: exeName);
 
     final batPath = '${Directory.systemTemp.path}\\install_update.bat';
     await File(batPath).writeAsString(batScript);
