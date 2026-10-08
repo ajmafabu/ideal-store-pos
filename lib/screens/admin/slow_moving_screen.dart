@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../models/product.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 
 class SlowMovingScreen extends ConsumerStatefulWidget {
   const SlowMovingScreen({super.key});
@@ -184,7 +185,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Stock: ${product.stock} ${product.unit} | Rs${product.sellingPrice.toStringAsFixed(0)}'),
+                                  Text('Stock: ${formatQty(product.stock)} ${product.unit} | Rs${product.sellingPrice.toStringAsFixed(0)}'),
                                   Text(
                                     lastSold != null
                                         ? 'Last sold: ${DateFormat('dd MMM yyyy').format(lastSold)} (${DateTime.now().difference(lastSold).inDays} days ago)'

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../services/connectivity_service.dart';
 import '../../services/product_service.dart';
 import '../../utils/logger.dart';
 import 'products.dart';
@@ -21,6 +22,21 @@ import 'returns.dart';
 final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
   final channel = Supabase.instance.client.channel('public:changes');
 
+  // One sale changes the stock of every product on the bill, and each change
+  // arrives as its own event. Reloading the whole product list per event
+  // meant 20 full downloads for a 20-item bill; wait for the burst to end.
+  Timer? productsDebounce;
+  void refreshProducts() {
+    productsDebounce?.cancel();
+    productsDebounce = Timer(const Duration(seconds: 2), () {
+      ProductService.invalidateCache();
+      ref.invalidate(productsProvider);
+      ref.invalidate(dashboardSummaryProvider);
+      ref.invalidate(stockValueProvider);
+    });
+  }
+  ref.onDispose(() => productsDebounce?.cancel());
+
   channel
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
@@ -40,12 +56,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         event: PostgresChangeEvent.all,
         schema: 'public',
         table: 'products',
-        callback: (payload) {
-          ProductService.invalidateCache();
-          ref.invalidate(productsProvider);
-          ref.invalidate(dashboardSummaryProvider);
-          ref.invalidate(stockValueProvider);
-        },
+        callback: (payload) => refreshProducts(),
       )
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
@@ -53,9 +64,9 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         table: 'purchases',
         callback: (payload) {
           ref.invalidate(purchasesProvider);
-          ref.invalidate(productsProvider);
           ref.invalidate(dashboardSummaryProvider);
           ref.invalidate(monthlyProfitProvider);
+          refreshProducts();
         },
       )
       .onPostgresChanges(
@@ -96,7 +107,7 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
         table: 'product_returns',
         callback: (payload) {
           ref.invalidate(returnsProvider);
-          ref.invalidate(productsProvider);
+          refreshProducts();
         },
       )
       .onPostgresChanges(
@@ -125,8 +136,10 @@ final realtimeChannelProvider = Provider<RealtimeChannel?>((ref) {
   });
   ref.onDispose(() => channel.unsubscribe());
 
-  // Fallback: refresh critical providers every 30s even if Realtime drops
-  final timer = Timer.periodic(const Duration(seconds: 30), (_) {
+  // Fallback in case Realtime drops: every 2 minutes (it was every 30 s and
+  // re-downloaded the whole product list each time), and not while offline.
+  final timer = Timer.periodic(const Duration(minutes: 2), (_) {
+    if (!ConnectivityService().isConnected) return;
     ProductService.invalidateCache();
     ref.invalidate(productsProvider);
     ref.invalidate(dashboardSummaryProvider);

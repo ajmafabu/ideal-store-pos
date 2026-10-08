@@ -9,6 +9,8 @@ import '../../services/product_service.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/payment_methods.dart';
+import '../../utils/paged_query.dart';
+import '../../utils/qty_format.dart';
 
 class ProfitDetailsScreen extends ConsumerStatefulWidget {
   final String initialPeriod;
@@ -82,16 +84,16 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
       }
 
       // Still fetch sales for per-product breakdown
-      final salesRes = await client
+      final salesRes = await fetchAllRows(() => client
           .from('sales')
           .select('final_amount, items')
           .gte('created_at', startUtc.toIso8601String())
-          .lt('created_at', endUtc.toIso8601String());
+          .lt('created_at', endUtc.toIso8601String()));
 
       // Fetch products for COGS fallback
-      final productsRes = await client
+      final productsRes = await fetchAllRows(() => client
           .from('products')
-          .select('id, purchase_price');
+          .select('id, purchase_price'));
       final productCostMap = <String, double>{};
       for (final p in productsRes as List) {
         productCostMap[p['id'] as String] =
@@ -490,7 +492,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
         text: product.sellingPrice.toStringAsFixed(2),
       );
       final stockController = TextEditingController(
-        text: product.stock.toString(),
+        text: formatQty(product.stock),
       );
 
       showDialog(
@@ -555,7 +557,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Sold: ${product.stock} units in stock',
+                        'Sold: ${formatQty(product.stock)} units in stock',
                         style: const TextStyle(fontSize: 12),
                       ),
                       Text(
@@ -634,7 +636,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                 final newSellingPrice =
                     double.tryParse(sellingController.text) ?? 0;
                 final newStock =
-                    int.tryParse(stockController.text) ?? product.stock;
+                    double.tryParse(stockController.text) ?? product.stock;
 
                 if (newPurchasePrice <= 0 || newSellingPrice <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -950,7 +952,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                             Expanded(
                               flex: 1,
                               child: Text(
-                                '${item.qty}',
+                                formatQty(item.qty),
                                 style: const TextStyle(fontSize: 12),
                                 textAlign: TextAlign.center,
                               ),

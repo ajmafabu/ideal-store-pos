@@ -58,6 +58,11 @@ void main() {
       expect(Validators.quantity('0', min: 0), isNull);
       expect(Validators.quantity('-2', min: 0), isNotNull);
       expect(Validators.quantity('1.5'), isNotNull);
+      // stock can be decimal (loose goods by weight)
+      expect(Validators.decimalQuantity('2.5'), isNull);
+      expect(Validators.decimalQuantity('0'), isNull);
+      expect(Validators.decimalQuantity('-1'), isNotNull);
+      expect(Validators.decimalQuantity('abc'), isNotNull);
       expect(Validators.hsn('1006'), isNull);
       expect(Validators.hsn('100630'), isNull);
       expect(Validators.hsn('10'), isNotNull);

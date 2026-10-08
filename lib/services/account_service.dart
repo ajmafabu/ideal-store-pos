@@ -5,6 +5,7 @@ import '../utils/logger.dart';
 import '../utils/app_timezone.dart';
 import '../utils/network_errors.dart';
 import 'offline_service.dart';
+import '../utils/search_term.dart';
 
 /// Cash book access.
 ///
@@ -118,8 +119,7 @@ class AccountService {
       if (startDate != null) query = query.gte('created_at', _toUtc(startDate).toIso8601String());
       if (endDate != null) query = query.lt('created_at', _toUtc(endDate).toIso8601String());
       if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-        // strip characters that have meaning inside a PostgREST or() filter
-        final q = searchQuery.replaceAll(RegExp(r'[,()*%\\]'), ' ').trim();
+        final q = searchTerm(searchQuery);
         if (q.isNotEmpty) {
           query = query.or('description.ilike.%$q%,category.ilike.%$q%');
         }

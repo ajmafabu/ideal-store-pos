@@ -125,7 +125,9 @@ class Product {
   final String? category;
   final double purchasePrice;
   final double sellingPrice;
-  final int stock;
+  /// Decimal: stock kept in kg can be 2.5 (it was rounded down, so 0.5 kg
+  /// left showed as out of stock).
+  final double stock;
   final String unit;
   final int lowStockAlert;
   final String? shopId;
@@ -171,9 +173,9 @@ class Product {
   bool get hasDualRates => sellingPrice2 != null && sellingPrice2! > 0;
 
   // Total stock across all variants (for display)
-  int get totalStock {
+  double get totalStock {
     if (!hasVariants || variants.isEmpty) return stock;
-    return variants.fold<int>(0, (sum, v) => sum + v.stock);
+    return variants.fold<double>(0, (sum, v) => sum + v.stock);
   }
 
   // Lowest price among variants
@@ -235,7 +237,7 @@ class Product {
       category: json['category'] as String?,
       purchasePrice: (json['purchase_price'] as num?)?.toDouble() ?? 0,
       sellingPrice: (json['selling_price'] as num?)?.toDouble() ?? 0,
-      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      stock: (json['stock'] as num?)?.toDouble() ?? 0,
       unit: json['unit'] as String? ?? 'pcs',
       lowStockAlert: (json['low_stock_alert'] as num?)?.toInt() ?? 10,
       shopId: json['shop_id'] as String?,
@@ -314,7 +316,7 @@ class Product {
     String? category,
     double? purchasePrice,
     double? sellingPrice,
-    int? stock,
+    double? stock,
     String? unit,
     int? lowStockAlert,
     String? shopId,

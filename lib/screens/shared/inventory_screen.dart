@@ -14,6 +14,7 @@ import '../../widgets/barcode_scanner.dart';
 import '../../utils/error_messages.dart';
 import '../../widgets/empty_state.dart';
 import 'product_form_screen.dart';
+import '../../utils/qty_format.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
   final String? initialFilter;
@@ -262,7 +263,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Current Stock: ${product.stock} ${product.unit}'),
+            Text('Current Stock: ${formatQty(product.stock)} ${product.unit}'),
             Text('Price: ₹${product.sellingPrice}'),
             const SizedBox(height: 16),
             TextField(
@@ -457,7 +458,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     ? Colors.orange.withValues(alpha: 0.1)
                                     : Colors.green.withValues(alpha: 0.1),
                                 child: Text(
-                                  '${product.stock}',
+                                  formatQty(product.stock),
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -1130,7 +1131,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Rs.${product.sellingPrice} | Stock: ${product.stock} ${product.unit} | Worth: Rs.${(product.stock * product.purchasePrice).toStringAsFixed(0)}',
+                                'Rs.${product.sellingPrice} | Stock: ${formatQty(product.stock)} ${product.unit} | Worth: Rs.${(product.stock * product.purchasePrice).toStringAsFixed(0)}',
                               ),
                               if (product.expiryDate != null)
                                 Text(
@@ -1261,7 +1262,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
       final totalStockValue = filtered.fold(0.0, (sum, p) => sum + (p.stock * p.purchasePrice));
       final totalSellingValue = filtered.fold(0.0, (sum, p) => sum + (p.stock * p.sellingPrice));
-      final totalStockQty = filtered.fold(0, (sum, p) => sum + p.stock);
+      final totalStockQty = formatQty(filtered.fold<double>(0, (sum, p) => sum + p.stock));
 
       final pdf = pw.Document();
 
@@ -1353,7 +1354,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        child: pw.Text('${p.stock} ${p.unit}', style: pw.TextStyle(font: f, fontSize: 7)),
+                        child: pw.Text('${formatQty(p.stock)} ${p.unit}', style: pw.TextStyle(font: f, fontSize: 7)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -1494,7 +1495,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   ),
                   const SizedBox(width: 2),
                   Text(
-                    '${product.stock} ${product.unit}',
+                    '${formatQty(product.stock)} ${product.unit}',
                     style: TextStyle(
                       fontSize: 11,
                       color: product.isLowStock ? Colors.red : Colors.grey,
@@ -1538,7 +1539,7 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
   @override
   void initState() {
     super.initState();
-    _qtyController = TextEditingController(text: '${widget.product.stock}');
+    _qtyController = TextEditingController(text: formatQty(widget.product.stock));
   }
 
   @override
@@ -1551,7 +1552,7 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(widget.product.name),
-      subtitle: Text('System Qty: ${widget.product.stock}'),
+      subtitle: Text('System Qty: ${formatQty(widget.product.stock)}'),
       trailing: SizedBox(
         width: 120,
         child: Row(
@@ -1559,7 +1560,7 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
             Expanded(
               child: TextField(
                 controller: _qtyController,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Physical',
                   isDense: true,
@@ -1577,7 +1578,7 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
               icon: const Icon(Icons.save, size: 18, color: Colors.green),
               onPressed: () async {
                 final physicalQty =
-                    int.tryParse(_qtyController.text) ?? widget.product.stock;
+                    double.tryParse(_qtyController.text) ?? widget.product.stock;
                 final success = await widget.ref
                     .read(productServiceProvider)
                     .reconcileStock(
@@ -1591,7 +1592,7 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
                     SnackBar(
                       content: Text(
                         success
-                            ? '${widget.product.name}: ${widget.product.stock} → $physicalQty'
+                            ? '${widget.product.name}: ${formatQty(widget.product.stock)} → $physicalQty'
                             : 'Reconciliation saved but stock update failed. Check manually.',
                       ),
                       backgroundColor: success

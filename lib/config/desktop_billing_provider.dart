@@ -7,6 +7,46 @@ class HeldBill {
   final Sale? editingSale;
 
   HeldBill({required this.session, required this.time, this.editingSale});
+
+  /// Saved on disk so held bills survive a restart. A held edit keeps the
+  /// sale it edits: without it, it came back as a new sale and billed the
+  /// same goods twice.
+  Map<String, dynamic> toJson() => {
+        'session': {
+          'id': session.id,
+          'items': session.items.map((i) => i.toHeldJson()).toList(),
+          'customer_id': session.customerId,
+          'customer_name': session.customerName,
+          'total_discount': session.totalDiscount,
+          'payment_method': session.paymentMethod,
+          'is_credit': session.isCredit,
+          'amount_paid': session.amountPaid,
+        },
+        'time': time.toIso8601String(),
+        if (editingSale != null) 'editing_sale': editingSale!.toJson(),
+      };
+
+  factory HeldBill.fromJson(Map<String, dynamic> m) {
+    final s = Map<String, dynamic>.from(m['session'] as Map);
+    return HeldBill(
+      session: SaleSession(
+        id: s['id'] as String,
+        items: (s['items'] as List)
+            .map((i) => DesktopCartItem.fromHeldJson(Map<String, dynamic>.from(i as Map)))
+            .toList(),
+        customerId: s['customer_id'] as String?,
+        customerName: s['customer_name'] as String?,
+        totalDiscount: (s['total_discount'] as num?)?.toDouble() ?? 0,
+        paymentMethod: s['payment_method'] as String? ?? 'cash',
+        isCredit: s['is_credit'] as bool? ?? false,
+        amountPaid: (s['amount_paid'] as num?)?.toDouble() ?? 0,
+      ),
+      time: DateTime.tryParse(m['time'] as String? ?? '') ?? DateTime.now(),
+      editingSale: m['editing_sale'] is Map
+          ? Sale.fromJson(Map<String, dynamic>.from(m['editing_sale'] as Map))
+          : null,
+    );
+  }
 }
 
 class SaleSession {
@@ -36,7 +76,7 @@ class SaleSession {
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.total);
   double get total => subtotal - totalDiscount;
   int get itemCount => items.length;
-  int get totalQty => items.fold(0, (sum, item) => sum + item.qty);
+  double get totalQty => items.fold(0.0, (sum, item) => sum + item.qty);
 
   /// Bill-level GST included in the line totals (before the bill discount).
   double get gstTotal => items.fold(0.0, (sum, item) => sum + item.gstAmount);
@@ -46,7 +86,8 @@ class DesktopCartItem {
   final String productId;
   final String name;
   double price;
-  int qty;
+  /// Decimal for loose goods sold by weight (1.5 kg).
+  double qty;
   final String unit;
   final double purchasePrice;
   final double gstRate;
@@ -93,7 +134,7 @@ class DesktopCartItem {
 
   DesktopCartItem copyWith({
     double? price,
-    int? qty,
+    double? qty,
     double? purchasePrice,
     double? discount,
     String? rateLabel,
@@ -180,7 +221,7 @@ class DesktopCartItem {
     productId: m['product_id'] as String,
     name: m['name'] as String,
     price: (m['price'] as num).toDouble(),
-    qty: (m['qty'] as num).toInt(),
+    qty: (m['qty'] as num).toDouble(),
     unit: m['unit'] as String? ?? 'pcs',
     purchasePrice: (m['purchase_price'] as num?)?.toDouble() ?? 0,
     gstRate: (m['gst_rate'] as num?)?.toDouble() ?? 0,
@@ -262,7 +303,7 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
     state = List.from(state);
   }
 
-  void updateItemQty(int index, int qty) {
+  void updateItemQty(int index, double qty) {
     final session = state[_activeSessionIndex];
     if (qty <= 0) {
       session.items.removeAt(index);
@@ -362,12 +403,13 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   final List<HeldBill> heldBills = [];
 
-  /// A bill on screen or on hold. Both live only in memory, so restarting the
-  /// app (e.g. to install an update) would lose them.
-  bool get hasOpenBills => heldBills.isNotEmpty || state.any((s) => s.items.isNotEmpty);
+  /// A bill on screen (or an edit in progress). It lives only in memory, so
+  /// restarting the app (e.g. to install an update) would lose it. Held
+  /// bills are saved on disk and survive a restart.
+  bool get hasOpenBills => _editingSale != null || state.any((s) => s.items.isNotEmpty);
 
   static const openBillsUpdateMessage =
-      'A bill is open or on hold on the Billing screen. Save or clear it first: '
+      'A bill is open on the Billing screen. Save it, hold it (F6) or clear it first: '
       'installing the update restarts the app and would lose it.';
 
   int _heldBillVersion = 0;

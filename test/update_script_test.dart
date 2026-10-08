@@ -16,14 +16,15 @@ void main() {
       expect(container.read(desktopBillingProvider.notifier).hasOpenBills, isFalse);
     });
 
-    test('a bill on screen or on hold blocks it', () {
+    test('a bill on screen blocks it; a held bill (saved on disk) does not', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final billing = container.read(desktopBillingProvider.notifier);
       billing.addItem(DesktopCartItem(productId: 'p', name: 'Rice', price: 50, qty: 1, unit: 'pcs'));
       expect(billing.hasOpenBills, isTrue);
-      expect(billing.autoHoldCurrentSession(), isTrue);   // moved to hold: still open
-      expect(billing.hasOpenBills, isTrue);
+      expect(billing.autoHoldCurrentSession(), isTrue);
+      expect(billing.heldBills, hasLength(1));
+      expect(billing.hasOpenBills, isFalse);
     });
   });
 

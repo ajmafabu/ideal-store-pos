@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/sale.dart';
 import 'payment_methods.dart';
 import '../utils/app_timezone.dart';
+import 'qty_format.dart';
 
 class InvoiceGenerator {
   static const int lineWidth = 32;
@@ -80,7 +81,7 @@ class InvoiceGenerator {
     lines.add(pw.Center(child: pw.Text(_sep(), style: pw.TextStyle(font: f, fontSize: 7))));
 
     // ── Invoice info ──
-    lines.add(pw.Text(_leftRight('Invoice: #${_saleId(sale)}', ''), style: pw.TextStyle(font: f, fontSize: 8)));
+    lines.add(pw.Text(_leftRight('Invoice: #${_saleId(sale)}${sale.invoiceNo == null ? ' (offline - provisional)' : ''}', ''), style: pw.TextStyle(font: f, fontSize: 8)));
     lines.add(pw.Text(_leftRight('Date: ${DateFormat('dd MMM yyyy hh:mm a').format(AppTimezone.toIst(sale.createdAt))}', ''), style: pw.TextStyle(font: f, fontSize: 8)));
     lines.add(pw.Center(child: pw.Text(_sep(), style: pw.TextStyle(font: f, fontSize: 7))));
 
@@ -106,12 +107,12 @@ class InvoiceGenerator {
       // Wrap long names
       final nameLines = _wrapText('$name$tierBadge$rateBadge', colItem);
       if (nameLines.length > 1) {
-        lines.add(pw.Text(_itemRow(nameLines[0], '$qty', _price(total)), style: nameStyle));
+        lines.add(pw.Text(_itemRow(nameLines[0], formatQty(qty), _price(total)), style: nameStyle));
         for (int i = 1; i < nameLines.length; i++) {
           lines.add(pw.Text(_itemRow(nameLines[i], '', ''), style: nameStyle));
         }
       } else {
-        lines.add(pw.Text(_itemRow(name, '$qty', _price(total)), style: nameStyle));
+        lines.add(pw.Text(_itemRow(name, formatQty(qty), _price(total)), style: nameStyle));
       }
 
       if (hasDiscount) {

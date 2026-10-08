@@ -112,7 +112,7 @@ class ExpenseService {
     var offset = 0;
     try {
       while (true) {
-        final page = await _client.from('expenses').select('amount').range(offset, offset + 999);
+        final page = await _client.from('expenses').select('amount').order('id').range(offset, offset + 999);
         for (final e in page as List) {
           total += (e['amount'] as num?)?.toDouble() ?? 0;
         }

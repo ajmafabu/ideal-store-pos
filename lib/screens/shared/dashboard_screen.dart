@@ -13,6 +13,7 @@ import '../admin/profit_details_screen.dart';
 import '../admin/all_profitable_products_screen.dart';
 import 'dashboard_widgets/greeting_header.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/paged_query.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -758,16 +759,16 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
       final end = DateTime.utc(now.year, now.month, now.day + 1).subtract(AppTimezone.localOffset);
 
       // Fetch all sales this month
-      final salesRes = await client
+      final salesRes = await fetchAllRows(() => client
           .from('sales')
           .select('items')
           .gte('created_at', start.toIso8601String())
-          .lt('created_at', end.toIso8601String());
+          .lt('created_at', end.toIso8601String()));
 
       // Fetch products for cost lookup
-      final productsRes = await client
+      final productsRes = await fetchAllRows(() => client
           .from('products')
-          .select('id, purchase_price');
+          .select('id, purchase_price'));
       final costMap = <String, double>{};
       for (final p in productsRes as List) {
         costMap[p['id'] as String] = (p['purchase_price'] as num?)?.toDouble() ?? 0;

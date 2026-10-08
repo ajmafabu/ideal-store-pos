@@ -28,7 +28,8 @@ class CartItem {
   final String productId;
   final String name;
   final double price;
-  int qty;
+  /// Decimal for loose goods sold by weight (1.5 kg).
+  double qty;
   final String unit;
   final double purchasePrice;
   final double gstRate;
@@ -121,7 +122,7 @@ class CartItem {
       productId: json['product_id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Item',
       price: _d(json['price']),
-      qty: _i(json['qty']),
+      qty: _d(json['qty']),
       unit: json['unit'] as String? ?? 'pcs',
       purchasePrice: _d(json['purchase_price']),
       gstRate: _d(json['gst_rate']),
@@ -137,7 +138,7 @@ class CartItem {
     );
   }
 
-  CartItem copyWith({double? price, int? qty, double? discount, double? purchasePrice}) => CartItem(
+  CartItem copyWith({double? price, double? qty, double? discount, double? purchasePrice}) => CartItem(
     productId: productId,
     name: name,
     price: price ?? this.price,

@@ -118,5 +118,11 @@ checks AS (
               WHEN (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.profiles WHERE role = ''admin'' AND coalesce(active, true)', false, true, '')))[1]::text::int >= 1 THEN 'OK' ELSE 'PROBLEM' END,
          CASE WHEN NOT (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND (table_name, column_name) IN (('profiles','role'),('profiles','active'))) = 2 THEN 'profiles.role/active missing'
               ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.profiles WHERE role = ''admin'' AND coalesce(active, true)', false, true, '')))[1]::text || ' active admin(s)' END
+  UNION ALL
+  SELECT 15, 'sale time guard',
+         CASE WHEN count(*) = 1 THEN 'OK' ELSE 'MISSING' END,
+         CASE WHEN count(*) = 1 THEN 'a wrong PC clock cannot misdate a bill'
+              ELSE 'run sql/2026_10_sale_time_guard.sql' END
+  FROM pg_trigger WHERE NOT tgisinternal AND tgname = 'a_sales_guard_time'
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

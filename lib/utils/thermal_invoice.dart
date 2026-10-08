@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import '../models/sale.dart';
 import '../utils/app_timezone.dart';
 import '../utils/tamil_bitmap_renderer.dart';
+import 'qty_format.dart';
 
 /// Output from ThermalInvoice: structured data for the renderer.
 class ThermalReceiptData {
@@ -32,7 +33,7 @@ class ThermalReceiptData {
       final name = row.productName.length > 22
           ? row.productName.substring(0, 22)
           : row.productName.padRight(22);
-      final qty = row.qty.toString().padLeft(4);
+      final qty = formatQty(row.qty).padLeft(4);
       final rate = _fmt(row.rate).padLeft(9);
       final amt = _fmt(row.amount).padLeft(8);
       sb.writeln('$sno  $name $qty $rate $amt');
@@ -74,7 +75,8 @@ class ThermalInvoice {
     final header = <String>[
       displayName,
       'QUOTATION',
-      'Bill No: ${sale.invoiceLabel}',
+      // a bill saved offline gets its real number when it syncs
+      'Bill No: ${sale.invoiceLabel}${sale.invoiceNo == null ? ' (offline - provisional)' : ''}',
       'Date: $dateStr  Time: $timeStr',
       if (customerName != null && customerName.isNotEmpty)
         'Customer: $customerName',
@@ -171,7 +173,7 @@ class ThermalInvoice {
           (useTamil && tamilNames != null && tamilNames.containsKey(productId))
           ? tamilNames[productId]!
           : (item['name'] as String? ?? '');
-      final qty = item['qty'] ?? 0;
+      final qty = ((item['qty'] as num?) ?? 0).toDouble();
       final rate = ((item['price'] as num?) ?? 0).toDouble();
       final total = ((item['total'] as num?) ?? 0).toDouble();
 

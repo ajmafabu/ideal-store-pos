@@ -24,6 +24,8 @@ class HiveAdapter {
   static const String pendingAuditBox = 'pending_audit';
   /// Queue items that failed 5 times: kept for review instead of deleted (#6).
   static const String deadLetterBox = 'dead_letters';
+  /// The signed-in user's profile, so the app opens offline after a restart.
+  static const String cachedProfileBox = 'cached_profile';
 
   static HiveAesCipher? _currentCipher;
 
@@ -136,6 +138,7 @@ class HiveAdapter {
     _heldBillsBox = await openEncryptedBox(heldBillsBox);
     _pendingAuditBox = await openEncryptedBox(pendingAuditBox);
     await openEncryptedBox(deadLetterBox);   // OfflineService reuses the open box
+    await openEncryptedBox(cachedProfileBox);   // AuthService reads it by name
   }
 
   static late Box<Map> _pendingSalesBox;

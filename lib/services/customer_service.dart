@@ -7,6 +7,8 @@ import '../utils/app_timezone.dart';
 import '../utils/logger.dart';
 import 'account_service.dart';
 import 'offline_service.dart';
+import '../utils/paged_query.dart';
+import '../utils/search_term.dart';
 
 class CustomerService {
   final SupabaseClient _supabase;
@@ -93,8 +95,10 @@ class CustomerService {
   }
 
   // Add customer. Server rejections are thrown; only a network failure is
-  // queued (it used to queue every error and report success).
-  Future<Customer?> addCustomer({
+  // queued (it used to queue every error and report success). The id is made
+  // here, so a customer added offline can be put on a bill at once and keeps
+  // the same id when it syncs (customers sync before the sales that use them).
+  Future<Customer> addCustomer({
     required String name,
     String? phone,
     String? address,
@@ -103,6 +107,7 @@ class CustomerService {
     double? creditLimit,
   }) async {
     final data = <String, dynamic>{
+      'id': newDocumentId(),
       'name': name,
       'phone': phone,
       'address': address,
@@ -116,8 +121,8 @@ class CustomerService {
     } catch (e) {
       if (!isNetworkError(e)) rethrow;
       Logger.warning('addCustomer offline, queuing: $e');
-      await _offlineService.queuePendingWrite({'table': 'customers', 'operation': 'insert', 'data': data});
-      return null;
+      await _offlineService.queuePendingWrite({'table': 'customers', 'operation': 'insert', 'data': Map<String, dynamic>.from(data)});
+      return Customer.fromJson(data);
     }
   }
 
@@ -177,15 +182,16 @@ class CustomerService {
     String customerId,
   ) async {
     try {
-      final response = await _supabase
-          .from('sales')
-          .select()
-          .eq('customer_id', customerId)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      return await fetchAllRows(
+        () => _supabase.from('sales').select().eq('customer_id', customerId),
+        orderBy: 'created_at',
+        ascending: false,
+      );
     } catch (e) {
+      // thrown, not []: an empty list looked like "no bills" (and made an
+      // empty customer statement)
       Logger.error('getSalesByCustomer', e);
-      return [];
+      rethrow;
     }
   }
 
@@ -194,15 +200,14 @@ class CustomerService {
     String customerId,
   ) async {
     try {
-      final response = await _supabase
-          .from('payments')
-          .select()
-          .eq('customer_id', customerId)
-          .order('created_at', ascending: false);
-      return List<Map<String, dynamic>>.from(response);
+      return await fetchAllRows(
+        () => _supabase.from('payments').select().eq('customer_id', customerId),
+        orderBy: 'created_at',
+        ascending: false,
+      );
     } catch (e) {
       Logger.error('getPaymentsByCustomer', e);
-      return [];
+      rethrow;
     }
   }
 
@@ -237,10 +242,11 @@ class CustomerService {
 
   // Search customers by name or phone
   Future<List<Customer>> searchCustomers(String query) async {
+    final q = searchTerm(query);
     final response = await _supabase
         .from('customers')
         .select()
-        .or('name.ilike.%$query%,phone.ilike.%$query%')
+        .or('name.ilike.%$q%,phone.ilike.%$q%')
         .order('name')
         .limit(20);
     return (response as List).map((json) => Customer.fromJson(json)).toList();
@@ -248,7 +254,7 @@ class CustomerService {
 
   // Get total debt of all customers
   Future<double> getTotalDebt() async {
-    final response = await _supabase.from('customers').select('total_credit');
+    final response = await fetchAllRows(() => _supabase.from('customers').select('id, total_credit'));
     double total = 0;
     for (final row in response) {
       total += (row['total_credit'] as num?)?.toDouble() ?? 0;
@@ -265,22 +271,21 @@ class CustomerService {
           .toList();
     } catch (e) {
       Logger.error('getReceivablesAging', e);
-      return [];
+      rethrow;
     }
   }
 
   // Get overdue payments
   Future<List<Map<String, dynamic>>> getOverduePayments() async {
     try {
-      final response = await _supabase
-          .from('sales')
-          .select(
-            'id, customer_id, final_amount, due_amount, due_date, created_at',
-          )
-          .eq('is_credit', true)
-          .gt('due_amount', 0)
-          .order('due_date');
-      final sales = (response as List).cast<Map<String, dynamic>>();
+      final sales = await fetchAllRows(
+        () => _supabase
+            .from('sales')
+            .select('id, customer_id, final_amount, due_amount, due_date, created_at')
+            .eq('is_credit', true)
+            .gt('due_amount', 0),
+        orderBy: 'due_date',
+      );
       final now = AppTimezone.nowIst();
       return sales.where((s) {
         final dueDate = s['due_date'] != null

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ideal_store_pos/models/sale.dart';
 import 'package:ideal_store_pos/models/product.dart';
 import 'package:intl/intl.dart';
+import 'package:ideal_store_pos/utils/qty_format.dart';
 
 void main() {
   // ============================================
@@ -84,7 +85,7 @@ void main() {
           home: Scaffold(
             body: ListTile(
               title: Text(item.name),
-              subtitle: Text('Qty: ${item.qty}'),
+              subtitle: Text('Qty: ${formatQty(item.qty)}'),
               trailing: Text('₹${item.total}'),
             ),
           ),
@@ -151,7 +152,7 @@ void main() {
                 children: [
                   Text(product.name),
                   Text('₹${product.sellingPrice}'),
-                  Text('Stock: ${product.stock}'),
+                  Text('Stock: ${formatQty(product.stock)}'),
                 ],
               ),
             ),

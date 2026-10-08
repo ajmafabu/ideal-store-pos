@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -58,10 +59,26 @@ class ThermalPrinterService {
   Future<BluetoothDevice?> selectDevice(BuildContext context) =>
       FlutterBluetoothPrinter.selectDevice(context);
 
+  /// Android only: asked when the user scans for or prints to a Bluetooth
+  /// printer (it used to be asked on every app start). Location is only
+  /// needed by Android 11 and older to find nearby devices.
+  static Future<void> requestBluetoothPermissions({bool scan = false}) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await [
+        Permission.bluetoothConnect,
+        if (scan) ...[Permission.bluetoothScan, Permission.locationWhenInUse],
+      ].request();
+    } catch (e) {
+      Logger.warning('Bluetooth permission request failed: $e');
+    }
+  }
+
   Future<bool> printText(String text, {bool hasTamil = false}) async {
     try {
       final address = await getSavedPrinterAddress();
       if (address == null || address.isEmpty) return false;
+      await requestBluetoothPermissions();
 
       for (int i = 0; i < 3; i++) {
         try {
@@ -226,7 +243,7 @@ class ThermalPrinterService {
               ThermalRow(
                 sNo: int.parse(match.group(1)!),
                 productName: match.group(2)!,
-                qty: int.parse(match.group(3)!),
+                qty: double.parse(match.group(3)!),
                 rate: double.parse(match.group(4)!),
                 amount: double.parse(match.group(5)!),
               ),

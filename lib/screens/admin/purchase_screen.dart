@@ -18,6 +18,7 @@ import '../../widgets/barcode_scanner.dart';
 import '../../utils/purchase_invoice_generator.dart';
 import '../../widgets/empty_state.dart';
 import '../shared/product_form_screen.dart';
+import '../../utils/qty_format.dart';
 
 class PurchaseScreen extends ConsumerStatefulWidget {
   const PurchaseScreen({super.key});
@@ -1016,7 +1017,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                       return ListTile(
                         title: Text(product.name),
                         subtitle: Text(
-                          'Purchase: Rs${product.purchasePrice} | Stock: ${product.stock}',
+                          'Purchase: Rs${product.purchasePrice} | Stock: ${formatQty(product.stock)}',
                         ),
                         onTap: () {
                           Navigator.pop(ctx);

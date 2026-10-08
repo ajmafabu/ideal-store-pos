@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/paged_query.dart';
 
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
@@ -33,9 +34,9 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
       // Fetch all data in parallel
       final results = await Future.wait([
-        Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, items').gte('created_at', startStr).lt('created_at', endStr),
-        Supabase.instance.client.from('purchases').select('total_amount').gte('created_at', startStr).lt('created_at', endStr),
-        Supabase.instance.client.from('expenses').select('amount').gte('created_at', startStr).lt('created_at', endStr),
+        fetchAllRows(() => Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, items').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('purchases').select('total_amount').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('expenses').select('amount').gte('created_at', startStr).lt('created_at', endStr)),
       ]);
 
       final sales = results[0] as List;

@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/sale.dart';
 import '../utils/logger.dart';
 import '../utils/error_messages.dart';
+import '../utils/qty_format.dart';
 
 class EmailService {
   Future<bool> sendInvoiceEmail({
@@ -20,7 +21,7 @@ class EmailService {
 
     final itemSummary = sale.items
         .take(5)
-        .map((item) => '  ${item.name} x${item.qty} = Rs${item.total.toStringAsFixed(2)}')
+        .map((item) => '  ${item.name} x${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(2)}')
         .join('\n');
     final remainingItems = sale.items.length > 5 ? '\n  ...and ${sale.items.length - 5} more items' : '';
 

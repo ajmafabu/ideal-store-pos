@@ -5,6 +5,7 @@ import '../../config/providers.dart';
 import '../../models/product.dart';
 import '../../models/damaged_product.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 
 class DamagedScreen extends ConsumerStatefulWidget {
   const DamagedScreen({super.key});
@@ -174,7 +175,7 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
                   items: available.map((p) {
                     return DropdownMenuItem(
                       value: p,
-                      child: Text('${p.name} (Stock: ${p.stock})'),
+                      child: Text('${p.name} (Stock: ${formatQty(p.stock)})'),
                     );
                   }).toList(),
                   onChanged: (v) => setState(() => _selectedProduct = v),

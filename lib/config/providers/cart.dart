@@ -24,7 +24,7 @@ class CartNotifier extends Notifier<List<CartItem>> {
     state = List.from(state)..removeAt(index);
   }
 
-  void updateQty(int index, int delta) {
+  void updateQty(int index, double delta) {
     final item = state[index];
     final newQty = item.qty + delta;
     if (newQty <= 0) {
