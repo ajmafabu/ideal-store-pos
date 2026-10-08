@@ -127,6 +127,31 @@ class SaleService {
     return _loadOfflineSales(limit: limit);
   }
 
+  /// Sales older than [before] (newest first), for "Load older bills" in
+  /// sales history. Read-only and online-only; does not touch the offline cache.
+  Future<List<Sale>> getOlderSales({required DateTime before, int limit = 200}) async {
+    final response = await _client
+        .from('sales')
+        .select('*, customers(name)')
+        .lte('created_at', before.toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(limit)
+        .timeout(const Duration(seconds: 15));
+    final sales = <Sale>[];
+    for (final e in response as List) {
+      final map = Map<String, dynamic>.from(e as Map);
+      final customerData = map.remove('customers') as Map<String, dynamic>?;
+      try {
+        final sale = Sale.fromJson(map);
+        final customerName = customerData?['name'] as String?;
+        sales.add(customerName != null ? sale.copyWith(customerName: customerName) : sale);
+      } catch (ex) {
+        Logger.warning('Skipping unreadable sale ${map['id']}: $ex');
+      }
+    }
+    return sales;
+  }
+
   List<Sale> _loadOfflineSales({int limit = 50}) {
     final cached = _offlineService.getCachedSalesHistory();
     final pending = _offlineService.getPendingSales();

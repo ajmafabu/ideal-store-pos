@@ -373,7 +373,11 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
     );
   }
 
+  /// How far the round billing button rises above the bottom tab bar.
+  static const double _fabOverhang = 36;
+
   Widget _buildMobileLayout(int currentIndex) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -402,44 +406,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
         }
       },
       child: Scaffold(
-      body: _screens[currentIndex],
-      floatingActionButton: ScaleTransition(
-        scale: _fabScaleAnimation,
-        child: Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            gradient: currentIndex == 2 ? AppColors.fabGradient : AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: (currentIndex == 2 ? const Color(0xFFf5576c) : const Color(0xFF667eea)).withValues(alpha: 0.4),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: FloatingActionButton(
-            onPressed: () {
-              setState(() => ref.read(currentTabProvider.notifier).setTab(2));
-              _fabAnimController.reset();
-              _fabAnimController.forward();
-            },
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: const Icon(
-              Icons.point_of_sale,
-              size: 28,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
+      body: Column(
         children: [
+          Expanded(child: _screens[currentIndex]),
           // Sync status bar (only shows when there's pending data)
           Consumer(
             builder: (context, ref, _) {
@@ -508,6 +477,50 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
               );
             },
           ),
+          // The round billing button sticks up above the tab bar; keep this
+          // strip empty so it never covers a screen's bottom buttons
+          // (Complete Sale, Complete Purchase) or the sync bar.
+          if (!keyboardOpen) const SizedBox(height: _fabOverhang),
+        ],
+      ),
+      // hidden while typing: it floated over the Complete button
+      floatingActionButton: keyboardOpen ? null : ScaleTransition(
+        scale: _fabScaleAnimation,
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            gradient: currentIndex == 2 ? AppColors.fabGradient : AppColors.primaryGradient,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: (currentIndex == 2 ? const Color(0xFFf5576c) : const Color(0xFF667eea)).withValues(alpha: 0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            onPressed: () {
+              setState(() => ref.read(currentTabProvider.notifier).setTab(2));
+              _fabAnimController.reset();
+              _fabAnimController.forward();
+            },
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: const Icon(
+              Icons.point_of_sale,
+              size: 28,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           BottomAppBar(
             shape: const CircularNotchedRectangle(),
             notchMargin: 8,

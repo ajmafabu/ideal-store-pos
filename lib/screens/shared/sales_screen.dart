@@ -158,6 +158,48 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
   String _dateFilter = 'all';
   String _searchQuery = '';
 
+  // The history list holds only the latest bills (salesHistoryProvider).
+  // Older ones are fetched on request ("Load older bills").
+  static const _olderPageSize = 200;
+  final List<Sale> _older = [];
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  List<Sale> _all = const [];
+
+  Future<void> _loadOlder() async {
+    if (_loadingMore || !_hasMore || _all.isEmpty) return;
+    setState(() => _loadingMore = true);
+    try {
+      final oldest = _all.map((s) => s.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
+      final page = await ref.read(saleServiceProvider).getOlderSales(before: oldest, limit: _olderPageSize);
+      if (!mounted) return;
+      final known = _all.map((s) => s.id).toSet();
+      setState(() {
+        _older.addAll(page.where((s) => !known.contains(s.id)));
+        _hasMore = page.length >= _olderPageSize;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load older bills: ${ErrorMessages.parse(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  /// Keep loading older bills until the list reaches back to [cutoff].
+  Future<void> _loadBackTo(DateTime cutoff) async {
+    while (mounted && _hasMore && !_loadingMore && _all.isNotEmpty &&
+        _all.map((s) => s.createdAt).reduce((a, b) => a.isBefore(b) ? a : b).isAfter(cutoff)) {
+      final before = _older.length;
+      await _loadOlder();
+      if (_older.length == before) break; // error or nothing new
+      _all = [..._all, ..._older.skip(before)];
+    }
+  }
+
   String _generateInvoiceText(Sale sale) {
     final profile = ref.read(profileProvider).value;
     return ThermalInvoice.generate(
@@ -228,8 +270,11 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
             );
           }
 
+          final loadedIds = sales.map((s) => s.id).toSet();
+          _all = [...sales, ..._older.where((s) => !loadedIds.contains(s.id))];
+
           // Apply filters
-          var filtered = sales.where((s) {
+          var filtered = _all.where((s) {
             // Payment method filter
             if (_paymentFilters.isNotEmpty &&
                 !_paymentFilters.contains(s.paymentMethod))
@@ -375,7 +420,9 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${filtered.length} sales',
+                    _hasMore
+                        ? '${filtered.length} sales (latest ${_all.length} bills loaded)'
+                        : '${filtered.length} sales',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ),
@@ -400,8 +447,20 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: filtered.length,
+                  itemCount: filtered.length + (_hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == filtered.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: _loadingMore
+                            ? const Center(child: CircularProgressIndicator())
+                            : OutlinedButton.icon(
+                                onPressed: _loadOlder,
+                                icon: const Icon(Icons.history),
+                                label: const Text('Load older bills'),
+                              ),
+                      );
+                    }
                     final sale = filtered[index];
                     final paymentColor = AppColors.getPaymentColor(
                       sale.paymentMethod,
@@ -1246,7 +1305,11 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
         backgroundColor: Colors.grey.shade100,
         checkmarkColor: Colors.white,
         visualDensity: VisualDensity.compact,
-        onSelected: (_) => setState(() => _dateFilter = value),
+        onSelected: (_) {
+          setState(() => _dateFilter = value);
+          final days = value == '7d' ? 7 : value == '30d' ? 30 : null;
+          if (days != null) _loadBackTo(DateTime.now().subtract(Duration(days: days)));
+        },
       ),
     );
   }
