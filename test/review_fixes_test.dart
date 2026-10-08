@@ -8,6 +8,9 @@ import 'package:http/testing.dart';
 import 'package:ideal_store_pos/config/desktop_billing_provider.dart';
 import 'package:ideal_store_pos/config/hive_adapter.dart';
 import 'package:ideal_store_pos/models/product.dart';
+import 'package:ideal_store_pos/models/product_return.dart';
+import 'package:ideal_store_pos/models/purchase.dart';
+import 'package:ideal_store_pos/models/purchase_order.dart';
 import 'package:ideal_store_pos/models/profile.dart';
 import 'package:ideal_store_pos/models/sale.dart';
 import 'package:ideal_store_pos/services/backup_service.dart';
@@ -188,6 +191,16 @@ void main() {
       final p = Product.fromJson({'id': 'p', 'name': 'Dal', 'stock': 0.5});
       expect(p.stock, 0.5); // it read as 0: "out of stock"
       expect(p.isLowStock, isTrue);
+    });
+
+    test('purchases, purchase orders and returns keep decimals', () {
+      final bought = PurchaseItem.fromJson({'product_id': 'p', 'name': 'Dal', 'price': 120, 'qty': 25.5, 'unit': 'kg'});
+      expect(bought.qty, 25.5); // it was rounded to 26
+      expect(bought.total, 3060);
+      expect(PurchaseItem.fromJson(bought.toJson()).qty, 25.5);
+      expect(PurchaseOrderItem.fromJson({'product_id': 'p', 'name': 'Dal', 'qty': 2.5, 'price': 120}).qty, 2.5);
+      final back = ProductReturn.fromJson({'id': 'r', 'product_name': 'Dal', 'quantity': 0.5, 'created_at': '2026-10-08T10:00:00Z'});
+      expect(back.quantity, 0.5); // it was rounded to 1 (or 0)
     });
 
     test('quantities print without needless decimals', () {

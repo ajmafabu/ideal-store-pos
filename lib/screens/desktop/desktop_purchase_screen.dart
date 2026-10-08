@@ -179,7 +179,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
 
   void _addItem() {
     final product = _selectedProduct;
-    final qty = int.tryParse(_qtyController.text) ?? 0;
+    final qty = double.tryParse(_qtyController.text) ?? 0;
     final price = double.tryParse(_priceController.text) ?? 0;
     if (product == null || qty <= 0 || price <= 0) return;
 
@@ -1185,7 +1185,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   dense: true,
                   title: Text(item.name),
                   subtitle: Text(
-                    'ID: ${item.productId} | ${item.qty} × Rs${item.price.toStringAsFixed(2)}${item.batchNumber != null ? ' | Batch: ${item.batchNumber}' : ''}',
+                    'ID: ${item.productId} | ${formatQty(item.qty)} × Rs${item.price.toStringAsFixed(2)}${item.batchNumber != null ? ' | Batch: ${item.batchNumber}' : ''}',
                   ),
                   trailing: Text('Rs${item.total.toStringAsFixed(2)}'),
                 ),
@@ -1437,7 +1437,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               ),
                               onPressed: () {
                                 final qty =
-                                    int.tryParse(qtyController.text) ?? 0;
+                                    double.tryParse(qtyController.text) ?? 0;
                                 final price =
                                     double.tryParse(priceController.text) ?? 0;
                                 if (qty <= 0 || price <= 0) return;
@@ -1608,7 +1608,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                                     horizontal: 4,
                                                   ),
                                               child: Text(
-                                                '${item.qty}',
+                                                formatQty(item.qty),
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 13,
@@ -2489,7 +2489,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                 width: 70,
                                 child: GestureDetector(
                                   onTap: () {
-                                    final qtyController = TextEditingController(text: item.qty.toString());
+                                    final qtyController = TextEditingController(text: formatQty(item.qty));
                                     showDialog(
                                       context: context,
                                       builder: (ctx) => AlertDialog(
@@ -2503,7 +2503,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             border: OutlineInputBorder(),
                                           ),
                                           onSubmitted: (_) {
-                                            final q = int.tryParse(qtyController.text);
+                                            final q = double.tryParse(qtyController.text);
                                             if (q != null && q > 0) {
                                               ref.read(desktopPurchaseProvider.notifier).updateItemQty(index, q);
                                               setState(() {});
@@ -2515,7 +2515,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
                                           ElevatedButton(
                                             onPressed: () {
-                                              final q = int.tryParse(qtyController.text);
+                                              final q = double.tryParse(qtyController.text);
                                               if (q != null && q > 0) {
                                                 ref.read(desktopPurchaseProvider.notifier).updateItemQty(index, q);
                                                 setState(() {});
@@ -2539,7 +2539,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          '${item.qty}',
+                                          formatQty(item.qty),
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w600,
                                             fontSize: 13,

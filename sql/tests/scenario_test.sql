@@ -347,4 +347,28 @@ INSERT INTO sales (id, items, total_amount, final_amount, created_at) VALUES
 SELECT set_config('app.bulk_mode', 'off', false);
 SELECT t.ok((SELECT created_at FROM sales WHERE id='50000000-0000-0000-0000-0000000000f4') < now() - interval '399 days', 'a restore keeps old bills on their own dates');
 
+-- loose goods by weight: buy 2.5 kg, sell 1.5 kg, return 0.5 kg (decimal purchases/returns)
+SET ROLE authenticated;
+INSERT INTO products (id, name, purchase_price, selling_price, stock, unit, unit_type, gst_rate) VALUES
+  ('10000000-0000-0000-0000-0000000000d1', 'Toor Dal loose', 0, 140, 0, 'kg', 'pieces', 0);
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method)
+VALUES ('40000000-0000-0000-0000-0000000000d1', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000d1","name":"Toor Dal loose","qty":2.5,"price":120}]', 300, 'cash');
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method)
+VALUES ('50000000-0000-0000-0000-0000000000d1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000d1","name":"Toor Dal loose","qty":1.5,"price":140,"total":210}]', 210, 210, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Toor Dal loose'), 1.0, 'decimal purchase 2.5 kg - sale 1.5 kg leaves 1 kg');
+SELECT t.eq(t.batches('Toor Dal loose'), 1.0, 'batches follow the decimal sale');
+SET ROLE authenticated;
+SELECT (create_return_atomic('60000000-0000-0000-0000-0000000000d1','10000000-0000-0000-0000-0000000000d1',
+   '50000000-0000-0000-0000-0000000000d1','Toor Dal loose',0.5)).return_amount AS dal_ret \gset
+RESET ROLE;
+SELECT t.eq(:'dal_ret', 70, 'returning 0.5 kg refunds half a kilo');
+SELECT t.eq(t.stock('Toor Dal loose'), 1.5, 'the returned 0.5 kg is back in stock');
+SET ROLE authenticated;
+SELECT t.fails($$SELECT create_return_atomic('60000000-0000-0000-0000-0000000000d2','10000000-0000-0000-0000-0000000000d1',
+   '50000000-0000-0000-0000-0000000000d1','Toor Dal loose',1.25)$$, 'Cannot return', 'cannot return more than is left of the line (1 kg)');
+RESET ROLE;
+
 \echo ALL SCENARIO TESTS PASSED

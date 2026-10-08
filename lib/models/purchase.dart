@@ -4,7 +4,8 @@ class PurchaseItem {
   final String productId;
   final String name;
   final double price;
-  int qty;
+  /// Decimal for loose goods bought by weight (25.5 kg).
+  double qty;
   final String unit;
   final double gstRate;
   final String? hsnCode;
@@ -36,7 +37,7 @@ class PurchaseItem {
   /// factor). Pass `batchNumber: null` / `expiryDate: null` to clear them.
   PurchaseItem copyWith({
     double? price,
-    int? qty,
+    double? qty,
     Object? batchNumber = _keep,
     Object? expiryDate = _keep,
   }) => PurchaseItem(
@@ -78,7 +79,7 @@ class PurchaseItem {
     productId: json['product_id'] as String,
     name: json['name'] as String,
     price: (json['price'] as num).toDouble(),
-    qty: (json['qty'] as num).round(),
+    qty: (json['qty'] as num).toDouble(),
     unit: json['unit'] as String? ?? 'pcs',
     gstRate: (json['gst_rate'] as num?)?.toDouble() ?? 0,
     hsnCode: json['hsn_code'] as String?,

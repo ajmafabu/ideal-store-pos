@@ -4,6 +4,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/purchase.dart';
 import '../utils/app_timezone.dart';
+import 'qty_format.dart';
 
 class PurchaseInvoiceGenerator {
   static String _purchaseId(Purchase purchase) {
@@ -55,7 +56,7 @@ class PurchaseInvoiceGenerator {
           pw.Row(
             children: [
               pw.Expanded(flex: 4, child: pw.Text(item.name, style: pw.TextStyle(fontSize: 9))),
-              pw.Expanded(flex: 2, child: pw.Text('${item.qty}', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 9))),
+              pw.Expanded(flex: 2, child: pw.Text(formatQty(item.qty), textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: 9))),
               pw.Expanded(flex: 3, child: pw.Text('Rs${item.price.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9))),
               pw.Expanded(flex: 3, child: pw.Text('Rs${item.total.toStringAsFixed(2)}', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: 9))),
             ],
