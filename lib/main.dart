@@ -25,11 +25,32 @@ void main() async {
 
   runZonedGuarded(
     () async {
-      await Hive.initFlutter();
-      await HiveAdapter.init();
-
       final offlineService = OfflineService();
-      await offlineService.init();
+      try {
+        await Hive.initFlutter();
+        await HiveAdapter.init();
+        await offlineService.init();
+      } catch (e, st) {
+        // never wipe the local data to get past this: unsent bills live there
+        Logger.error('Local data could not be opened', e, st);
+        runApp(const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'Ideal Store POS could not open its saved data.\n\n'
+                  'If the app is already open in another window, close it and start the app again.\n\n'
+                  'Nothing was deleted. If this keeps happening, restart the computer and contact support.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ),
+          ),
+        ));
+        return;
+      }
 
       final connectivityService = ConnectivityService();
       await connectivityService.init();
@@ -118,6 +139,8 @@ void main() async {
 
       runApp(const ProviderScope(child: MyApp()));
 
+      if (HiveAdapter.recoveredBoxes.isNotEmpty) _showRecoveredDataWarning();
+
       // Auto-update check — 7s after runApp to ensure navigator is ready
       _scheduleUpdateCheck();
     },
@@ -125,6 +148,33 @@ void main() async {
       Logger.error('Uncaught Error', error, stack);
     },
   );
+}
+
+/// Some saved data could not be read at start-up (see HiveAdapter.openBoxSafely).
+/// The original files were kept; tell the user so unsent bills can be checked.
+void _showRecoveredDataWarning([int attempt = 1]) {
+  Timer(const Duration(seconds: 3), () {
+    final context = routerNavigatorKey.currentContext;
+    if (context == null) {
+      if (attempt < 10) _showRecoveredDataWarning(attempt + 1);
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Some saved data was damaged'),
+        content: SelectableText(
+          'Part of the data saved on this computer could not be read '
+          '(${HiveAdapter.recoveredBoxes.join(', ')}).\n\n'
+          'Bills made while offline may not have been sent. Check today\'s sales, '
+          'and re-enter any bill that is missing.\n\n'
+          'A copy of the original files was kept here — do not delete it:\n'
+          '${HiveAdapter.recoveryDir}',
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+      ),
+    );
+  });
 }
 
 void _scheduleUpdateCheck() {
