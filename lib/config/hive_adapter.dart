@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:hive_ce/hive.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/logger.dart';
 
 class HiveAdapter {
   static const String pendingSalesBox = 'pending_sales';
@@ -57,30 +58,68 @@ class HiveAdapter {
     return key;
   }
 
+  /// Boxes that lost unreadable entries when opened (damaged file or a
+  /// changed key). The file as it was is kept in [recoveryDir]; main() tells
+  /// the user.
+  static final List<String> recoveredBoxes = [];
+  static String? recoveryDir;
+
+  /// Opens an encrypted box without silently losing data such as unsent bills.
+  ///
+  /// Hive repairs a damaged box by cutting it at the first unreadable entry
+  /// (with a wrong key: all of it) and raises no error. So the file is copied
+  /// first; if opening made it shorter, the copy is kept in
+  /// `hive_recovery/<time>/` and the box is reported. A box that cannot be
+  /// opened at all (e.g. the app is already running) is never deleted: the
+  /// error goes to main(), which tells the user.
+  @visibleForTesting
+  static Future<Box<Map>> openBoxSafely(String name, HiveAesCipher cipher, String dir) async {
+    final sep = Platform.pathSeparator;
+    final file = File('$dir$sep$name.hive');
+    final sizeBefore = await file.exists() ? await file.length() : 0;
+    File? copy;
+    if (sizeBefore > 0) {
+      try {
+        copy = await file.copy('$dir$sep$name.hive.before_open');
+      } catch (e) {
+        Logger.warning('Could not copy $name before opening: $e');
+      }
+    }
+    try {
+      // without a copy, fail loudly instead of cutting the file
+      final box = await Hive.openBox<Map>(name, encryptionCipher: cipher, crashRecovery: copy != null);
+      final kept = copy;
+      if (kept != null && await file.length() < sizeBefore) {
+        copy = null;   // keep it
+        recoveredBoxes.add(name);
+        final now = DateTime.now();
+        String two(int n) => n.toString().padLeft(2, '0');
+        final folder = Directory('$dir${sep}hive_recovery$sep'
+            '${now.year}${two(now.month)}${two(now.day)}_${two(now.hour)}${two(now.minute)}${two(now.second)}');
+        var keptPath = kept.path;
+        try {
+          await folder.create(recursive: true);
+          keptPath = (await kept.rename('${folder.path}$sep$name.hive')).path;
+          recoveryDir = folder.path;
+        } catch (e) {
+          recoveryDir = dir;   // copy stays next to the box as <name>.hive.before_open
+        }
+        Logger.error('Local data "$name" was damaged; the original file is kept at $keptPath');
+      }
+      return box;
+    } finally {
+      try {
+        await copy?.delete();
+      } catch (_) {}
+    }
+  }
+
   static Future<void> init() async {
     _currentCipher = HiveAesCipher(await _getOrCreateKey());
     final cipher = _currentCipher!;
+    final dir = (await getApplicationDocumentsDirectory()).path;   // same folder as Hive.initFlutter()
 
-    Future<Box<Map>> openEncryptedBox(String name) async {
-      try {
-        return await Hive.openBox<Map>(name, encryptionCipher: cipher);
-      } catch (e) {
-        try {
-          if (Hive.isBoxOpen(name)) {
-            final box = Hive.box<Map>(name);
-            await box.close();
-          }
-        } catch (_) {}
-        try {
-          await Hive.deleteBoxFromDisk(name);
-        } catch (_) {}
-        try {
-          return await Hive.openBox<Map>(name, encryptionCipher: cipher);
-        } catch (e2) {
-          rethrow;
-        }
-      }
-    }
+    Future<Box<Map>> openEncryptedBox(String name) => openBoxSafely(name, cipher, dir);
 
     _pendingSalesBox = await openEncryptedBox(pendingSalesBox);
     _cachedSalesBox = await openEncryptedBox(cachedSalesBox);
@@ -96,6 +135,7 @@ class HiveAdapter {
     _pendingWritesBox = await openEncryptedBox(pendingWritesBox);
     _heldBillsBox = await openEncryptedBox(heldBillsBox);
     _pendingAuditBox = await openEncryptedBox(pendingAuditBox);
+    await openEncryptedBox(deadLetterBox);   // OfflineService reuses the open box
   }
 
   static late Box<Map> _pendingSalesBox;
