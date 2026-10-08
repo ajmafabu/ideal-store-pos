@@ -7,6 +7,7 @@ import '../../models/purchase_order.dart';
 import '../../models/supplier.dart';
 import '../../config/providers.dart';
 import '../../services/purchase_order_service.dart';
+import '../../utils/qty_format.dart';
 
 class PurchaseOrderScreen extends ConsumerStatefulWidget {
   const PurchaseOrderScreen({super.key});
@@ -303,7 +304,7 @@ class _OrderCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'x${item.qty} @ Rs${item.price.toStringAsFixed(0)}',
+                          'x${formatQty(item.qty)} @ Rs${item.price.toStringAsFixed(0)}',
                         ),
                         const SizedBox(width: 8),
                         Text(
@@ -1037,7 +1038,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
                         subtitle: GestureDetector(
                           onTap: () => _editItemPrice(index),
                           child: Text(
-                            'Rs${item.price.toStringAsFixed(0)} x ${item.qty} = Rs${item.total.toStringAsFixed(0)}',
+                            'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}',
                             style: const TextStyle(
                               color: Colors.blue,
                               decoration: TextDecoration.underline,
@@ -1055,7 +1056,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
                               onPressed: () => _updateItemQty(index, -1),
                             ),
                             Text(
-                              '${item.qty}',
+                              formatQty(item.qty),
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),

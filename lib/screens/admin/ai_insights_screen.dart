@@ -889,8 +889,8 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
             if (returnList.isEmpty && damagedList.isEmpty) return _empty();
 
             double totalReturnRefund = 0;
-            int totalReturnQty = 0;
-            final returnProducts = <String, int>{};
+            double totalReturnQty = 0;
+            final returnProducts = <String, double>{};
             for (final r in returnList) {
               final ret = r as ProductReturn;
               totalReturnRefund += ret.refundAmount;

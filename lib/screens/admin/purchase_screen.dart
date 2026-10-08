@@ -435,7 +435,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
 
   void _editItemQty(int index) {
     final item = _cart[index];
-    final qtyController = TextEditingController(text: '${item.qty}');
+    final qtyController = TextEditingController(text: formatQty(item.qty));
 
     showDialog(
       context: context,
@@ -445,11 +445,12 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Current: ${item.qty} ${item.unit}'),
+            Text('Current: ${formatQty(item.qty)} ${item.unit}'),
             const SizedBox(height: 12),
             TextField(
               controller: qtyController,
-              keyboardType: TextInputType.number,
+              // decimal for goods bought by weight (25.5 kg)
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'New Quantity',
                 border: OutlineInputBorder(),
@@ -465,7 +466,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
           ),
           TextButton(
             onPressed: () {
-              final newQty = int.tryParse(qtyController.text);
+              final newQty = double.tryParse(qtyController.text);
               if (newQty != null && newQty > 0) {
                 setState(() {
                   _cart[index] = item.copyWith(qty: newQty);
@@ -1315,7 +1316,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                   child: Row(
                                     children: [
                                       Text(
-                                        'Rs${item.price.toStringAsFixed(2)} x ${item.qty} = Rs${item.total.toStringAsFixed(2)}',
+                                        'Rs${item.price.toStringAsFixed(2)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(2)}',
                                         style: const TextStyle(
                                           color: Colors.blue,
                                           decoration: TextDecoration.underline,
@@ -1361,7 +1362,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                     GestureDetector(
                                       onTap: () => _editItemQty(index),
                                       child: Text(
-                                        '${item.qty}',
+                                        formatQty(item.qty),
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -1758,7 +1759,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                           .map(
                             (item) => [
                               item.name,
-                              '${item.qty}',
+                              formatQty(item.qty),
                               'Rs${item.price.toStringAsFixed(2)}',
                               'Rs${item.total.toStringAsFixed(2)}',
                             ],
@@ -1934,7 +1935,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      'Rs${item.price.toStringAsFixed(2)} x ${item.qty}',
+                      'Rs${item.price.toStringAsFixed(2)} x ${formatQty(item.qty)}',
                     ),
                     trailing: Text(
                       'Rs${item.total.toStringAsFixed(2)}',
@@ -2249,7 +2250,7 @@ class _EditPurchaseDialogState extends State<_EditPurchaseDialog> {
                       subtitle: Row(
                         children: [
                           Text(
-                            'Rs${item.price.toStringAsFixed(0)} x ${item.qty} = Rs${item.total.toStringAsFixed(0)}',
+                            'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}',
                             style: const TextStyle(fontSize: 11),
                           ),
                           if (_allProducts
@@ -2282,7 +2283,7 @@ class _EditPurchaseDialogState extends State<_EditPurchaseDialog> {
                             onPressed: () => _updateQty(index, -1),
                           ),
                           Text(
-                            '${item.qty}',
+                            formatQty(item.qty),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           IconButton(

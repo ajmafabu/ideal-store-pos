@@ -27,7 +27,7 @@ class PurchaseSession {
   double get totalBeforeDiscount => subtotal;
   double get totalAfterDiscount => subtotal - discount + extraCharges;
   int get itemCount => items.length;
-  int get totalQty => items.fold(0, (sum, item) => sum + item.qty);
+  double get totalQty => items.fold(0.0, (sum, item) => sum + item.qty);
 }
 
 class DesktopPurchaseNotifier extends Notifier<List<PurchaseSession>> {
@@ -81,7 +81,7 @@ class DesktopPurchaseNotifier extends Notifier<List<PurchaseSession>> {
     }
   }
 
-  void updateItemQty(int index, int qty) {
+  void updateItemQty(int index, double qty) {
     final session = state[_activeSessionIndex];
     if (qty <= 0) {
       session.items.removeAt(index);

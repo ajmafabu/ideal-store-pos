@@ -21,7 +21,8 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
   String _billSearch = '';
   Map<String, dynamic>? _selectedBill;
   List<CartItem> _billItems = [];
-  final Map<String, int> _returnQty = {};
+  // decimal: 0.5 kg of a 1.5 kg line can be returned
+  final Map<String, double> _returnQty = {};
   bool _submitting = false;
 
   @override
@@ -80,8 +81,8 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
   double get _totalRefund => _selectedItems.fold(
       0.0, (sum, item) => sum + (item.qty == 0 ? 0 : item.total / item.qty) * (_returnQty[item.productId] ?? 0));
 
-  int get _totalReturnQty =>
-      _returnQty.values.fold(0, (sum, q) => sum + q);
+  double get _totalReturnQty =>
+      _returnQty.values.fold(0.0, (sum, q) => sum + q);
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +170,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Qty: ${r.quantity} | Rs${r.refundAmount.toStringAsFixed(0)}',
+                                    'Qty: ${formatQty(r.quantity)} | Rs${r.refundAmount.toStringAsFixed(0)}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   if (r.originalSaleId != null)
@@ -447,7 +448,8 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                           if (isSelected) {
                             _returnQty.remove(item.productId);
                           } else {
-                            _returnQty[item.productId] = 1;
+                            // a line under 1 (e.g. 0.5 kg) starts at its full amount
+                            _returnQty[item.productId] = item.qty < 1 ? item.qty : 1;
                           }
                         });
                       },
@@ -520,23 +522,27 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                               icon: Icons.remove,
                               onTap: () {
                                 setState(() {
-                                  final current =
-                                      _returnQty[item.productId] ?? 1;
-                                  if (current <= 1) {
+                                  final next =
+                                      (_returnQty[item.productId] ?? 1) - 1;
+                                  if (next <= 0) {
                                     _returnQty.remove(item.productId);
                                   } else {
-                                    _returnQty[item.productId] = current - 1;
+                                    _returnQty[item.productId] = next;
                                   }
                                 });
                               },
                             ),
-                            Container(
-                              width: 36,
-                              alignment: Alignment.center,
-                              child: Text(
-                                '$returnQty',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 14),
+                            // tap to type an exact amount (0.25 kg)
+                            InkWell(
+                              onTap: () => _editReturnQty(item),
+                              child: Container(
+                                width: 44,
+                                alignment: Alignment.center,
+                                child: Text(
+                                  formatQty(returnQty),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
                               ),
                             ),
                             _qtyButton(
@@ -545,9 +551,9 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                 setState(() {
                                   final current =
                                       _returnQty[item.productId] ?? 0;
-                                  if (current < item.qty) {
-                                    _returnQty[item.productId] = current + 1;
-                                  }
+                                  // never more than was sold (1 → 1.5 for 1.5 kg)
+                                  final next = current + 1;
+                                  _returnQty[item.productId] = next > item.qty ? item.qty : next;
                                 });
                               },
                             ),
@@ -568,6 +574,42 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
         ],
       ),
     );
+  }
+
+  /// Type an exact return amount for a line, up to what was sold.
+  Future<void> _editReturnQty(CartItem item) async {
+    final ctrl = TextEditingController(text: formatQty(_returnQty[item.productId] ?? 0));
+    final value = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Return quantity — ${item.name}'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Quantity',
+            helperText: 'Up to ${formatQty(item.qty)} ${item.unit}',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, double.tryParse(ctrl.text.trim())),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || !mounted) return;
+    if (value <= 0 || value > item.qty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Enter more than 0 and at most ${formatQty(item.qty)}')),
+      );
+      return;
+    }
+    setState(() => _returnQty[item.productId] = value);
   }
 
   Widget _qtyButton(
@@ -617,7 +659,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('${item.name} x$qty',
+                        Text('${item.name} x${formatQty(qty)}',
                             style: const TextStyle(
                                 fontSize: 11, fontWeight: FontWeight.w600)),
                         const SizedBox(width: 4),
@@ -656,7 +698,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  '$_totalReturnQty items',
+                  '${formatQty(_totalReturnQty)} items',
                   style:
                       TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),

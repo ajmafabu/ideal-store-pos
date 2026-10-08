@@ -3,7 +3,8 @@ class ProductReturn {
   final String? saleId;
   final String? productId;
   final String productName;
-  final int quantity;
+  /// Decimal: 0.5 kg of a 1.5 kg line can be returned.
+  final double quantity;
   final double unitPrice;
   final double refundAmount;
   final String? reason;
@@ -47,7 +48,7 @@ class ProductReturn {
       saleId: json['sale_id'] as String?,
       productId: json['product_id'] as String?,
       productName: json['product_name'] as String? ?? '',
-      quantity: (json['quantity'] as num?)?.round() ?? 0,
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
       refundAmount: (json['refund_amount'] as num?)?.toDouble() ?? 0,
       reason: json['reason'] as String?,

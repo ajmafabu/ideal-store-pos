@@ -1,7 +1,7 @@
 class PurchaseOrderItem {
   final String productId;
   final String name;
-  final int qty;
+  final double qty;
   final double price;
   final bool received;
 
@@ -19,7 +19,7 @@ class PurchaseOrderItem {
     return PurchaseOrderItem(
       productId: json['product_id'] as String,
       name: json['name'] as String? ?? '',
-      qty: (json['qty'] as num?)?.toInt() ?? 0,
+      qty: (json['qty'] as num?)?.toDouble() ?? 0,
       price: (json['price'] as num?)?.toDouble() ?? 0,
       received: json['received'] as bool? ?? false,
     );
