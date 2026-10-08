@@ -571,12 +571,12 @@ class _WeeklyChart extends ConsumerWidget {
                     child: Text('No data', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
                   );
                 }
-                final maxVal = days.map((d) => d['total'] as double).reduce(max);
+                final maxVal = days.map((d) => (d['total'] as num? ?? 0).toDouble()).reduce(max);
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: List.generate(days.length, (i) {
                     final day = days[i];
-                    final total = day['total'] as double;
+                    final total = (day['total'] as num? ?? 0).toDouble();
                     final label = day['day'] as String;
                     final height = maxVal > 0 ? (total / maxVal * 90) : 0.0;
                     return Expanded(
