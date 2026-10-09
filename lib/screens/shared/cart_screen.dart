@@ -170,6 +170,20 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   void _showQtyPopup(Product product) {
     String qtyText = '1';
+    // "1" starts selected, so typing 3 gives 3 and not 13 (QA #25)
+    final qtyController = TextEditingController(text: '1')
+      ..selection = const TextSelection(baseOffset: 0, extentOffset: 1);
+    // Close this box first, then add: adding opens the rate picker for
+    // products with a second rate, and popping after that closed the picker
+    // instead — the item went in at the first rate and this box stayed open,
+    // so a second "Add" added it again (QA #22).
+    void addAndClose(BuildContext ctx) {
+      final qty = double.tryParse(qtyText) ?? 0;
+      if (qty <= 0) return;
+      Navigator.pop(ctx);
+      _addToCartWithQty(product, qty);
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -196,16 +210,10 @@ class CartScreenState extends ConsumerState<CartScreen>
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
-                controller: TextEditingController(text: '1'),
+                controller: qtyController,
                 autofocus: true,
                 onChanged: (v) => qtyText = v,
-                onSubmitted: (_) {
-                  final qty = double.tryParse(qtyText) ?? 0;
-                  if (qty > 0) {
-                    _addToCartWithQty(product, qty);
-                    Navigator.pop(ctx);
-                  }
-                },
+                onSubmitted: (_) => addAndClose(ctx),
               ),
             ),
           ],
@@ -216,13 +224,7 @@ class CartScreenState extends ConsumerState<CartScreen>
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () {
-              final qty = double.tryParse(qtyText) ?? 0;
-              if (qty > 0) {
-                _addToCartWithQty(product, qty);
-                Navigator.pop(ctx);
-              }
-            },
+            onPressed: () => addAndClose(ctx),
             child: const Text('Add'),
           ),
         ],

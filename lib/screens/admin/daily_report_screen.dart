@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/qty_format.dart';
 import '../../utils/paged_query.dart';
 
 class DailyReportScreen extends StatefulWidget {
@@ -34,7 +35,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
       // Fetch all data in parallel
       final results = await Future.wait([
-        fetchAllRows(() => Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, items').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, cash_amount, digital_amount, items').gte('created_at', startStr).lt('created_at', endStr)),
         fetchAllRows(() => Supabase.instance.client.from('purchases').select('total_amount').gte('created_at', startStr).lt('created_at', endStr)),
         fetchAllRows(() => Supabase.instance.client.from('expenses').select('amount').gte('created_at', startStr).lt('created_at', endStr)),
       ]);
@@ -48,7 +49,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       double digitalSales = 0;
       double creditSales = 0;
       double cashCollected = 0;
-      int totalItems = 0;
+      double totalItems = 0; // decimals: 1.5 kg (QA #58)
 
       for (final sale in sales) {
         final amount = (sale['final_amount'] as num?)?.toDouble() ?? 0;
@@ -58,10 +59,17 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         final items = sale['items'] as List? ?? [];
 
         totalSales += amount;
-        totalItems += items.fold<int>(0, (sum, item) => sum + ((item['qty'] as int?) ?? 0));
+        // a 1.5 kg line made this throw and the screen kept the previous day
+        totalItems += items.fold<double>(0, (sum, item) => sum + (((item as Map)['qty'] as num?)?.toDouble() ?? 0));
 
         if (isCredit) {
           creditSales += amount;
+        } else if (method == 'split') {
+          // its cash part and UPI part, not all of it as "Digital" (QA #59)
+          final cashPart = (sale['cash_amount'] as num?)?.toDouble() ?? 0;
+          final digitalPart = (sale['digital_amount'] as num?)?.toDouble() ?? (amount - cashPart);
+          cashSales += cashPart;
+          digitalSales += digitalPart;
         } else if (method == 'cash') {
           cashSales += amount;
         } else {
@@ -95,9 +103,11 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         };
       });
     } catch (e) {
+      // never leave the previous day's figures under the new date
+      if (mounted) setState(() => _report = null);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Could not load this day: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -198,7 +208,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                       _StatRow(label: 'Total Expenses', value: 'Rs${(_report!['total_expenses'] as double).toStringAsFixed(0)}'),
                       _StatRow(label: 'Cash Collected', value: 'Rs${(_report!['cash_collected'] as double).toStringAsFixed(0)}'),
                       _StatRow(label: 'Total Transactions', value: '${_report!['total_transactions']}'),
-                      _StatRow(label: 'Items Sold', value: '${_report!['total_items_sold']}'),
+                      _StatRow(label: 'Items Sold', value: formatQty(_report!['total_items_sold'] as num)),
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(16),

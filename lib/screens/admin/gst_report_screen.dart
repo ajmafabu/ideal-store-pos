@@ -19,7 +19,9 @@ class GSTReportScreen extends ConsumerStatefulWidget {
 
 class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
   DateTime _startDate = AppTimezone.monthStartIst();
-  DateTime _endDate = AppTimezone.monthEndIst();
+  // last day of the month, inclusive (the query adds a day). monthEndIst() is
+  // the 1st of next month, so October's GSTR included 1 November (QA #36).
+  DateTime _endDate = AppTimezone.monthEndIst().subtract(const Duration(days: 1));
   bool _loading = false;
   List<Map<String, dynamic>> _hsnData = [];
   double _totalSales = 0;
@@ -432,11 +434,12 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
         ),
         const SizedBox(height: 8),
 
-        // Inward Supplies (Reverse Charge)
+        // GST paid on ordinary purchases = input tax credit (GSTR-3B table 4).
+        // It was labelled "3.2 Inward Supplies (Reverse Charge)" (QA #82).
         _gstr3bCard(
-          title: '3.2 - Inward Supplies (Reverse Charge)',
+          title: '4 - Eligible ITC (GST paid on purchases)',
           rows: [
-            _Gstr3bRow('Taxable Value', (data['inward_taxable'] as num?)?.toDouble() ?? 0),
+            _Gstr3bRow('Purchases (taxable value)', (data['inward_taxable'] as num?)?.toDouble() ?? 0),
             _Gstr3bRow('IGST', (data['inward_igst'] as num?)?.toDouble() ?? 0),
             _Gstr3bRow('CGST', (data['inward_cgst'] as num?)?.toDouble() ?? 0),
             _Gstr3bRow('SGST', (data['inward_sgst'] as num?)?.toDouble() ?? 0),

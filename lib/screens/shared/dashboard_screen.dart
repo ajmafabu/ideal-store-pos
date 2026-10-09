@@ -9,6 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/product_profit.dart';
+import '../../utils/qty_format.dart';
 import '../admin/profit_details_screen.dart';
 import '../admin/all_profitable_products_screen.dart';
 import 'dashboard_widgets/greeting_header.dart';
@@ -774,46 +776,11 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
         costMap[p['id'] as String] = (p['purchase_price'] as num?)?.toDouble() ?? 0;
       }
 
-      // Aggregate profit per product from actual sales
-      final Map<String, Map<String, dynamic>> productData = {};
-      for (final sale in salesRes as List) {
-        final items = sale['items'] as List? ?? [];
-        for (final item in items) {
-          final name = item['name'] as String? ?? 'Unknown';
-          final productId = item['product_id'] as String? ?? '';
-          final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
-          var costPrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-          if (costPrice <= 0) costPrice = costMap[productId] ?? 0;
-
-          if (!productData.containsKey(name)) {
-            productData[name] = {
-              'name': name,
-              'qtySold': 0,
-              'revenue': 0.0,
-              'cost': 0.0,
-            };
-          }
-          productData[name]!['qtySold'] += qty;
-          productData[name]!['revenue'] += itemTotal;
-          productData[name]!['cost'] += costPrice * qty;
-        }
-      }
-
-      // Calculate profit and sort
-      final results = productData.values.map((d) {
-        final revenue = d['revenue'] as double;
-        final cost = d['cost'] as double;
-        final profit = revenue - cost;
-        final margin = revenue > 0 ? (profit / revenue * 100) : 0.0;
-        return {
-          'name': d['name'],
-          'qtySold': d['qtySold'],
-          'revenue': revenue,
-          'profit': profit,
-          'margin': margin,
-        };
-      }).toList()
+      // profit per product, decimals and returns included (QA #46)
+      final returnsRes = await fetchReturnsBetween(start, end);
+      final results = ProductProfit.compute(sales: salesRes, returns: returnsRes, costMap: costMap)
+          .map((p) => p.toMap())
+          .toList()
         ..sort((a, b) => (b['profit'] as double).compareTo(a['profit'] as double));
 
       if (mounted) {
@@ -888,7 +855,7 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
         children: List.generate(_topProducts.length, (i) {
           final item = _topProducts[i];
           final name = item['name'] as String;
-          final qtySold = item['qtySold'] as int;
+          final qtySold = formatQty(item['qtySold'] as num);
           final revenue = item['revenue'] as double;
           final profit = item['profit'] as double;
           final margin = item['margin'] as double;

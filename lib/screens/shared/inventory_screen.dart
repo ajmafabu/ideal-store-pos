@@ -272,7 +272,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 labelText: 'Quantity',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               autofocus: true,
             ),
           ],
@@ -284,7 +284,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           ),
           TextButton(
             onPressed: () async {
-              final qty = int.tryParse(controller.text) ?? 0;
+              // decimals for kg/litre items: 10.5 kg used to do nothing (QA #10)
+              final qty = double.tryParse(controller.text.trim()) ?? 0;
               if (qty > 0) {
                 try {
                   final left = await ref
@@ -313,7 +314,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           ),
           TextButton(
             onPressed: () async {
-              final qty = int.tryParse(controller.text) ?? 0;
+              final qty = double.tryParse(controller.text.trim()) ?? 0;
               if (qty > 0 && qty <= product.stock) {
                 try {
                   final left = await ref
@@ -596,6 +597,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                           itemBuilder: (context, index) {
                             final product = filteredProducts[index];
                             return _ReconciliationRow(
+                              // without a key a filtered list reused another
+                              // product's count box: one tap saved the wrong
+                              // stock (QA #9: 120 became 1)
+                              key: ValueKey(product.id),
                               product: product,
                               ref: ref,
                             );
@@ -1527,7 +1532,7 @@ class _ReconciliationRow extends StatefulWidget {
   final Product product;
   final WidgetRef ref;
 
-  const _ReconciliationRow({required this.product, required this.ref});
+  const _ReconciliationRow({super.key, required this.product, required this.ref});
 
   @override
   State<_ReconciliationRow> createState() => _ReconciliationRowState();
@@ -1535,11 +1540,17 @@ class _ReconciliationRow extends StatefulWidget {
 
 class _ReconciliationRowState extends State<_ReconciliationRow> {
   late final TextEditingController _qtyController;
+  late double _systemQty;
+  bool _saving = false;
+  // shown on the row: a SnackBar here appeared behind the bottom sheet
+  String? _result;
+  bool _resultOk = true;
 
   @override
   void initState() {
     super.initState();
-    _qtyController = TextEditingController(text: formatQty(widget.product.stock));
+    _systemQty = widget.product.stock;
+    _qtyController = TextEditingController(text: formatQty(_systemQty));
   }
 
   @override
@@ -1548,11 +1559,47 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
     super.dispose();
   }
 
+  Future<void> _save() async {
+    final physicalQty = double.tryParse(_qtyController.text.trim());
+    if (physicalQty == null || physicalQty < 0) {
+      setState(() {
+        _result = 'Enter the counted quantity';
+        _resultOk = false;
+      });
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _result = null;
+    });
+    final before = _systemQty;
+    final success = await widget.ref
+        .read(productServiceProvider)
+        .reconcileStock(widget.product.id, physicalQty, notes: 'Stock reconciliation');
+    widget.ref.invalidate(productsProvider);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _resultOk = success;
+      if (success) {
+        _systemQty = physicalQty;
+        _result = 'Saved: ${formatQty(before)} → ${formatQty(physicalQty)}';
+      } else {
+        _result = 'Not saved — check the stock and try again';
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
       title: Text(widget.product.name),
-      subtitle: Text('System Qty: ${formatQty(widget.product.stock)}'),
+      subtitle: Text(
+        _result ?? 'System Qty: ${formatQty(_systemQty)}',
+        style: _result == null
+            ? null
+            : TextStyle(color: _resultOk ? Colors.green.shade800 : Colors.red.shade800, fontWeight: FontWeight.w600),
+      ),
       trailing: SizedBox(
         width: 120,
         child: Row(
@@ -1571,40 +1618,19 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
                   border: OutlineInputBorder(),
                 ),
                 style: const TextStyle(fontSize: 13),
+                onChanged: (_) {
+                  if (_result != null) setState(() => _result = null);
+                },
               ),
             ),
             const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.save, size: 18, color: Colors.green),
-              onPressed: () async {
-                final physicalQty =
-                    double.tryParse(_qtyController.text) ?? widget.product.stock;
-                final success = await widget.ref
-                    .read(productServiceProvider)
-                    .reconcileStock(
-                      widget.product.id,
-                      physicalQty,
-                      notes: 'Stock reconciliation',
-                    );
-                widget.ref.invalidate(productsProvider);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? '${widget.product.name}: ${formatQty(widget.product.stock)} → $physicalQty'
-                            : 'Reconciliation saved but stock update failed. Check manually.',
-                      ),
-                      backgroundColor: success
-                          ? (physicalQty >= widget.product.stock
-                                ? Colors.green
-                                : Colors.orange)
-                          : Colors.red,
-                    ),
-                  );
-                }
-              },
-            ),
+            _saving
+                ? const SizedBox(width: 40, height: 40, child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2)))
+                : IconButton(
+                    tooltip: 'Save count',
+                    icon: const Icon(Icons.save, size: 18, color: Colors.green),
+                    onPressed: _save,
+                  ),
           ],
         ),
       ),

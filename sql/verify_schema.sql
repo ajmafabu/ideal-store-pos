@@ -124,5 +124,21 @@ checks AS (
          CASE WHEN count(*) = 1 THEN 'a wrong PC clock cannot misdate a bill'
               ELSE 'run sql/2026_10_sale_time_guard.sql' END
   FROM pg_trigger WHERE NOT tgisinternal AND tgname = 'a_sales_guard_time'
+  UNION ALL
+  SELECT 16, 'app can edit products',
+         CASE WHEN to_regprocedure('public.app_bulk_mode()') IS NULL THEN 'MISSING'
+              WHEN has_function_privilege('authenticated', 'public.app_bulk_mode()', 'EXECUTE') THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.app_bulk_mode()') IS NOT NULL
+                   AND has_function_privilege('authenticated', 'public.app_bulk_mode()', 'EXECUTE')
+              THEN 'stock guard can run for the app user'
+              ELSE 'product edits fail ("permission denied for function app_bulk_mode") — run sql/2026_10_stage1_fixes.sql' END
+  UNION ALL
+  SELECT 17, 'receivables aging',
+         CASE WHEN to_regprocedure('public.get_receivables_aging()') IS NULL THEN 'MISSING'
+              WHEN pg_get_functiondef(to_regprocedure('public.get_receivables_aging()')) ILIKE '%due_date::date%' THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.get_receivables_aging()') IS NOT NULL
+                   AND pg_get_functiondef(to_regprocedure('public.get_receivables_aging()')) ILIKE '%due_date::date%'
+              THEN 'works with date or timestamp due dates'
+              ELSE 'fails on timestamp due_date — run sql/2026_10_stage1_fixes.sql' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

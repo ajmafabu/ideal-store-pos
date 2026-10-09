@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
 import '../utils/logger.dart';
+import '../utils/network_errors.dart';
 import 'audit_service.dart';
 import 'offline_service.dart';
 
@@ -304,6 +305,10 @@ class ProductService {
       );
     } catch (e, stackTrace) {
       Logger.error('updateProduct', e, stackTrace);
+      // Only a lost connection is retried later. A server refusal used to be
+      // queued too, so the screen said "Product updated" while nothing was
+      // saved and the edit failed again on every sync (QA #6).
+      if (!isNetworkError(e)) rethrow;
       await _offlineService.queuePendingWrite({
         'table': 'products',
         'operation': 'update',

@@ -407,10 +407,10 @@ class SaleService {
           .map((e) => {
                 'product_id': e.key,
                 'name': names[e.key] ?? '',
-                'totalQty': (e.value[key] as num).toInt(),
+                'totalQty': (e.value[key] as num).toDouble(), // decimals (QA #60)
               })
           .toList()
-        ..sort((a, b) => (b['totalQty'] as int).compareTo(a['totalQty'] as int));
+        ..sort((a, b) => (b['totalQty'] as num).compareTo(a['totalQty'] as num));
       return rows.take(limit).toList();
     } catch (e) {
       Logger.warning('getTopSoldProducts failed: $e');

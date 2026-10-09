@@ -201,6 +201,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         batchNumber: _batchNumberController.text.trim().isEmpty
             ? null
             : _batchNumberController.text.trim(),
+        // not on this form: keep them, or the update would blank the shop and
+        // delete the product's variants
+        shopId: widget.product?.shopId,
+        hasVariants: widget.product?.hasVariants ?? false,
+        variants: widget.product?.variants ?? const [],
       );
 
       if (_isEditing) {
@@ -208,7 +213,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
         // stock is only changed through a physical count, never by
         // overwriting the column (#8)
         final oldStock = widget.product!.stock;
-        final newStock = int.tryParse(_stockController.text);
+        final newStock = double.tryParse(_stockController.text.trim()); // 35.5 kg is a valid count
         if (newStock != null && newStock != oldStock) {
           if (newStock < 0) throw Exception('Stock cannot be negative');
           await service.setPhysicalStock(product.id, newStock);

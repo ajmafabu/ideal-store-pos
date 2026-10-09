@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../utils/product_profit.dart';
 import '../../utils/app_timezone.dart';
 import '../../services/return_service.dart';
 import '../../services/damaged_service.dart';
@@ -203,9 +204,7 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
     for (final item in items) {
       final name = item['name'] as String? ?? 'Unknown';
       final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
-      final purchasePrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-      final qty = (item['qty'] as num?)?.toInt() ?? 0;
-      totalPurchaseCost += purchasePrice * qty;
+      totalPurchaseCost += ProductProfit.lineCost(item as Map); // decimal qty (QA #60)
       productSales[name] = (productSales[name] ?? 0) + itemTotal;
     }
   }
@@ -265,9 +264,7 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
     prevMonthSales += (s['final_amount'] as num?)?.toDouble() ?? 0;
     final items = s['items'] as List? ?? [];
     for (final item in items) {
-      final purchasePrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-      final qty = (item['qty'] as num?)?.toInt() ?? 0;
-      prevMonthPurchases += purchasePrice * qty;
+      prevMonthPurchases += ProductProfit.lineCost(item as Map);
     }
   }
 
@@ -1418,6 +1415,12 @@ class _ReportRow extends StatelessWidget {
 }
 
 class _BalanceSheetSection extends ConsumerWidget {
+  static Future<double> _totalLiabilities() async {
+    final res = await Supabase.instance.client.rpc('get_balance_sheet');
+    final row = res is List ? (res.isEmpty ? null : res.first) : res;
+    return ((row as Map?)?['total_liabilities'] as num?)?.toDouble() ?? 0;
+  }
+
   final WidgetRef ref;
   const _BalanceSheetSection({required this.ref});
 
@@ -1452,20 +1455,22 @@ class _BalanceSheetSection extends ConsumerWidget {
                       const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Text('Error: ${ErrorMessages.parse(e)}'),
                   data: (stockValue) {
-                    return FutureBuilder<double>(
-                      future: CustomerService().getTotalDebt(),
+                    return FutureBuilder<List<double>>(
+                      future: Future.wait([CustomerService().getTotalDebt(), _totalLiabilities()]),
                       builder: (ctx, snap) {
                         // an error used to show as "receivables 0"
                         if (snap.hasError) {
-                          return Text('Could not load receivables: ${ErrorMessages.parse(snap.error!)}');
+                          return Text('Could not load receivables / dues: ${ErrorMessages.parse(snap.error!)}');
                         }
-                        final receivables = snap.data ?? 0;
+                        final receivables = snap.data?[0] ?? 0;
                         final totalAssets =
                             cashBalance +
                             bankBalance +
                             stockValue +
                             receivables;
-                        const liabilities = 0.0;
+                        // supplier dues + GST payable, from the database's
+                        // balance sheet (was hard-coded to 0 — QA #37)
+                        final liabilities = snap.data?[1] ?? 0;
                         final equity = totalAssets - liabilities;
                         return Column(
                           children: [

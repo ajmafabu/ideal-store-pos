@@ -44,10 +44,10 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                   : _selectedDays <= 60
                       ? 'qty60d'
                       : 'qty90d';
-      final Map<String, int> salesCount = {};
+      final Map<String, double> salesCount = {}; // 0.5 kg sold is a sale (QA #60)
       final Map<String, DateTime> lastSold = {};
       stats.forEach((id, st) {
-        salesCount[id] = (st[key] as num?)?.toInt() ?? 0;
+        salesCount[id] = (st[key] as num?)?.toDouble() ?? 0;
         final last = st['lastSoldAt'];
         if (last is DateTime) lastSold[id] = last;
       });
@@ -60,7 +60,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
         final soldQty = salesCount[p.id] ?? 0;
         final lastSale = lastSold[p.id];
         if (lastSale == null) return true; // no sale in 90 days
-        if (soldQty == 0 && now.difference(lastSale).inDays > _selectedDays) return true;
+        if (soldQty <= 0 && now.difference(lastSale).inDays > _selectedDays) return true;
         if (p.stock > 20 && soldQty < 3) return true;
         return false;
       }).toList();
@@ -168,7 +168,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                         itemBuilder: (context, index) {
                           final data = _slowProducts[index];
                           final product = data['product'] as Product;
-                          final soldQty = data['soldQty'] as int;
+                          final soldQty = data['soldQty'] as num;
                           final lastSold = data['lastSold'] as DateTime?;
 
                           return Card(
@@ -201,7 +201,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  '$soldQty sold',
+                                  '${formatQty(soldQty)} sold',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,

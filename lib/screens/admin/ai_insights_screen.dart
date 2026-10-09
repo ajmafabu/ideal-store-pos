@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../utils/qty_format.dart';
 import '../../config/providers.dart';
 import '../../models/product_return.dart';
 import '../../models/damaged_product.dart';
@@ -899,8 +900,8 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
             }
 
             double totalDamagedValue = 0;
-            int totalDamagedQty = 0;
-            final damagedProducts = <String, int>{};
+            double totalDamagedQty = 0;
+            final damagedProducts = <String, double>{};
             for (final d in damagedList) {
               final dmg = d as DamagedProduct;
               totalDamagedValue += dmg.quantity * dmg.unitPrice;
@@ -943,7 +944,7 @@ class _ReturnsDamagedAnalytics extends ConsumerWidget {
                     icon: Icons.broken_image_rounded,
                     color: const Color(0xFFEF4444),
                     title: 'Damaged Goods',
-                    value: '$totalDamagedQty units',
+                    value: '${formatQty(totalDamagedQty)} units',
                     subtitle: '₹${totalDamagedValue.toStringAsFixed(0)} value lost to damage',
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamagedScreen())),
                   ),

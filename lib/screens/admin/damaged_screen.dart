@@ -59,7 +59,7 @@ class _DamagedScreenState extends ConsumerState<DamagedScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
-                      'Qty: ${d.quantity} | Rs${(d.unitPrice * d.quantity).toStringAsFixed(0)}\n${d.reason ?? ''}',
+                      'Qty: ${formatQty(d.quantity)} | Rs${(d.unitPrice * d.quantity).toStringAsFixed(0)}\n${d.reason ?? ''}',
                       style: const TextStyle(fontSize: 12),
                     ),
                     trailing: Text(
@@ -187,7 +187,7 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
             // Quantity
             TextField(
               controller: _qtyController,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
                 labelText: 'Quantity',
                 border: OutlineInputBorder(),
@@ -259,7 +259,7 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
       return;
     }
 
-    final qty = int.tryParse(_qtyController.text) ?? 0;
+    final qty = double.tryParse(_qtyController.text.trim()) ?? 0; // decimals for kg/litre (QA #60)
     if (qty <= 0) {
       ScaffoldMessenger.of(
         context,

@@ -72,6 +72,10 @@ UPDATE products SET selling_price = 11, stock = 999 WHERE name = 'Biscuit';
 RESET ROLE;
 SELECT t.eq((SELECT selling_price FROM products WHERE name='Biscuit'), 11, 'app price edit is saved (#8)');
 SELECT t.eq(t.stock('Biscuit'), 240, 'app update cannot overwrite stock (#8)');
+-- the live database refused every app product edit: the guard trigger runs as
+-- the app user and needs app_bulk_mode() (stage 1, QA #5)
+SELECT t.ok(has_function_privilege('authenticated', 'public.app_bulk_mode()', 'EXECUTE'), 'app user may run the stock guard (QA #5)');
+SELECT t.ok(NOT has_function_privilege('anon', 'public.app_bulk_mode()', 'EXECUTE'), 'anon still may not (verify check 8)');
 SET ROLE authenticated;
 UPDATE products SET selling_price = 10 WHERE name = 'Biscuit';
 RESET ROLE;

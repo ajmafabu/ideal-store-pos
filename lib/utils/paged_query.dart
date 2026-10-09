@@ -22,3 +22,13 @@ Future<List<Map<String, dynamic>>> fetchAllRows(
     if (batch.length < pageSize) return rows;
   }
 }
+
+/// Returns made in [startUtc, endUtc), with what the profit screens need to
+/// take them back out of sales (see `ProductProfit.compute`).
+Future<List<Map<String, dynamic>>> fetchReturnsBetween(DateTime startUtc, DateTime endUtc) {
+  return fetchAllRows(() => Supabase.instance.client
+      .from('product_returns')
+      .select('product_id, product_name, quantity, return_amount, refund_amount, cost_amount')
+      .gte('created_at', startUtc.toUtc().toIso8601String())
+      .lt('created_at', endUtc.toUtc().toIso8601String()));
+}

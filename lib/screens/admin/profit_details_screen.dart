@@ -1,12 +1,13 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/providers.dart';
 import '../../models/sale.dart';
-import '../../models/product.dart';
 import '../../services/product_service.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/product_profit.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/payment_methods.dart';
 import '../../utils/paged_query.dart';
@@ -23,9 +24,12 @@ class ProfitDetailsScreen extends ConsumerStatefulWidget {
 
 class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
   List<Map<String, dynamic>> _productProfits = [];
+  DateTime? _periodStartUtc;
+  DateTime? _periodEndUtc;
   double _totalRevenue = 0; // Sum of final_amount (matches Business Summary)
   double _totalCOGS = 0;
   double _totalExpenses = 0;
+  double _totalDamaged = 0; // damaged stock is a loss too (QA #44)
   bool _loading = true;
   String _selectedPeriod = 'all';
 
@@ -45,6 +49,9 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
       DateTime start;
       DateTime end = now;
       _totalRevenue = 0;
+      _totalCOGS = 0;
+      _totalExpenses = 0;
+      _totalDamaged = 0;
 
       switch (_selectedPeriod) {
         case 'daily':
@@ -69,6 +76,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
           .subtract(AppTimezone.localOffset);
       final endUtc = DateTime.utc(end.year, end.month, end.day + 1)
           .subtract(AppTimezone.localOffset);
+      _periodStartUtc = startUtc;
+      _periodEndUtc = endUtc;
 
       // Use SQL RPC for totals (same as dashboard)
       final res = await client.rpc('get_monthly_profit', params: {
@@ -81,6 +90,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
         _totalRevenue = (row['sales_total'] as num?)?.toDouble() ?? 0;
         _totalCOGS = (row['purchase_cost'] as num?)?.toDouble() ?? 0;
         _totalExpenses = (row['expenses_total'] as num?)?.toDouble() ?? 0;
+        _totalDamaged = (row['damaged_total'] as num?)?.toDouble() ?? 0;
       }
 
       // Still fetch sales for per-product breakdown
@@ -100,51 +110,13 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
             (p['purchase_price'] as num?)?.toDouble() ?? 0;
       }
 
-      // Calculate profit per product from sale items
-      final Map<String, Map<String, dynamic>> productData = {};
-
-      for (final sale in salesRes as List) {
-        final items = sale['items'] as List? ?? [];
-        for (final item in items) {
-          final name = item['name'] as String? ?? 'Unknown';
-          final tamilName = item['tamil_name'] as String?;
-          final productId = item['product_id'] as String? ?? '';
-          final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
-          var costPrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-          if (costPrice <= 0) {
-            costPrice = productCostMap[productId] ?? 0;
-          }
-
-          if (!productData.containsKey(name)) {
-            productData[name] = {
-              'name': name,
-              'tamilName': tamilName,
-              'qtySold': 0,
-              'totalSold': 0.0,
-              'totalCost': 0.0,
-            };
-          }
-          productData[name]!['qtySold'] += qty;
-          productData[name]!['totalSold'] += itemTotal;
-          productData[name]!['totalCost'] += costPrice * qty;
-        }
-      }
-
-      // Calculate profit for each product
-      _productProfits = productData.values.map((data) {
-        final sold = data['totalSold'] as double;
-        final cost = data['totalCost'] as double;
-        return {
-          'name': data['name'],
-          'tamilName': data['tamilName'],
-          'qtySold': data['qtySold'],
-          'totalSold': sold,
-          'totalCost': cost,
-          'profit': sold - cost,
-          'margin': sold > 0 ? ((sold - cost) / sold * 100) : 0.0,
-        };
-      }).toList();
+      // profit per product, decimals and returns included (QA #42, #43)
+      final returnsRes = await fetchReturnsBetween(startUtc, endUtc);
+      _productProfits = ProductProfit.compute(
+        sales: salesRes,
+        returns: returnsRes,
+        costMap: productCostMap,
+      ).map((p) => p.toMap()).toList();
 
       // Sort by profit (lowest first to show losses)
       _productProfits.sort(
@@ -190,7 +162,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final grossProfit = _totalRevenue - _totalCOGS;
-    final netProfit = grossProfit - _totalExpenses;
+    // same as the Dashboard / Reports net profit (database period_figures)
+    final netProfit = grossProfit - _totalExpenses - _totalDamaged;
     final margin = _totalRevenue > 0 ? (netProfit / _totalRevenue * 100) : 0.0;
 
     return Scaffold(
@@ -281,6 +254,20 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                           ),
                         ],
                       ),
+                      if (_totalDamaged > 0)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Damaged stock:'),
+                            Text(
+                              '-Rs${_totalDamaged.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
                       const Divider(),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -363,7 +350,9 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                       final p = _productProfits[index];
                       final name = p['name'] as String;
                       final tamilName = p['tamilName'] as String?;
-                      final qtySold = p['qtySold'] as int;
+                      final qtyNum = p['qtySold'] as num;
+                      final qtySold = formatQty(qtyNum);
+                      final productId = p['productId'] as String? ?? '';
                       final totalSold = p['totalSold'] as double;
                       final totalCost = p['totalCost'] as double;
                       final prodProfit = p['profit'] as double;
@@ -376,7 +365,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                         margin: const EdgeInsets.only(bottom: 6),
                         child: ListTile(
                           onTap: () =>
-                              _editPurchasePrice(name, totalCost / qtySold),
+                              _editPurchasePrice(name, qtyNum > 0 ? totalCost / qtyNum : 0),
                           leading: CircleAvatar(
                             backgroundColor: color.withValues(alpha: 0.1),
                             child: isLoss
@@ -420,7 +409,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                             children: [
                               // View bills button
                               GestureDetector(
-                                onTap: () => _viewProductBills(name),
+                                onTap: () => _viewProductBills(name, productId),
                                 child: Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
@@ -557,7 +546,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Sold: ${formatQty(product.stock)} units in stock',
+                        'In stock: ${formatQty(product.stock)} ${product.unit}',
                         style: const TextStyle(fontSize: 12),
                       ),
                       Text(
@@ -649,23 +638,19 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                 }
 
                 try {
-                  final updated = Product(
-                    id: product.id,
-                    name: product.name,
-                    barcode: product.barcode,
-                    category: product.category,
+                  final service = ref.read(productServiceProvider);
+                  // Only the prices: rebuilding the whole product here wiped
+                  // Rate 2, box size, short code, batch and expiry (QA #64).
+                  await service.updatePrices(
+                    product.id,
                     purchasePrice: newPurchasePrice,
                     sellingPrice: newSellingPrice,
-                    stock: newStock,
-                    unit: product.unit,
-                    lowStockAlert: product.lowStockAlert,
-                    gstRate: product.gstRate,
-                    hsnCode: product.hsnCode,
-                    tamilName: product.tamilName,
-                    hasVariants: product.hasVariants,
-                    variants: product.variants,
                   );
-                  await ref.read(productServiceProvider).updateProduct(updated);
+                  // stock changes only through a physical count (#8)
+                  if ((newStock - product.stock).abs() > 0.0001) {
+                    if (newStock < 0) throw Exception('Stock cannot be negative');
+                    await service.setPhysicalStock(product.id, newStock);
+                  }
                   ProductService.invalidateCache();
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (mounted) {
@@ -696,29 +681,62 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
     });
   }
 
-  void _viewProductBills(String productName) async {
-    final sales = await ref
-        .read(saleServiceProvider)
-        .getSalesHistory(limit: 500);
+  void _viewProductBills(String productName, String productId) async {
+    // bills of the period on screen that contain this product (it used to
+    // scan only the latest 500 bills of the whole shop) — QA #67
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Loading bills…'), duration: Duration(seconds: 30)));
+    final startUtc = _periodStartUtc ?? DateTime.utc(2020);
+    final endUtc = _periodEndUtc ?? DateTime.now().toUtc().add(const Duration(days: 1));
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await fetchAllRows(() {
+        var q = Supabase.instance.client
+            .from('sales')
+            .select()
+            .gte('created_at', startUtc.toIso8601String())
+            .lt('created_at', endUtc.toIso8601String());
+        if (productId.isNotEmpty) {
+          // jsonb containment needs JSON text; .contains() with a List sends a
+          // Postgres array literal, which the server rejects
+          q = q.filter('items', 'cs', jsonEncode([
+            {'product_id': productId},
+          ]));
+        }
+        return q;
+      }, orderBy: 'created_at', ascending: false);
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not load bills: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    messenger.hideCurrentSnackBar();
     final matchingSales = <Map<String, dynamic>>[];
 
-    for (final sale in sales) {
+    for (final row in rows) {
+      final Sale sale;
+      try {
+        sale = Sale.fromJson(row);
+      } catch (_) {
+        continue;
+      }
       for (final item in sale.items) {
-        if (item.name == productName) {
-          matchingSales.add({
-            'saleId': sale.id,
-            'shortId': sale.id.length > 8
-                ? sale.id.substring(0, 8).toUpperCase()
-                : sale.id.toUpperCase(),
-            'date': sale.createdAt,
-            'qty': item.qty,
-            'price': item.price,
-            'total': item.total,
-            'purchasePrice': item.purchasePrice,
-            'profit': item.total - (item.purchasePrice * item.qty),
-            'sale': sale,
-          });
-        }
+        final same = productId.isNotEmpty ? item.productId == productId : item.name == productName;
+        if (!same) continue;
+        final cost = item.costTotal ?? item.purchasePrice * item.qty;
+        matchingSales.add({
+          'saleId': sale.id,
+          'shortId': sale.invoiceLabel,
+          'date': sale.createdAt,
+          'qty': item.qty,
+          'price': item.price,
+          'total': item.total,
+          'cost': cost,
+          'profit': item.total - cost,
+          'sale': sale,
+        });
       }
     }
 
@@ -775,7 +793,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${DateFormat('dd MMM yyyy').format(date)} | Qty: ${s['qty']} | Rs${(s['price'] as double).toStringAsFixed(0)} × ${s['qty']}',
+                                '${DateFormat('dd MMM yyyy').format(date)} | Qty: ${formatQty(s['qty'] as num)} | Rs${(s['price'] as double).toStringAsFixed(0)} × ${formatQty(s['qty'] as num)}',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey[600],
@@ -787,7 +805,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
-                                    'Revenue: Rs${(s['total'] as double).toStringAsFixed(0)} | Cost: Rs${((s['purchasePrice'] as double) * (s['qty'] as int)).toStringAsFixed(0)}',
+                                    'Revenue: Rs${(s['total'] as double).toStringAsFixed(0)} | Cost: Rs${(s['cost'] as double).toStringAsFixed(0)}',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey[500],

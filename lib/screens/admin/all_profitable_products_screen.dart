@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/product_profit.dart';
 import '../../utils/paged_query.dart';
+import '../../utils/qty_format.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -48,44 +50,11 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
         costMap[p['id'] as String] = (p['purchase_price'] as num?)?.toDouble() ?? 0;
       }
 
-      final Map<String, Map<String, dynamic>> productData = {};
-      for (final sale in salesRes as List) {
-        final items = sale['items'] as List? ?? [];
-        for (final item in items) {
-          final name = item['name'] as String? ?? 'Unknown';
-          final productId = item['product_id'] as String? ?? '';
-          final qty = (item['qty'] as num?)?.toInt() ?? 0;
-          final itemTotal = (item['total'] as num?)?.toDouble() ?? 0;
-          var costPrice = (item['purchase_price'] as num?)?.toDouble() ?? 0;
-          if (costPrice <= 0) costPrice = costMap[productId] ?? 0;
-
-          if (!productData.containsKey(name)) {
-            productData[name] = {
-              'name': name,
-              'qtySold': 0,
-              'revenue': 0.0,
-              'cost': 0.0,
-            };
-          }
-          productData[name]!['qtySold'] += qty;
-          productData[name]!['revenue'] += itemTotal;
-          productData[name]!['cost'] += costPrice * qty;
-        }
-      }
-
-      final results = productData.values.map((d) {
-        final revenue = d['revenue'] as double;
-        final cost = d['cost'] as double;
-        final profit = revenue - cost;
-        final margin = revenue > 0 ? (profit / revenue * 100) : 0.0;
-        return {
-          'name': d['name'],
-          'qtySold': d['qtySold'],
-          'revenue': revenue,
-          'profit': profit,
-          'margin': margin,
-        };
-      }).toList();
+      // decimals and returns handled the same way as the database (QA #46)
+      final returnsRes = await fetchReturnsBetween(start, end);
+      final results = ProductProfit.compute(sales: salesRes, returns: returnsRes, costMap: costMap)
+          .map((p) => p.toMap())
+          .toList();
 
       _sortList(results);
 
@@ -106,7 +75,7 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
         list.sort((a, b) => (b['revenue'] as double).compareTo(a['revenue'] as double));
         break;
       case 'qty':
-        list.sort((a, b) => (b['qtySold'] as int).compareTo(a['qtySold'] as int));
+        list.sort((a, b) => (b['qtySold'] as num).compareTo(a['qtySold'] as num));
         break;
       case 'margin':
         list.sort((a, b) => (b['margin'] as double).compareTo(a['margin'] as double));
@@ -158,7 +127,7 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
                   itemBuilder: (context, i) {
                     final item = _products[i];
                     final name = item['name'] as String;
-                    final qtySold = item['qtySold'] as int;
+                    final qtySold = formatQty(item['qtySold'] as num);
                     final revenue = item['revenue'] as double;
                     final profit = item['profit'] as double;
                     final margin = item['margin'] as double;

@@ -786,6 +786,16 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                           Navigator.push(context, MaterialPageRoute(builder: (_) => const SlowMovingScreen()));
                         },
                       ),
+                      // bills/changes the server rejected; the phone had no way to see them
+                      _MoreMenuItem(
+                        icon: Icons.sync_problem_rounded,
+                        title: 'Sync Issues',
+                        color: const Color(0xFFD32F2F),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncIssuesScreen()));
+                        },
+                      ),
                       _MoreMenuSection('SETTINGS'),
                       _MoreMenuItem(
                         icon: Icons.store_rounded,
