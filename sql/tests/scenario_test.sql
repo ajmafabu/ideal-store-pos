@@ -243,11 +243,12 @@ DELETE FROM expenses WHERE id = '80000000-0000-0000-0000-000000000001';
 SELECT * FROM create_damaged_atomic('90000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000003','Biscuit',6,NULL,'rats');
 -- a wrong damaged entry can be deleted; its stock comes back (QA #86)
 SELECT t.stock('Biscuit') AS biscuit_before \gset
+SELECT t.batches('Biscuit') AS biscuit_batches_before \gset
 SELECT * FROM create_damaged_atomic('90000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003','Biscuit',2.5,NULL,'typo');
 SELECT t.eq(t.stock('Biscuit'), :biscuit_before - 2.5, 'damaged entry takes stock');
 SELECT delete_damaged_atomic('90000000-0000-0000-0000-000000000002');
 SELECT t.eq(t.stock('Biscuit'), :biscuit_before, 'deleting it puts the stock back');
-SELECT t.eq(t.batches('Biscuit'), :biscuit_before, 'and back into the batches');
+SELECT t.eq(t.batches('Biscuit'), :biscuit_batches_before, 'and back into the batches');
 SELECT t.eq((SELECT count(*) FROM damaged_products WHERE id = '90000000-0000-0000-0000-000000000002'), 0, 'entry is gone');
 SELECT delete_damaged_atomic('90000000-0000-0000-0000-000000000002');
 SELECT transfer_between_accounts(t.acc('cash'), t.acc('bank'), 50, 'deposit');
