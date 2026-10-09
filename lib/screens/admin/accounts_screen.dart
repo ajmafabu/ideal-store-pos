@@ -188,7 +188,7 @@ class _AccountsScreenState extends ConsumerState<AccountsScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       side: const BorderSide(color: Color(0xFF667eea)),
-                      foregroundColor: const Color(0xFF667eea),
+                      foregroundColor: Color(0xFF4C51BF),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                   ),

@@ -6,6 +6,7 @@ import '../../models/product.dart';
 import '../../models/damaged_product.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/qty_format.dart';
+import '../../widgets/search_picker.dart';
 
 class DamagedScreen extends ConsumerStatefulWidget {
   const DamagedScreen({super.key});
@@ -62,10 +63,21 @@ class _DamagedScreenState extends ConsumerState<DamagedScreen> {
                       'Qty: ${formatQty(d.quantity)} | Rs${(d.unitPrice * d.quantity).toStringAsFixed(0)}\n${d.reason ?? ''}',
                       style: const TextStyle(fontSize: 12),
                     ),
-                    trailing: Text(
-                      DateFormat('dd MMM\nhh:mm a').format(d.createdAt),
-                      style: const TextStyle(fontSize: 11),
-                      textAlign: TextAlign.end,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          DateFormat('dd MMM\nhh:mm a').format(d.createdAt),
+                          style: const TextStyle(fontSize: 11),
+                          textAlign: TextAlign.end,
+                        ),
+                        // a wrong entry stayed forever (QA #86)
+                        IconButton(
+                          tooltip: 'Delete entry',
+                          icon: const Icon(Icons.delete_outline, color: Colors.red),
+                          onPressed: () => _confirmDelete(d),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -88,6 +100,42 @@ class _DamagedScreenState extends ConsumerState<DamagedScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDelete(DamagedProduct d) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete damaged entry?'),
+        content: Text(
+          '${d.productName} × ${formatQty(d.quantity)} goes back into stock and its loss leaves the profit figures.\n\n'
+          'To correct a wrong entry, delete it and enter it again.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(damagedServiceProvider).deleteDamaged(d.id);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Deleted — ${formatQty(d.quantity)} back in stock'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      final text = e.toString().contains('delete_damaged_atomic')
+          ? 'Not deleted: the database needs sql/2026_10_stage2_fixes.sql first'
+          : 'Not deleted: ${ErrorMessages.parse(e)}';
+      messenger.showSnackBar(
+        SnackBar(content: Text(text), backgroundColor: Colors.red, duration: const Duration(seconds: 8)),
+      );
+    }
+    ref.invalidate(damagedProvider);
   }
 
   void _showAddDamaged(BuildContext context) {
@@ -166,19 +214,33 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
               error: (e, _) => Text('Error: ${ErrorMessages.parse(e)}'),
               data: (products) {
                 final available = products.where((p) => p.stock > 0).toList();
-                return DropdownButtonFormField<Product>(
-                  value: _selectedProduct,
-                  decoration: const InputDecoration(
-                    labelText: 'Product',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: available.map((p) {
-                    return DropdownMenuItem(
-                      value: p,
-                      child: Text('${p.name} (Stock: ${formatQty(p.stock)})'),
+                // search box instead of a 1,000-item dropdown (QA #30)
+                return InkWell(
+                  onTap: () async {
+                    final picked = await showSearchPicker<Product>(
+                      context: context,
+                      title: 'Damaged product',
+                      hint: 'Type name, Tamil name or barcode',
+                      items: available,
+                      label: (p) => p.name,
+                      subtitle: (p) => 'Stock: ${formatQty(p.stock)} ${p.unit}',
+                      searchText: (p) => '${p.tamilName ?? ''} ${p.barcode ?? ''}',
                     );
-                  }).toList(),
-                  onChanged: (v) => setState(() => _selectedProduct = v),
+                    if (picked != null) setState(() => _selectedProduct = picked);
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Product',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.search),
+                    ),
+                    child: Text(
+                      _selectedProduct == null
+                          ? 'Tap to search'
+                          : '${_selectedProduct!.name} (Stock: ${formatQty(_selectedProduct!.stock)})',
+                      style: TextStyle(color: _selectedProduct == null ? Colors.grey.shade700 : null),
+                    ),
+                  ),
                 );
               },
             ),
@@ -202,14 +264,11 @@ class _AddDamagedSheetState extends ConsumerState<_AddDamagedSheet> {
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'broken', child: Text('Broken')),
-                DropdownMenuItem(value: 'expired', child: Text('Expired')),
-                DropdownMenuItem(value: 'stolen', child: Text('Stolen')),
-                DropdownMenuItem(
-                  value: 'water_damage',
-                  child: Text('Water Damage'),
-                ),
-                DropdownMenuItem(value: 'other', child: Text('Other')),
+                DropdownMenuItem(value: 'Broken', child: Text('Broken')),
+                DropdownMenuItem(value: 'Expired', child: Text('Expired')),
+                DropdownMenuItem(value: 'Stolen', child: Text('Stolen')),
+                DropdownMenuItem(value: 'Water damage', child: Text('Water damage')),
+                DropdownMenuItem(value: 'Other', child: Text('Other')),
               ],
               onChanged: (v) => _reasonController.text = v ?? '',
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/product.dart';
+import '../utils/readable_color.dart';
 
 class RatePickerResult {
   final double price;
@@ -51,7 +52,7 @@ class RatePickerDialog extends StatelessWidget {
         children: [
           const Text(
             'Choose selling rate:',
-            style: TextStyle(fontSize: 13, color: Colors.grey),
+            style: TextStyle(fontSize: 13, color: Color(0xFF757575)),
           ),
           const SizedBox(height: 16),
           _RateCard(
@@ -123,7 +124,7 @@ class _RateCard extends StatelessWidget {
                       label,
                       style: TextStyle(
                         fontSize: 13,
-                        color: color,
+                        color: readableText(color),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -133,7 +134,7 @@ class _RateCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: color,
+                        color: readableText(color),
                       ),
                     ),
                   ],

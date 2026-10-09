@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import '../../services/gst_export_service.dart';
 import '../../utils/error_messages.dart';
@@ -45,11 +48,17 @@ class _GstFilingScreenState extends State<GstFilingScreen> {
         month: _selectedMonth.month,
         year: _selectedMonth.year,
       );
+      // the phone kept it in the app's private folder, out of reach of
+      // Files (QA #61): hand it straight to the share menu
+      if (file != null && mounted && Platform.isAndroid) {
+        await Share.shareXFiles([XFile(file.path)], text: 'GSTR-1 B2B');
+      }
       if (file != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('GSTR-1 B2B saved: ${file.path.split('/').last}'),
             backgroundColor: Colors.green,
+            persist: false, // with an action it otherwise stays until tapped (QA #65)
             action: SnackBarAction(
               label: 'Share',
               textColor: Colors.white,
@@ -79,11 +88,17 @@ class _GstFilingScreenState extends State<GstFilingScreen> {
         month: _selectedMonth.month,
         year: _selectedMonth.year,
       );
+      // the phone kept it in the app's private folder, out of reach of
+      // Files (QA #61): hand it straight to the share menu
+      if (file != null && mounted && Platform.isAndroid) {
+        await Share.shareXFiles([XFile(file.path)], text: 'GSTR-1 B2C');
+      }
       if (file != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('GSTR-1 B2C saved: ${file.path.split('/').last}'),
             backgroundColor: Colors.green,
+            persist: false, // with an action it otherwise stays until tapped (QA #65)
             action: SnackBarAction(
               label: 'Share',
               textColor: Colors.white,

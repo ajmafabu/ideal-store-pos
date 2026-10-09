@@ -19,6 +19,7 @@ import '../../utils/purchase_invoice_generator.dart';
 import '../../widgets/empty_state.dart';
 import '../shared/product_form_screen.dart';
 import '../../utils/qty_format.dart';
+import '../../widgets/search_picker.dart';
 
 class PurchaseScreen extends ConsumerStatefulWidget {
   const PurchaseScreen({super.key});
@@ -127,7 +128,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                               'Past Purchase: Rs${product.purchasePrice.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 13,
-                                color: Colors.orange,
+                                color: Color(0xFFC2410C),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -146,7 +147,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                               'Current Selling: Rs${product.sellingPrice.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 fontSize: 13,
-                                color: Colors.green,
+                                color: Color(0xFF2E7D32),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -342,7 +343,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                             'DB Purchase: Rs${product.purchasePrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Colors.orange,
+                              color: Color(0xFFC2410C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -357,7 +358,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                             'DB Selling: Rs${product.sellingPrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Colors.green,
+                              color: Color(0xFF2E7D32),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -543,7 +544,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
               Text(
                 'MRP: Rs${apiProduct.mrp}',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: Color(0xFF2E7D32),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -630,78 +631,27 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
     );
   }
 
-  void _showSupplierPicker() {
-    final query = _supplierSearchQuery.toLowerCase();
-    final filtered = query.isEmpty
-        ? _suppliers
-        : _suppliers.where((s) =>
-            s.name.toLowerCase().contains(query) ||
-            (s.phone?.toLowerCase().contains(query) ?? false)).toList();
-
-    showModalBottomSheet(
+  // one sheet with its own search box, kept above the keyboard: the old one
+  // closed and reopened on every key and showed one row (QA #17)
+  Future<void> _showSupplierPicker() async {
+    final picked = await showSearchPicker<Supplier>(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (ctx, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search supplier...',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (v) {
-                  setState(() => _supplierSearchQuery = v);
-                  // Rebuild bottom sheet
-                  Navigator.pop(ctx);
-                  _showSupplierPicker();
-                },
-              ),
-            ),
-            Expanded(
-              child: filtered.isEmpty
-                  ? const Center(child: Text('No suppliers found'))
-                  : ListView.builder(
-                      controller: scrollController,
-                      itemCount: filtered.length,
-                      itemBuilder: (ctx, i) {
-                        final s = filtered[i];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            child: Text(s.name.isNotEmpty ? s.name[0].toUpperCase() : '?'),
-                          ),
-                          title: Text(s.name),
-                          subtitle: Text(s.phone ?? ''),
-                          trailing: s.totalDues > 0
-                              ? Text('Due: Rs${s.totalDues.toStringAsFixed(0)}',
-                                  style: const TextStyle(color: Colors.orange, fontSize: 12))
-                              : null,
-                          onTap: () {
-                            setState(() {
-                              _selectedSupplier = s;
-                              _supplierSearchQuery = '';
-                            });
-                            Navigator.pop(ctx);
-                          },
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
+      title: 'Supplier',
+      hint: 'Type supplier name or phone',
+      items: _suppliers,
+      label: (s) => s.name,
+      subtitle: (s) => [
+        if ((s.phone ?? '').isNotEmpty) s.phone!,
+        if (s.totalDues > 0) 'Due ₹${s.totalDues.toStringAsFixed(0)}',
+      ].join(' · '),
+      searchText: (s) => s.phone ?? '',
     );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedSupplier = picked;
+        _supplierSearchQuery = '';
+      });
+    }
   }
 
   Future<void> _addNewSupplier() async {
@@ -797,7 +747,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
               Text(
                 'Due: Rs ${_dueAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
-                  color: Colors.orange,
+                  color: Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1004,7 +954,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                   child: Center(
                     child: Text(
                       'No products found. Tap + to create new.',
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: Color(0xFF757575)),
                     ),
                   ),
                 )
@@ -1094,10 +1044,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                         )
                                       : null,
                                 ),
-                                onChanged: (v) {
-                                  setState(() => _supplierSearchQuery = v);
-                                  if (v.isNotEmpty) _showSupplierPicker();
-                                },
+                                readOnly: true,
                                 onTap: _showSupplierPicker,
                               ),
                       ),
@@ -1188,8 +1135,8 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                           'Rs ${_dueAmount.toStringAsFixed(2)}',
                           style: TextStyle(
                             color: _dueAmount > 0
-                                ? Colors.orange
-                                : Colors.green,
+                                ? Color(0xFFC2410C)
+                                : Color(0xFF2E7D32),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1266,7 +1213,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                           item.batchNumber!,
                                           style: const TextStyle(
                                             fontSize: 10,
-                                            color: Colors.blue,
+                                            color: Color(0xFF1565C0),
                                           ),
                                         ),
                                       ),
@@ -1304,8 +1251,8 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                                     const Duration(days: 30),
                                                   ),
                                                 )
-                                                ? Colors.orange
-                                                : Colors.green,
+                                                ? Color(0xFFC2410C)
+                                                : Color(0xFF2E7D32),
                                           ),
                                         ),
                                       ),
@@ -1318,7 +1265,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                       Text(
                                         'Rs${item.price.toStringAsFixed(2)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(2)}',
                                         style: const TextStyle(
-                                          color: Colors.blue,
+                                          color: Color(0xFF1565C0),
                                           decoration: TextDecoration.underline,
                                         ),
                                       ),
@@ -1366,7 +1313,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                                         style: const TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.blue,
+                                          color: Color(0xFF1565C0),
                                           decoration: TextDecoration.underline,
                                         ),
                                       ),
@@ -1423,7 +1370,7 @@ class _PurchaseScreenState extends ConsumerState<PurchaseScreen>
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue,
+                                color: Color(0xFF1565C0),
                               ),
                             ),
                           ],
@@ -1475,6 +1422,33 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
   Set<String> _statusFilters = {};
   String _dateFilter = 'all';
   String _searchQuery = '';
+  static const _olderPageSize = 200;
+  final List<Purchase> _older = [];
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
+  Future<void> _loadOlder(List<Purchase> shown) async {
+    if (_loadingMore || !_hasMore || shown.isEmpty) return;
+    setState(() => _loadingMore = true);
+    try {
+      final oldest = shown.map((p) => p.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
+      final page = await ref.read(purchaseServiceProvider).getOlderPurchases(before: oldest, limit: _olderPageSize);
+      if (!mounted) return;
+      final known = shown.map((p) => p.id).toSet();
+      setState(() {
+        _older.addAll(page.where((p) => !known.contains(p.id)));
+        _hasMore = page.length >= _olderPageSize;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load older purchases: ${ErrorMessages.parse(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1485,7 +1459,9 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
           .when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: ${ErrorMessages.parse(e)}')),
-            data: (purchases) {
+            data: (latest) {
+              final latestIds = latest.map((p) => p.id).toSet();
+              final purchases = [...latest, ..._older.where((p) => !latestIds.contains(p.id))];
               if (purchases.isEmpty) {
                 return const EmptyState(
                   icon: Icons.shopping_cart_outlined,
@@ -1495,9 +1471,14 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
               }
 
               var filtered = purchases.where((p) {
-                if (_paymentFilters.isNotEmpty && !_paymentFilters.contains(p.paymentMethod)) return false;
-                if (_statusFilters.contains('credit') && !p.isCredit) return false;
-                if (_statusFilters.contains('paid') && p.isCredit) return false;
+                // by what was actually paid / is still due: "Cash" listed unpaid
+                // credit purchases and "Credit Due" fully paid ones (QA #74)
+                if (_paymentFilters.isNotEmpty &&
+                    (!_paymentFilters.contains(p.paymentMethod) || p.amountPaid <= 0)) {
+                  return false;
+                }
+                if (_statusFilters.contains('credit') && p.dueAmount <= 0.005) return false;
+                if (_statusFilters.contains('paid') && p.dueAmount > 0.005) return false;
                 final now = DateTime.now();
                 if (_dateFilter == 'today') {
                   if (p.createdAt.day != now.day || p.createdAt.month != now.month || p.createdAt.year != now.year) return false;
@@ -1533,7 +1514,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                   ),
                   // Payment method chips
                   SizedBox(
-                    height: 40,
+                    height: 48,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -1548,7 +1529,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                   ),
                   // Status + Date chips
                   SizedBox(
-                    height: 40,
+                    height: 48,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -1591,8 +1572,20 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                   Expanded(
                     child: ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: filtered.length,
+                      itemCount: filtered.length + (_hasMore ? 1 : 0),
                       itemBuilder: (context, index) {
+                        if (index == filtered.length) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: _loadingMore
+                                ? const Center(child: CircularProgressIndicator())
+                                : OutlinedButton.icon(
+                                    onPressed: () => _loadOlder(purchases),
+                                    icon: const Icon(Icons.history),
+                                    label: const Text('Load older purchases'),
+                                  ),
+                          );
+                        }
                         final purchase = filtered[index];
                         return Card(
                           child: ListTile(
@@ -1612,11 +1605,11 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                                 Text(
                                   '${purchase.items.length} items | ${purchase.supplierName ?? "No supplier"}',
                                 ),
-                                if (purchase.isCredit)
+                                if (purchase.dueAmount > 0.005)
                                   Text(
                                     'Credit: Due Rs${purchase.dueAmount.toStringAsFixed(0)}',
                                     style: const TextStyle(
-                                      color: Colors.orange,
+                                      color: Color(0xFFC2410C),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -1640,7 +1633,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                                   value: 'delete',
                                   child: Text(
                                     'Delete',
-                                    style: TextStyle(color: Colors.red),
+                                    style: TextStyle(color: Color(0xFFC62828)),
                                   ),
                                 ),
                               ],
@@ -1655,9 +1648,18 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                                   _confirmDelete(context, ref, purchase);
                                 }
                               },
-                              child: Text(
-                                DateFormat('dd MMM').format(purchase.createdAt),
-                                style: const TextStyle(color: Colors.grey),
+                              // the menu hid behind the date (QA #34)
+                              tooltip: 'View, edit, share or delete',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    DateFormat('dd MMM').format(purchase.createdAt),
+                                    style: const TextStyle(color: Color(0xFF757575)),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.more_vert),
+                                ],
                               ),
                             ),
                           ),
@@ -1849,7 +1851,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save', style: TextStyle(color: Colors.green)),
+            child: const Text('Save', style: TextStyle(color: Color(0xFF2E7D32))),
           ),
         ],
       ),
@@ -1918,7 +1920,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   'Supplier: ${purchase.supplierName}',
-                  style: const TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Color(0xFF757575)),
                 ),
               ),
             const Divider(),
@@ -1959,7 +1961,7 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                      color: Color(0xFF1565C0),
                     ),
                   ),
                 ],
@@ -1998,6 +2000,9 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
           ),
           TextButton(
             onPressed: () async {
+              // taken before the dialog closes: the refusal ("1 unit already
+              // sold or used") used to vanish with it (QA #87)
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
               try {
                 await ref
@@ -2007,26 +2012,23 @@ class _PurchaseHistoryState extends ConsumerState<_PurchaseHistory> {
                 ref.invalidate(productsProvider);
                 ref.invalidate(accountsProvider);
                 ref.invalidate(todayTransactionsProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Purchase deleted'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Purchase deleted'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${ErrorMessages.parse(e)}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Not deleted: ${ErrorMessages.parse(e)}'),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 8),
+                  ),
+                );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),

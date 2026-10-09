@@ -160,7 +160,17 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    // bring the first wrong field into view: the name error sat hidden at
+    // the top while the Save button is at the bottom (QA #4)
+    final invalid = _formKey.currentState!.validateGranularly();
+    if (invalid.isNotEmpty) {
+      Scrollable.ensureVisible(
+        invalid.first.context,
+        duration: const Duration(milliseconds: 300),
+        alignment: 0.1,
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -553,7 +563,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                               ? '${_expiryDate!.day}/${_expiryDate!.month}/${_expiryDate!.year}'
                               : 'Optional',
                           style: TextStyle(
-                            color: _expiryDate != null ? null : Colors.grey,
+                            color: _expiryDate != null ? null : Color(0xFF757575),
                           ),
                         ),
                       ),
@@ -582,11 +592,21 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   }
 
   Future<void> _deleteProduct() async {
+    final p = widget.product!;
+    // say what disappears with it (QA #89)
+    final stockValue = p.stock * p.purchasePrice;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Product'),
-        content: Text('Delete "${widget.product!.name}"?'),
+        content: Text(
+          p.stock > 0
+              ? 'Delete "${p.name}"?\n\nIt still has ${formatQty(p.stock)} ${p.unit} in stock'
+                  '${stockValue > 0 ? ' (worth ₹${stockValue.toStringAsFixed(0)} at cost)' : ''}. '
+                  'That stock will disappear from stock value. If it was sold out or damaged, '
+                  'record that instead.'
+              : 'Delete "${p.name}"?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -594,7 +614,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),

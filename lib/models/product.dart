@@ -47,10 +47,10 @@ class ProductVariant {
       attributes: (json['attributes'] as Map?)?.cast<String, dynamic>() ?? {},
       isActive: json['is_active'] as bool? ?? true,
       createdAt:
-          DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
           DateTime.now(),
       updatedAt:
-          DateTime.tryParse(json['updated_at'] as String? ?? '') ??
+          DateTime.tryParse(json['updated_at'] as String? ?? '')?.toLocal() ??
           DateTime.now(),
       tamilName: json['tamil_name'] as String?,
     );
@@ -69,8 +69,8 @@ class ProductVariant {
       'min_stock': minStock,
       'attributes': attributes,
       'is_active': isActive,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
       'tamil_name': tamilName,
     };
   }

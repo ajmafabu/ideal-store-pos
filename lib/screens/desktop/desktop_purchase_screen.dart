@@ -274,8 +274,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                       : (filtered[index].phone ?? ''),
                                   style: TextStyle(
                                     color: filtered[index].totalDues > 0
-                                        ? Colors.orange
-                                        : Colors.grey,
+                                        ? Color(0xFFC2410C)
+                                        : Color(0xFF757575),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -294,7 +294,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
-                                            color: Colors.orange.shade800,
+                                            color: Color(0xFFC2410C),
                                           ),
                                         ),
                                       )
@@ -437,7 +437,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                             'DB Purchase: Rs${product.purchasePrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Colors.orange,
+                              color: Color(0xFFC2410C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -452,7 +452,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                             'DB Selling: Rs${product.sellingPrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Colors.green,
+                              color: Color(0xFF2E7D32),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -954,11 +954,11 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
               children: [
                 Icon(Icons.receipt_long, size: 48, color: Colors.grey[300]),
                 const SizedBox(height: 12),
-                Text('No purchases yet', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                Text('No purchases yet', style: TextStyle(color: Color(0xFF757575), fontSize: 14)),
                 const SizedBox(height: 4),
                 Text(
                   'F1 to start a new purchase',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  style: TextStyle(color: Color(0xFF757575), fontSize: 12),
                 ),
               ],
             ),
@@ -1052,7 +1052,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           children: [
                             Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
                             const SizedBox(height: 12),
-                            Text('No purchases match "$_purchaseSearchQuery"', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                            Text('No purchases match "$_purchaseSearchQuery"', style: TextStyle(color: Color(0xFF757575), fontSize: 14)),
                           ],
                         ),
                       )
@@ -1078,7 +1078,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                 backgroundColor: const Color(0xFF059669).withValues(alpha: 0.1),
                                 child: Text(
                                   '${index + 1}',
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF059669)),
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF047857)),
                                 ),
                               ),
                             ),
@@ -1107,7 +1107,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               width: 140,
                               child: Text(
                                 AppTimezone.formatDateTime(purchase.createdAt),
-                                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                               ),
                             ),
                             PopupMenuButton<String>(
@@ -1115,7 +1115,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               itemBuilder: (_) => const [
                                 PopupMenuItem(value: 'details', child: Text('View Items')),
                                 PopupMenuItem(value: 'edit', child: Text('Edit Purchase')),
-                                PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                                PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Color(0xFFC62828)))),
                               ],
                               onSelected: (action) async {
                                 if (action == 'details') {
@@ -1134,7 +1134,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                         TextButton(
                                           onPressed: () => Navigator.pop(ctx, true),
-                                          child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                          child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
                                         ),
                                       ],
                                     ),
@@ -1294,7 +1294,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF11998e),
+                      color: Color(0xFF0F766E),
                     ),
                   ),
                 ],
@@ -1691,7 +1691,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                           child: Text(
                                             'Rs${item.price.toStringAsFixed(0)}',
                                             style: const TextStyle(
-                                              color: Colors.blue,
+                                              color: Color(0xFF1565C0),
                                               fontSize: 13,
                                             ),
                                           ),
@@ -2046,7 +2046,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   focusNode: _searchFocus,
                   decoration: InputDecoration(
                     hintText: 'Scan barcode or type product name...',
-                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 13),
+                    hintStyle: TextStyle(color: Color(0xFF757575), fontSize: 13),
                     prefixIcon: const Icon(Icons.search, size: 18),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -2098,7 +2098,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                     child: Text(
                       _selectedProduct!.name,
                       style: const TextStyle(
-                        color: Color(0xFF059669),
+                        color: Color(0xFF047857),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -2107,7 +2107,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   const SizedBox(width: 8),
                   Text(
                     '→ ENTER after batch to add',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                    style: TextStyle(color: Color(0xFF757575), fontSize: 11),
                   ),
                   const Spacer(),
                   TextButton.icon(
@@ -2172,7 +2172,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               _results[index].tamilName!.isNotEmpty)
                             Text(
                               _results[index].tamilName!,
-                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                              style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                             ),
                           const SizedBox(height: 2),
                           Row(
@@ -2390,12 +2390,12 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                         const SizedBox(height: 12),
                         Text(
                           'Scan a product or type to search',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                          style: TextStyle(color: Color(0xFF757575), fontSize: 13),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Ctrl+F to focus search',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                          style: TextStyle(color: Color(0xFF757575), fontSize: 11),
                         ),
                       ],
                     ),
@@ -2447,11 +2447,11 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                         if (item.tamilName != null && item.tamilName!.isNotEmpty)
                                           Text(
                                             '${item.tamilName} · ',
-                                            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                            style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                                           ),
                                         Text(
                                           item.batchNumber ?? 'No batch',
-                                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                          style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                                         ),
                                         const SizedBox(width: 6),
                                         Builder(
@@ -2462,7 +2462,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             final sellPrice = product?.sellingPrice ?? 0;
                                             return Text(
                                               '· Sell ₹$sellPrice',
-                                              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                                              style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                                             );
                                           },
                                         ),
@@ -2476,7 +2476,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             ),
                                             child: Text(
                                               'Exp ${item.expiryDate!.day}/${item.expiryDate!.month}/${item.expiryDate!.year}',
-                                              style: TextStyle(fontSize: 10, color: Colors.orange.shade800),
+                                              style: TextStyle(fontSize: 10, color: Color(0xFFC2410C)),
                                             ),
                                           ),
                                         ],
@@ -2636,7 +2636,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
               if (session.discount > 0) ...[
                 Text(
                   '-₹${session.discount.toStringAsFixed(0)}  ',
-                  style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFC62828), fontWeight: FontWeight.w500),
                 ),
               ],
               Column(
@@ -2652,7 +2652,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF059669),
+                      color: Color(0xFF047857),
                     ),
                   ),
                 ],
@@ -2801,13 +2801,13 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                     fontWeight: FontWeight.w500,
                                     color: session.supplier != null
                                         ? const Color(0xFF1E293B)
-                                        : Colors.grey[500],
+                                        : Color(0xFF757575),
                                   ),
                                 ),
                                 if (session.supplier != null && _supplierDues > 0)
                                   Text(
                                     'Dues: ₹${_supplierDues.toStringAsFixed(0)}',
-                                    style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+                                    style: TextStyle(fontSize: 11, color: Color(0xFFC2410C)),
                                   ),
                               ],
                             ),
@@ -2850,7 +2850,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           const SizedBox(width: 6),
                           Text(
                             'Previous Dues: ₹${_supplierDues.toStringAsFixed(0)}',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.orange.shade800),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFC2410C)),
                           ),
                         ],
                       ),
@@ -2953,7 +2953,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       style: const TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w600,
-        color: Color(0xFF94A3B8),
+        color: Color(0xFF64748B),
         letterSpacing: 0.5,
       ),
     );

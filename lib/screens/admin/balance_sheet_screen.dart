@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../utils/readable_color.dart';
 
 class BalanceSheetScreen extends StatefulWidget {
   const BalanceSheetScreen({super.key});
@@ -182,7 +183,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                         : 'Difference: Rs${_n('difference').toStringAsFixed(2)} — usually an opening balance that was never entered',
                     style: TextStyle(
                       fontSize: 12,
-                      color: isBalanced ? Colors.green.shade600 : Colors.red.shade600,
+                      color: isBalanced ? Color(0xFF2E7D32) : Color(0xFFC62828),
                     ),
                   ),
                 ],
@@ -217,7 +218,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: readableText(color),
                   ),
                 ),
               ],
@@ -303,7 +304,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: color,
+            color: readableText(color),
           ),
         ),
         Text(

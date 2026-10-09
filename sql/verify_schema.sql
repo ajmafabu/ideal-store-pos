@@ -140,5 +140,14 @@ checks AS (
                    AND pg_get_functiondef(to_regprocedure('public.get_receivables_aging()')) ILIKE '%due_date::date%'
               THEN 'works with date or timestamp due dates'
               ELSE 'fails on timestamp due_date — run sql/2026_10_stage1_fixes.sql' END
+  UNION ALL
+  SELECT 18, 'damaged entries can be deleted',
+         CASE WHEN to_regprocedure('public.delete_damaged_atomic(uuid)') IS NULL THEN 'MISSING'
+              WHEN has_function_privilege('authenticated', 'public.delete_damaged_atomic(uuid)', 'EXECUTE')
+                   AND NOT has_function_privilege('anon', 'public.delete_damaged_atomic(uuid)', 'EXECUTE') THEN 'OK'
+              ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.delete_damaged_atomic(uuid)') IS NULL
+              THEN 'a wrong damaged entry cannot be deleted — run sql/2026_10_stage2_fixes.sql'
+              ELSE 'delete puts the stock back' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

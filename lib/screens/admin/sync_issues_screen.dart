@@ -69,7 +69,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: Color(0xFFC62828)),
             child: const Text('Discard'),
           ),
         ],

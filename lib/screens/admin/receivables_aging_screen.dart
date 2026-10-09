@@ -144,14 +144,14 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
                 children: [
                   const Text(
                     'Total Outstanding',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    style: TextStyle(fontSize: 14, color: Color(0xFF757575)),
                   ),
                   Text(
                     _fmt(total),
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: total > 0 ? Colors.orange.shade800 : Colors.green.shade800,
+                      color: total > 0 ? Color(0xFFC2410C) : Colors.green.shade800,
                     ),
                   ),
                 ],
@@ -159,7 +159,7 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
             ),
             Text(
               '${_data.length} customers',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: const TextStyle(fontSize: 14, color: Color(0xFF757575)),
             ),
           ],
         ),
@@ -244,7 +244,7 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: amount > 0 ? Colors.black : Colors.grey,
+                              color: amount > 0 ? Colors.black : Color(0xFF757575),
                             ),
                           ),
                         ],
@@ -276,7 +276,7 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
                   _selectedBucket < 0
                       ? 'No outstanding receivables'
                       : 'No customers in this bucket',
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  style: const TextStyle(fontSize: 16, color: Color(0xFF757575)),
                 ),
               ],
             ),
@@ -323,7 +323,7 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
                     backgroundColor: Colors.orange.shade100,
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : '?',
-                      style: TextStyle(color: Colors.orange.shade800),
+                      style: TextStyle(color: Color(0xFFC2410C)),
                     ),
                   ),
                   title: Text(name),
@@ -339,7 +339,7 @@ class _ReceivablesAgingScreenState extends State<ReceivablesAgingScreen> {
                         _fmt(totalDue),
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.red,
+                          color: Color(0xFFC62828),
                         ),
                       ),
                       if (oldestDate != null)

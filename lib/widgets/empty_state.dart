@@ -32,7 +32,7 @@ class EmptyState extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                color: isDark ? Color(0xFF757575) : Colors.grey.shade600,
               ),
               textAlign: TextAlign.center,
             ),
@@ -42,7 +42,7 @@ class EmptyState extends StatelessWidget {
                 subtitle!,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? Colors.grey.shade500 : Colors.grey.shade500,
+                  color: isDark ? Color(0xFF757575) : Color(0xFF757575),
                 ),
                 textAlign: TextAlign.center,
               ),

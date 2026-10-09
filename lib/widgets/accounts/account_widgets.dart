@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
 import '../../models/account.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/readable_color.dart';
 
 // ============================================
 // BALANCE CARD
@@ -84,13 +85,13 @@ class MiniStat extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 16),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF757575)), maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
             'Rs${amount.toStringAsFixed(0)}',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: readableText(color)),
           ),
         ),
       ],
@@ -211,11 +212,11 @@ class TransactionTile extends StatelessWidget {
           children: [
             Text(
               '${isIn ? '+' : '-'}Rs${transaction.amount.toStringAsFixed(0)}',
-              style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14),
+              style: TextStyle(fontWeight: FontWeight.bold, color: readableText(color), fontSize: 14),
             ),
             Text(
                AppTimezone.formatDateTime(transaction.createdAt),
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+              style: const TextStyle(fontSize: 10, color: Color(0xFF757575)),
             ),
           ],
         ),
@@ -258,7 +259,7 @@ class TransactionsList extends ConsumerWidget {
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Center(
-                child: Text('No transactions found', style: TextStyle(color: Colors.grey)),
+                child: Text('No transactions found', style: TextStyle(color: Color(0xFF757575))),
               ),
             ),
           );

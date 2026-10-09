@@ -163,6 +163,25 @@ class _BarcodeLabelScreenState extends ConsumerState<BarcodeLabelScreen> {
     final product = _selectedProduct;
     if (product == null) return;
 
+    // a label without a barcode cannot be scanned at the till (QA #63)
+    if (product.barcode == null || product.barcode!.isEmpty) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No barcode'),
+          content: Text(
+            '${product.name} has no barcode, so the label will show only the name and price and cannot be scanned.\n\n'
+            'Add a barcode in Stock → product first, or print a price-only label.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Print price label')),
+          ],
+        ),
+      );
+      if (go != true) return;
+    }
+
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async {
         final doc = pw.Document();

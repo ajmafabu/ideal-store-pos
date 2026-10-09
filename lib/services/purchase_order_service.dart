@@ -100,20 +100,31 @@ class PurchaseOrderService {
   /// stock, costed batches, cost price, supplier dues and (if paid now) the
   /// cash/bank payment — and marks the order received only if all of that
   /// succeeded (#21). [paymentMethod] 'credit' means pay the supplier later.
-  Future<void> receiveOrder(String orderId, {String paymentMethod = 'credit'}) async {
+  /// [items]: what actually arrived (qty / price changed, 0 = not received).
+  /// Null receives the order exactly as ordered.
+  Future<void> receiveOrder(
+    String orderId, {
+    String paymentMethod = 'credit',
+    List<PurchaseOrderItem>? items,
+  }) async {
     final method = PaymentMethods.normalize(paymentMethod);
     final isCredit = method == PaymentMethods.credit;
     double paid = 0;
     if (!isCredit) {
-      final po = await getPurchaseOrder(orderId);
-      if (po == null) throw Exception('Purchase order not found');
-      paid = po.items.fold<double>(0, (sum, i) => sum + i.price * i.qty);
+      var lines = items;
+      if (lines == null) {
+        final po = await getPurchaseOrder(orderId);
+        if (po == null) throw Exception('Purchase order not found');
+        lines = po.items;
+      }
+      paid = lines.fold<double>(0, (sum, i) => sum + i.price * i.qty);
     }
     await _client.rpc('receive_purchase_order', params: {
       'p_order_id': orderId,
       'p_is_credit': isCredit,
       'p_amount_paid': paid,
       'p_payment_method': isCredit ? PaymentMethods.cash : method,
+      if (items != null) 'p_items': items.map((i) => i.toJson()).toList(),
     });
     ProductService.invalidateCache();
     Logger.info('Purchase order $orderId received as a purchase');
@@ -128,6 +139,7 @@ class PurchaseOrderService {
       await _client.from('purchase_orders').delete().eq('id', orderId);
     } catch (e) {
       Logger.error('deletePurchaseOrder', e);
+      rethrow; // a silent failure looked like a delete
     }
   }
 }

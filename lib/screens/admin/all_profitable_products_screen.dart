@@ -5,6 +5,7 @@ import '../../utils/app_timezone.dart';
 import '../../utils/product_profit.dart';
 import '../../utils/paged_query.dart';
 import '../../utils/qty_format.dart';
+import '../../utils/readable_color.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -95,6 +96,8 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
+        foregroundColor: const Color(0xFF1E293B), // white title on a light bar was unreadable
+        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
         backgroundColor: const Color(0xFFF1F5F9),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
@@ -119,7 +122,7 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
           ? const Center(child: CircularProgressIndicator())
           : _products.isEmpty
               ? Center(
-                  child: Text('No sales data this month', style: TextStyle(color: Colors.grey.shade400)),
+                  child: Text('No sales data this month', style: TextStyle(color: Color(0xFF757575))),
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
@@ -131,8 +134,11 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
                     final revenue = item['revenue'] as double;
                     final profit = item['profit'] as double;
                     final margin = item['margin'] as double;
-                    final maxProfit = _products.first['profit'] as double;
-                    final ratio = maxProfit > 0 ? profit / maxProfit : 0.0;
+                    // scale by the biggest profit, not the first row: sorted by
+                    // margin the bars reached 137 % and 387 % (QA #48)
+                    final maxProfit = _products.fold<double>(
+                        0, (m, p) => (p['profit'] as double) > m ? p['profit'] as double : m);
+                    final ratio = maxProfit > 0 ? (profit / maxProfit).clamp(0.0, 1.0) : 0.0;
                     final medal = i == 0 ? '🥇' : i == 1 ? '🥈' : i == 2 ? '🥉' : '';
 
                     return Container(
@@ -202,7 +208,7 @@ class _AllProfitableProductsScreenState extends State<AllProfitableProductsScree
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF10B981),
+                                  color: Color(0xFF047857),
                                 ),
                               ),
                             ],
@@ -249,7 +255,7 @@ class _Tag extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: readableText(color)),
       ),
     );
   }

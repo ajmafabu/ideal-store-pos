@@ -37,7 +37,7 @@ class ProductService {
         final response = await _client
             .from('products')
             .select('*, variants:product_variants(*)')
-            .order('name')
+            .order('name', ascending: true)
             .range(offset, offset + batchSize - 1);
 
         final batch = (response as List)
@@ -464,7 +464,7 @@ class ProductService {
           .select()
           .eq('product_id', productId)
           .eq('is_active', true)
-          .order('name');
+          .order('name', ascending: true);
 
       return (response as List).map((e) => ProductVariant.fromJson(e)).toList();
     } catch (e, stackTrace) {

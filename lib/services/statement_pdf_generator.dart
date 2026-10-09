@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/customer.dart';
 import '../models/supplier.dart';
 import '../utils/app_timezone.dart';
+import '../utils/money_flow.dart';
 
 class StatementPdfGenerator {
   static final _currencyFormat = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 2);
@@ -344,9 +345,12 @@ class StatementPdfGenerator {
     List<Map<String, dynamic>> payments,
   ) {
     final entries = <_TransactionEntry>[];
+    // money paid at the counter with each bill is credited too (QA #14)
+    final paidAtBill = paidWithBill(
+      bills: sales, payments: payments, totalKey: 'final_amount', linkKey: 'sale_id');
 
     for (final sale in sales) {
-      final date = DateTime.tryParse(sale['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(sale['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (sale['final_amount'] as num?)?.toDouble() ?? 0;
       final saleId = sale['invoice_number'] ?? (() { final s = sale['id']?.toString() ?? ''; return s.length >= 8 ? s.substring(0, 8) : s; })() ?? '';
       entries.add(_TransactionEntry(
@@ -356,10 +360,20 @@ class StatementPdfGenerator {
         debit: amount,
         credit: 0,
       ));
+      final paid = paidAtBill[sale['id']?.toString() ?? ''];
+      if (paid != null) {
+        entries.add(_TransactionEntry(
+          date: date.add(const Duration(microseconds: 1)),
+          type: 'Payment',
+          description: 'Paid with invoice #$saleId',
+          debit: 0,
+          credit: paid,
+        ));
+      }
     }
 
     for (final payment in payments) {
-      final date = DateTime.tryParse(payment['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(payment['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
       final method = payment['payment_method'] ?? 'cash';
       entries.add(_TransactionEntry(
@@ -387,9 +401,11 @@ class StatementPdfGenerator {
     List<Map<String, dynamic>> payments,
   ) {
     final entries = <_TransactionEntry>[];
+    final paidAtBill = paidWithBill(
+      bills: purchases, payments: payments, totalKey: 'total_amount', linkKey: 'purchase_id');
 
     for (final purchase in purchases) {
-      final date = DateTime.tryParse(purchase['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(purchase['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (purchase['total_amount'] as num?)?.toDouble() ?? 0;
       final refNo = purchase['reference_number'] ?? (() { final s = purchase['id']?.toString() ?? ''; return s.length >= 8 ? s.substring(0, 8) : s; })() ?? '';
       entries.add(_TransactionEntry(
@@ -399,10 +415,20 @@ class StatementPdfGenerator {
         debit: amount,
         credit: 0,
       ));
+      final paid = paidAtBill[purchase['id']?.toString() ?? ''];
+      if (paid != null) {
+        entries.add(_TransactionEntry(
+          date: date.add(const Duration(microseconds: 1)),
+          type: 'Payment',
+          description: 'Paid with ref #$refNo',
+          debit: 0,
+          credit: paid,
+        ));
+      }
     }
 
     for (final payment in payments) {
-      final date = DateTime.tryParse(payment['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(payment['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
       final method = payment['payment_method'] ?? 'cash';
       entries.add(_TransactionEntry(

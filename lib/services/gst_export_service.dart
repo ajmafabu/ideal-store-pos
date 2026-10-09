@@ -272,7 +272,8 @@ class GstExportService {
         final rawTax = value * rate / (100 + rate);
         final tax = computedTax > 0 && s['tax_exempt'] != true ? storedTax * rawTax / computedTax : 0.0;
         final h = byHsn.putIfAbsent(key, () => {
-              'hsn': hsn, 'desc': it['name'] ?? '', 'uqc': (it['unit'] ?? 'NOS').toString().toUpperCase(),
+              // lines without HSN are one group: not named after its first product
+              'hsn': hsn, 'desc': hsn.isEmpty ? 'Products without HSN code' : (it['name'] ?? ''), 'uqc': (it['unit'] ?? 'NOS').toString().toUpperCase(),
               'rate': rate, 'qty': 0.0, 'value': 0.0, 'taxable': 0.0, 'igst': 0.0, 'cgst': 0.0, 'sgst': 0.0,
             });
         h['qty'] = (h['qty'] as double) + _d(it['qty']);

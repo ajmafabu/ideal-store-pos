@@ -45,6 +45,9 @@ class PurchaseOrder {
   final String? createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  /// The purchase bill made when it was received; null once that bill is
+  /// deleted.
+  final String? purchaseId;
 
   PurchaseOrder({
     required this.id,
@@ -57,6 +60,7 @@ class PurchaseOrder {
     this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.purchaseId,
   });
 
   factory PurchaseOrder.fromJson(Map<String, dynamic> json) {
@@ -73,8 +77,9 @@ class PurchaseOrder {
       status: json['status'] as String? ?? 'pending',
       notes: json['notes'] as String?,
       createdBy: json['created_by'] as String?,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
+      purchaseId: json['purchase_id'] as String?,
     );
   }
 

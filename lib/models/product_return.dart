@@ -53,7 +53,7 @@ class ProductReturn {
       refundAmount: (json['refund_amount'] as num?)?.toDouble() ?? 0,
       reason: json['reason'] as String?,
       createdBy: json['created_by'] as String?,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       originalSaleId: json['original_sale_id'] as String? ?? json['sale_id'] as String?,
       returnAmount: (json['return_amount'] as num?)?.toDouble() ?? 0,

@@ -49,7 +49,7 @@ class InventoryBatch {
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       remaining: (json['remaining'] as num?)?.toInt() ?? 0,
       purchasePrice: (json['purchase_price'] as num?)?.toDouble() ?? 0,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
     );
   }
 

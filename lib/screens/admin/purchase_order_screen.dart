@@ -8,6 +8,8 @@ import '../../models/supplier.dart';
 import '../../config/providers.dart';
 import '../../services/purchase_order_service.dart';
 import '../../utils/qty_format.dart';
+import '../../widgets/search_picker.dart';
+import '../../utils/readable_color.dart';
 
 class PurchaseOrderScreen extends ConsumerStatefulWidget {
   const PurchaseOrderScreen({super.key});
@@ -92,7 +94,8 @@ class _PurchaseOrderScreenState extends ConsumerState<PurchaseOrderScreen>
               onLoad: _loadOrders,
               showActions: true,
             ),
-            _OrderList(orders: _receivedOrders, onLoad: _loadOrders),
+            // received orders can be removed from the list (QA #88)
+            _OrderList(orders: _receivedOrders, onLoad: _loadOrders, showActions: true),
             _OrderList(orders: _cancelledOrders, onLoad: _loadOrders),
           ],
         ),
@@ -171,7 +174,7 @@ class _OrderList extends StatelessWidget {
           children: [
             Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
             SizedBox(height: 16),
-            Text('No orders', style: TextStyle(color: Colors.grey)),
+            Text('No orders', style: TextStyle(color: Color(0xFF757575))),
           ],
         ),
       );
@@ -252,7 +255,9 @@ class _OrderCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
-                order.status.toUpperCase(),
+                order.status == 'received' && order.purchaseId == null
+                    ? 'RECEIVED · BILL DELETED'
+                    : order.status.toUpperCase(),
                 style: TextStyle(
                   color: _statusColor(order.status),
                   fontSize: 10,
@@ -272,7 +277,7 @@ class _OrderCard extends StatelessWidget {
             ),
             Text(
               DateFormat('dd MMM yyyy, hh:mm a').format(order.createdAt),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
             ),
           ],
         ),
@@ -346,7 +351,7 @@ class _OrderCard extends StatelessWidget {
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text(
                                       'Delete',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(color: Color(0xFFC62828)),
                                     ),
                                   ),
                                 ],
@@ -361,7 +366,7 @@ class _OrderCard extends StatelessWidget {
                           },
                           child: const Text(
                             'Delete',
-                            style: TextStyle(color: Colors.red),
+                            style: TextStyle(color: Color(0xFFC62828)),
                           ),
                         ),
                         TextButton(
@@ -382,7 +387,7 @@ class _OrderCard extends StatelessWidget {
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text(
                                       'Cancel Order',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(color: Color(0xFFC62828)),
                                     ),
                                   ),
                                 ],
@@ -397,7 +402,7 @@ class _OrderCard extends StatelessWidget {
                           },
                           child: const Text(
                             'Cancel',
-                            style: TextStyle(color: Colors.orange),
+                            style: TextStyle(color: Color(0xFFC2410C)),
                           ),
                         ),
                         TextButton(
@@ -417,6 +422,48 @@ class _OrderCard extends StatelessWidget {
                           child: const Text('Mark Ordered'),
                         ),
                       ],
+                      if (order.status == 'received')
+                        TextButton(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete this order?'),
+                                content: Text(
+                                  order.purchaseId == null
+                                      ? 'Its purchase bill was already deleted. This removes the order from the list.'
+                                      : 'This removes only the order from the list. The purchase bill, stock and supplier due stay. '
+                                          'To undo the stock, delete the bill in Purchase → History.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm != true) return;
+                            try {
+                              await PurchaseOrderService().deletePurchaseOrder(order.id);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Not deleted: ${ErrorMessages.parse(e)}'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                            onLoad();
+                          },
+                          child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
+                        ),
                       if (order.status == 'ordered') ...[
                         TextButton(
                           onPressed: () async {
@@ -436,7 +483,7 @@ class _OrderCard extends StatelessWidget {
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text(
                                       'Delete',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(color: Color(0xFFC62828)),
                                     ),
                                   ),
                                 ],
@@ -451,7 +498,7 @@ class _OrderCard extends StatelessWidget {
                           },
                           child: const Text(
                             'Delete',
-                            style: TextStyle(color: Colors.red),
+                            style: TextStyle(color: Color(0xFFC62828)),
                           ),
                         ),
                         TextButton(
@@ -472,7 +519,7 @@ class _OrderCard extends StatelessWidget {
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: const Text(
                                       'Cancel Order',
-                                      style: TextStyle(color: Colors.red),
+                                      style: TextStyle(color: Color(0xFFC62828)),
                                     ),
                                   ),
                                 ],
@@ -487,47 +534,24 @@ class _OrderCard extends StatelessWidget {
                           },
                           child: const Text(
                             'Cancel',
-                            style: TextStyle(color: Colors.orange),
+                            style: TextStyle(color: Color(0xFFC2410C)),
                           ),
                         ),
                         ElevatedButton(
                           onPressed: () async {
-                            // receiving creates a real purchase: stock with
-                            // cost, supplier due or payment (#21)
-                            final method = await showDialog<String>(
+                            // what arrived can differ from the order:
+                            // 5 instead of 4, another price (QA #68)
+                            final result = await showModalBottomSheet<_ReceiveResult>(
                               context: context,
-                              builder: (ctx) => SimpleDialog(
-                                title: const Text('Receive order — how was it paid?'),
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-                                    child: Text(
-                                      'Items are added to stock at the order prices and a purchase bill is created.',
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                  for (final m in const [
-                                    ['credit', 'Not paid yet (supplier due)'],
-                                    ['cash', 'Paid in cash'],
-                                    ['upi', 'Paid by UPI'],
-                                    ['bank', 'Paid by bank / cheque'],
-                                  ])
-                                    SimpleDialogOption(
-                                      onPressed: () => Navigator.pop(ctx, m[0]),
-                                      child: Text(m[1]),
-                                    ),
-                                  SimpleDialogOption(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-                                  ),
-                                ],
-                              ),
+                              isScrollControlled: true,
+                              builder: (_) => _ReceiveSheet(order: order),
                             );
-                            if (method != null) {
+                            if (result != null) {
                               try {
                                 await PurchaseOrderService().receiveOrder(
                                   order.id,
-                                  paymentMethod: method,
+                                  paymentMethod: result.method,
+                                  items: result.items,
                                 );
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -811,7 +835,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
                     ? const Center(
                         child: Text(
                           'No products found',
-                          style: TextStyle(color: Colors.grey),
+                          style: TextStyle(color: Color(0xFF757575)),
                         ),
                       )
                     : ListView.builder(
@@ -936,7 +960,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
         child: Text(
           stockLabel,
           style: TextStyle(
-            color: stockColor,
+            color: readableText(stockColor),
             fontSize: 10,
             fontWeight: FontWeight.bold,
           ),
@@ -980,31 +1004,38 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Supplier selection
-            DropdownButtonFormField<String>(
-              value: _selectedSupplier?.id,
-              decoration: const InputDecoration(
-                labelText: 'Supplier',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.business),
-              ),
-              items: [
-                const DropdownMenuItem(
-                  value: '',
-                  child: Text('None', style: TextStyle(color: Colors.grey)),
-                ),
-                ..._suppliers.map(
-                  (s) => DropdownMenuItem(value: s.id, child: Text(s.name)),
-                ),
-              ],
-              onChanged: (id) {
-                if (id == null || id.isEmpty) {
-                  setState(() => _selectedSupplier = null);
-                } else {
-                  final supplier = _suppliers.firstWhere((s) => s.id == id);
-                  setState(() => _selectedSupplier = supplier);
-                }
+            // Supplier selection: searchable (QA #57)
+            InkWell(
+              onTap: () async {
+                final picked = await showSearchPicker<Supplier>(
+                  context: context,
+                  title: 'Supplier',
+                  hint: 'Type supplier name or phone',
+                  items: _suppliers,
+                  label: (s) => s.name,
+                  subtitle: (s) => s.phone ?? '',
+                  searchText: (s) => s.phone ?? '',
+                );
+                if (picked != null) setState(() => _selectedSupplier = picked);
               },
+              child: InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Supplier',
+                  border: const OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.business),
+                  suffixIcon: _selectedSupplier == null
+                      ? const Icon(Icons.search)
+                      : IconButton(
+                          tooltip: 'No supplier',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() => _selectedSupplier = null),
+                        ),
+                ),
+                child: Text(
+                  _selectedSupplier?.name ?? 'None — tap to search',
+                  style: TextStyle(color: _selectedSupplier == null ? Colors.grey.shade700 : null),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -1040,7 +1071,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
                           child: Text(
                             'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}',
                             style: const TextStyle(
-                              color: Colors.blue,
+                              color: Color(0xFF1565C0),
                               decoration: TextDecoration.underline,
                             ),
                           ),
@@ -1096,7 +1127,7 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blue,
+                      color: Color(0xFF1565C0),
                     ),
                   ),
                 ],
@@ -1195,5 +1226,187 @@ class _CreatePOSheetState extends ConsumerState<_CreatePOSheet> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+}
+
+class _ReceiveResult {
+  final List<PurchaseOrderItem> items;
+  final String method;
+  const _ReceiveResult(this.items, this.method);
+}
+
+/// Receive a PO with what actually arrived: change the quantity or price of
+/// any line (0 = did not come), then say how it was paid.
+class _ReceiveSheet extends StatefulWidget {
+  final PurchaseOrder order;
+  const _ReceiveSheet({required this.order});
+
+  @override
+  State<_ReceiveSheet> createState() => _ReceiveSheetState();
+}
+
+class _ReceiveSheetState extends State<_ReceiveSheet> {
+  late final List<TextEditingController> _qty;
+  late final List<TextEditingController> _price;
+  String _method = 'credit';
+
+  static const _methods = [
+    ['credit', 'Not paid yet'],
+    ['cash', 'Cash'],
+    ['upi', 'UPI'],
+    ['bank', 'Bank / cheque'],
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _qty = [for (final i in widget.order.items) TextEditingController(text: formatQty(i.qty))];
+    _price = [for (final i in widget.order.items) TextEditingController(text: formatQty(i.price))];
+  }
+
+  @override
+  void dispose() {
+    for (final c in [..._qty, ..._price]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  double _num(TextEditingController c) => double.tryParse(c.text.trim()) ?? -1;
+
+  List<PurchaseOrderItem> get _lines => [
+        for (var i = 0; i < widget.order.items.length; i++)
+          PurchaseOrderItem(
+            productId: widget.order.items[i].productId,
+            name: widget.order.items[i].name,
+            qty: _num(_qty[i]),
+            price: _num(_price[i]),
+          ),
+      ];
+
+  String? get _problem {
+    final lines = _lines;
+    for (final l in lines) {
+      if (l.qty < 0) return 'Enter a quantity for ${l.name} (0 if it did not come)';
+      if (l.qty > 0 && l.price < 0) return 'Enter a price for ${l.name}';
+    }
+    if (!lines.any((l) => l.qty > 0)) return 'Nothing arrived? Use Cancel Order instead.';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = _lines;
+    final total = lines.where((l) => l.qty > 0 && l.price >= 0).fold<double>(0, (s, l) => s + l.total);
+    final problem = _problem;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            children: [
+              const Text('Receive order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                'Change a quantity or price if what came is different. Put 0 for an item that did not come.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
+              const SizedBox(height: 12),
+              for (var i = 0; i < widget.order.items.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${widget.order.items[i].name}  (ordered ${formatQty(widget.order.items[i].qty)})',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _qty[i],
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Qty arrived',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: _price[i],
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Price each',
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              const Text('How was it paid?', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final m in _methods)
+                    ChoiceChip(
+                      label: Text(m[1]),
+                      selected: _method == m[0],
+                      onSelected: (_) => setState(() => _method = m[0]),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Bill total: ₹${total.toStringAsFixed(2)}'
+                '${total != widget.order.totalAmount ? '  (order was ₹${widget.order.totalAmount.toStringAsFixed(2)})' : ''}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              if (problem != null) ...[
+                const SizedBox(height: 6),
+                Text(problem, style: const TextStyle(color: Color(0xFFC62828))),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: problem != null
+                          ? null
+                          : () => Navigator.pop(context, _ReceiveResult(lines, _method)),
+                      child: const Text('Receive'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

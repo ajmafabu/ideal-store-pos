@@ -150,6 +150,8 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: const Text('Shop Settings'),
+        foregroundColor: const Color(0xFF1E293B), // white title on a light bar was unreadable
+        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -539,7 +541,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                                               'Select a Windows printer first for auto-print',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.orange,
+                                                color: Color(0xFFC2410C),
                                               ),
                                             ),
                                           ),
@@ -566,7 +568,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                                             'Auto-printing to: $printerName',
                                             style: const TextStyle(
                                               fontSize: 11,
-                                              color: Colors.green,
+                                              color: Color(0xFF2E7D32),
                                             ),
                                           ),
                                         ),
@@ -696,7 +698,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                     const SizedBox(height: 4),
                     const Text(
                       'IRN will be displayed on invoices for e-invoicing compliance. Leave empty if not applicable.',
-                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                     ),
                   ],
                 ),
@@ -723,7 +725,7 @@ class _ShopSettingsScreenState extends ConsumerState<ShopSettingsScreen> {
                     Expanded(
                       child: Text(
                         'GSTIN and shop details will appear on invoices and tax reports',
-                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                        style: TextStyle(fontSize: 12, color: Color(0xFF1565C0)),
                       ),
                     ),
                   ],

@@ -96,6 +96,25 @@ class PaymentSection extends StatelessWidget {
               _quickCashBtn(1000),
             ],
           ),
+          // what the counter needs: the change to give back (QA #78)
+          Builder(builder: (_) {
+            final given = double.tryParse(amountPaidController.text) ?? 0;
+            if (given <= 0) return const SizedBox.shrink();
+            final back = given - total;
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                back >= 0
+                    ? 'Customer gave ₹${given.toStringAsFixed(0)} → give back ₹${back.toStringAsFixed(back == back.roundToDouble() ? 0 : 2)}'
+                    : 'Customer gave ₹${given.toStringAsFixed(0)} → ₹${(-back).toStringAsFixed(2)} short',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: back >= 0 ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+                ),
+              ),
+            );
+          }),
         ],
 
         // Credit Details
@@ -125,7 +144,7 @@ class PaymentSection extends StatelessWidget {
               Text(
                 '₹ ${dueAmount.toStringAsFixed(2)}',
                 style: TextStyle(
-                  color: dueAmount > 0 ? Colors.red : Colors.green,
+                  color: dueAmount > 0 ? Color(0xFFC62828) : Color(0xFF2E7D32),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -224,7 +243,7 @@ class PaymentSection extends StatelessWidget {
                     Text(
                       'Total: Rs${sum.toStringAsFixed(2)}',
                       style: TextStyle(
-                        color: isValid ? Colors.green : Colors.red,
+                        color: isValid ? Color(0xFF2E7D32) : Color(0xFFC62828),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -232,7 +251,7 @@ class PaymentSection extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         '(${sum > total ? "Over by" : "Under by"} Rs${(sum - total).abs().toStringAsFixed(2)})',
-                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                        style: const TextStyle(color: Color(0xFFC62828), fontSize: 12),
                       ),
                     ],
                   ],
@@ -259,11 +278,11 @@ class PaymentSection extends StatelessWidget {
             },
             borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              constraints: const BoxConstraints(minHeight: 48),
               alignment: Alignment.center,
               child: Text(
-                'Rs$amount',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                '₹$amount',
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
             ),
           ),

@@ -12,6 +12,7 @@ import '../../utils/error_messages.dart';
 import '../../utils/payment_methods.dart';
 import '../../utils/paged_query.dart';
 import '../../utils/qty_format.dart';
+import '../../utils/readable_color.dart';
 
 class ProfitDetailsScreen extends ConsumerStatefulWidget {
   final String initialPeriod;
@@ -24,6 +25,10 @@ class ProfitDetailsScreen extends ConsumerStatefulWidget {
 
 class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
   List<Map<String, dynamic>> _productProfits = [];
+  // tap the "sold below cost" banner to list only those (QA #45)
+  bool _onlyLoss = false;
+  List<Map<String, dynamic>> get _shownProfits =>
+      _onlyLoss ? _productProfits.where((p) => (p['profit'] as double) < 0).toList() : _productProfits;
   DateTime? _periodStartUtc;
   DateTime? _periodEndUtc;
   double _totalRevenue = 0; // Sum of final_amount (matches Business Summary)
@@ -220,7 +225,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                             '-Rs${_totalCOGS.toStringAsFixed(0)}',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Colors.red,
+                              color: Color(0xFFC62828),
                             ),
                           ),
                         ],
@@ -234,8 +239,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: grossProfit >= 0
-                                  ? Colors.green
-                                  : Colors.red,
+                                  ? Color(0xFF2E7D32)
+                                  : Color(0xFFC62828),
                             ),
                           ),
                         ],
@@ -249,7 +254,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                             '-Rs${_totalExpenses.toStringAsFixed(0)}',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Colors.red,
+                              color: Color(0xFFC62828),
                             ),
                           ),
                         ],
@@ -263,7 +268,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                               '-Rs${_totalDamaged.toStringAsFixed(0)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: Colors.red,
+                                color: Color(0xFFC62828),
                               ),
                             ),
                           ],
@@ -288,8 +293,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                   color: netProfit >= 0
-                                      ? Colors.green
-                                      : Colors.red,
+                                      ? Color(0xFF2E7D32)
+                                      : Color(0xFFC62828),
                                 ),
                               ),
                               Text(
@@ -297,7 +302,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: netProfit >= 0
-                                      ? Colors.green.shade700
+                                      ? Color(0xFF2E7D32)
                                       : Colors.red.shade700,
                                 ),
                               ),
@@ -311,7 +316,9 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
 
                 // Loss making products warning
                 if (_productProfits.any((p) => (p['profit'] as double) < 0))
-                  Container(
+                  GestureDetector(
+                  onTap: () => setState(() => _onlyLoss = !_onlyLoss),
+                  child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 12),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -330,13 +337,18 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                           child: Text(
                             '${_productProfits.where((p) => (p['profit'] as double) < 0).length} products sold below cost',
                             style: const TextStyle(
-                              color: Colors.red,
+                              color: Color(0xFFC62828),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
+                        Text(
+                          _onlyLoss ? 'Show all' : 'Show only these',
+                          style: const TextStyle(color: Color(0xFFC62828), decoration: TextDecoration.underline),
+                        ),
                       ],
                     ),
+                  ),
                   ),
 
                 const SizedBox(height: 8),
@@ -345,9 +357,9 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: _productProfits.length,
+                    itemCount: _shownProfits.length,
                     itemBuilder: (context, index) {
-                      final p = _productProfits[index];
+                      final p = _shownProfits[index];
                       final name = p['name'] as String;
                       final tamilName = p['tamilName'] as String?;
                       final qtyNum = p['qtySold'] as num;
@@ -432,7 +444,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                     '${prodProfit >= 0 ? '+' : ''}Rs${prodProfit.toStringAsFixed(0)}',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: color,
+                                      color: readableText(color),
                                       fontSize: 13,
                                     ),
                                   ),
@@ -449,7 +461,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                       '${margin.toStringAsFixed(1)}%',
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: color,
+                                        color: readableText(color),
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -562,8 +574,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                         style: TextStyle(
                           fontSize: 12,
                           color: product.sellingPrice > product.purchasePrice
-                              ? Colors.green
-                              : Colors.red,
+                              ? Color(0xFF2E7D32)
+                              : Color(0xFFC62828),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -608,7 +620,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                 const SizedBox(height: 8),
                 const Text(
                   'Updates apply to future transactions. Past sales retain original values.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                 ),
               ],
             ),
@@ -784,8 +796,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: isProfit
-                                          ? Colors.green
-                                          : Colors.red,
+                                          ? Color(0xFF2E7D32)
+                                          : Color(0xFFC62828),
                                       fontSize: 14,
                                     ),
                                   ),
@@ -808,7 +820,7 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                     'Revenue: Rs${(s['total'] as double).toStringAsFixed(0)} | Cost: Rs${(s['cost'] as double).toStringAsFixed(0)}',
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.grey[500],
+                                      color: Color(0xFF757575),
                                     ),
                                   ),
                                   Container(
@@ -960,8 +972,8 @@ class _ProfitDetailsScreenState extends ConsumerState<ProfitDetailsScreen> {
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: margin >= 0
-                                          ? Colors.green
-                                          : Colors.red,
+                                          ? Color(0xFF2E7D32)
+                                          : Color(0xFFC62828),
                                     ),
                                   ),
                                 ],

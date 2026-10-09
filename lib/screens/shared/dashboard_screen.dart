@@ -16,6 +16,7 @@ import '../admin/all_profitable_products_screen.dart';
 import 'dashboard_widgets/greeting_header.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/paged_query.dart';
+import '../../utils/readable_color.dart';
 
 String _inr(double v) {
   final f = NumberFormat('#,##,##0', 'en_IN');
@@ -140,7 +141,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     const SizedBox(width: 4),
                                     Text(
                                       '$pendingCount',
-                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange.shade700),
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFC2410C)),
                                     ),
                                   ],
                                 ),
@@ -158,7 +159,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                     TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                     TextButton(
                                       onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                                      child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
                                     ),
                                   ],
                                 ),
@@ -424,6 +425,9 @@ class _QuickStats extends ConsumerWidget {
     final orderCount = orderCountAsync.value ?? 0;
     final expenseAmt = expenses.value ?? 0;
     final stockAmt = stockValue.value ?? 0;
+    // the cards opened nothing (QA #47); tab numbers are the admin shell's
+    final isAdmin = ref.watch(dashboardIsAdminProvider).value ?? false;
+    void open(int tab) => ref.read(currentTabProvider.notifier).setTab(tab);
 
     return Row(
       children: [
@@ -433,6 +437,7 @@ class _QuickStats extends ConsumerWidget {
           color: const Color(0xFF3B82F6),
           icon: Icons.receipt_long_rounded,
           bgGradient: [const Color(0xFFEFF6FF), const Color(0xFFDBEAFE)],
+          onTap: isAdmin ? () => open(2) : null,
         ),
         const SizedBox(width: 10),
         _StatCard(
@@ -441,6 +446,7 @@ class _QuickStats extends ConsumerWidget {
           color: const Color(0xFFF59E0B),
           icon: Icons.receipt_rounded,
           bgGradient: [const Color(0xFFFFFBEB), const Color(0xFFFEF3C7)],
+          onTap: isAdmin ? () => open(4) : null,
         ),
         const SizedBox(width: 10),
         _StatCard(
@@ -449,6 +455,7 @@ class _QuickStats extends ConsumerWidget {
           color: const Color(0xFF8B5CF6),
           icon: Icons.warehouse_rounded,
           bgGradient: [const Color(0xFFF5F3FF), const Color(0xFFEDE9FE)],
+          onTap: isAdmin ? () => open(1) : null,
         ),
       ],
     );
@@ -461,6 +468,7 @@ class _StatCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final List<Color> bgGradient;
+  final VoidCallback? onTap;
 
   const _StatCard({
     required this.label,
@@ -468,11 +476,14 @@ class _StatCard extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.bgGradient,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
+      child: GestureDetector(
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
         decoration: BoxDecoration(
@@ -501,7 +512,7 @@ class _StatCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: color,
+                color: readableText(color),
                 letterSpacing: -0.3,
               ),
               maxLines: 1,
@@ -518,6 +529,7 @@ class _StatCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -556,7 +568,7 @@ class _WeeklyChart extends ConsumerWidget {
                 onTap: () => ref.read(currentTabProvider.notifier).setTab(5),
                 child: Text(
                   'Details',
-                  style: TextStyle(fontSize: 13, color: const Color(0xFF667eea), fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 13, color: Color(0xFF4C51BF), fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -570,7 +582,7 @@ class _WeeklyChart extends ConsumerWidget {
               data: (days) {
                 if (days.isEmpty) {
                   return Center(
-                    child: Text('No data', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                    child: Text('No data', style: TextStyle(color: Color(0xFF757575), fontSize: 12)),
                   );
                 }
                 final maxVal = days.map((d) => (d['total'] as num? ?? 0).toDouble()).reduce(max);
@@ -589,7 +601,7 @@ class _WeeklyChart extends ConsumerWidget {
                           children: [
                             Text(
                               total >= 1000 ? '${(total / 1000).toStringAsFixed(0)}K' : total.toStringAsFixed(0),
-                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                              style: TextStyle(fontSize: 10, color: Color(0xFF757575)),
                             ),
                             const SizedBox(height: 4),
                             Container(
@@ -725,7 +737,7 @@ class _SummaryRow extends StatelessWidget {
           style: TextStyle(
             fontSize: bold ? 18 : 16,
             fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-            color: color,
+            color: readableText(color),
           ),
         ),
       ],
@@ -815,7 +827,7 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
               },
               child: Text(
                 'View All',
-                style: TextStyle(fontSize: 13, color: const Color(0xFF667eea), fontWeight: FontWeight.w500),
+                style: TextStyle(fontSize: 13, color: Color(0xFF4C51BF), fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -831,7 +843,7 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
-                      child: Text('No sales data this month', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                      child: Text('No sales data this month', style: TextStyle(color: Color(0xFF757575), fontSize: 13)),
                     ),
                   )
                 : _buildList(),
@@ -877,7 +889,7 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
                         alignment: Alignment.center,
                         child: Text(
                           '${i + 1}',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF757575)),
                         ),
                       ),
                     const SizedBox(width: 8),
@@ -896,7 +908,7 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
                             children: [
                               Text(
                                 '$qtySold sold',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
                               ),
                               const SizedBox(width: 8),
                               Container(
@@ -915,10 +927,10 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     color: margin >= 20
-                                        ? const Color(0xFF10B981)
+                                        ? Color(0xFF047857)
                                         : margin >= 10
-                                            ? const Color(0xFFF59E0B)
-                                            : const Color(0xFFEF4444),
+                                            ? Color(0xFFB45309)
+                                            : Color(0xFFB91C1C),
                                   ),
                                 ),
                               ),
@@ -932,11 +944,11 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
                       children: [
                         Text(
                           _inr(profit),
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
                         ),
                         Text(
                           '${_inr(revenue)} rev',
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                          style: TextStyle(fontSize: 10, color: Color(0xFF757575)),
                         ),
                       ],
                     ),

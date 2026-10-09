@@ -274,7 +274,7 @@ class Sale {
       paymentMethod: json['payment_method'] as String? ?? 'cash',
       createdBy: json['created_by'] as String? ?? '',
       createdAt:
-          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal() ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       customerId: json['customer_id'] as String?,
       isCredit: json['is_credit'] as bool? ?? false,

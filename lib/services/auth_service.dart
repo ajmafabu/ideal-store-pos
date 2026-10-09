@@ -207,6 +207,63 @@ class AuthService {
     await _client.rpc('admin_delete_staff', params: {'p_user_id': userId});
   }
 
+  /// Sets or changes the signed-in person's own PIN (till unlock, and the
+  /// login of staff who sign in with email + PIN). There was no way to do
+  /// this after an account was made.
+  ///
+  /// Proof first: the current PIN when one is set, else the account
+  /// password. For a PIN-login account the login password is derived from
+  /// the PIN, so it is changed with it — otherwise that person could no
+  /// longer sign in.
+  Future<void> changeOwnPin({required String newPin, String? currentPin, String? password}) async {
+    final user = _client.auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) throw Exception('Not signed in');
+    if (!RegExp(r'^\d{4,6}$').hasMatch(newPin)) throw Exception('The PIN must be 4 to 6 digits');
+
+    final row = await _client.from('profiles').select('pin').eq('id', user.id).maybeSingle();
+    final oldHash = row?['pin'] as String?;
+
+    var pinLogin = false;
+    if (oldHash != null && oldHash.isNotEmpty) {
+      if (currentPin == null || !PinAuth.verifyPin(currentPin, oldHash)) {
+        throw Exception('The current PIN is wrong');
+      }
+      // does this account sign in with its PIN?
+      try {
+        await _client.auth.signInWithPassword(email: email, password: PinAuth.derivePassword(email, currentPin));
+        pinLogin = true;
+      } catch (_) {
+        pinLogin = false; // signs in with a normal password
+      }
+    } else {
+      if (password == null || password.isEmpty) throw Exception('Enter your account password');
+      try {
+        await _client.auth.signInWithPassword(email: email, password: password);
+      } catch (_) {
+        throw Exception('The password is wrong');
+      }
+    }
+
+    await _client.from('profiles').update({'pin': PinAuth.hashPin(newPin)}).eq('id', user.id);
+    if (pinLogin) {
+      try {
+        await _client.auth.updateUser(UserAttributes(password: PinAuth.derivePassword(email, newPin)));
+      } catch (e) {
+        // keep PIN and login password in step: put the old PIN back
+        await _client.from('profiles').update({'pin': oldHash}).eq('id', user.id);
+        rethrow;
+      }
+    }
+
+    // the till unlocks from the saved profile when offline
+    final cached = cachedProfile();
+    if (cached != null) {
+      await ProfileCache.save(Profile.fromJson({...cached.toJson(), 'pin': PinAuth.hashPin(newPin)}));
+    }
+    AuditService().log(action: 'change_pin', entityType: 'auth', description: 'Changed own PIN: $email');
+  }
+
   /// Sign in with email + PIN (derives strong password from PIN)
   Future<void> signInWithPin({
     required String email,

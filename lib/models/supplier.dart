@@ -25,7 +25,7 @@ class Supplier {
     gstNumber: json['gst_number'] as String?,
     totalDues: (json['total_dues'] as num?)?.toDouble() ?? 0,
     createdAt:
-        DateTime.tryParse(json['created_at'] as String? ?? '') ??
+        DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
         DateTime.now(),
   );
 

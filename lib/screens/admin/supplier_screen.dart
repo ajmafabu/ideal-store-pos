@@ -5,7 +5,9 @@ import '../../config/providers.dart';
 import '../../services/statement_pdf_generator.dart';
 import '../../widgets/empty_state.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/validators.dart';
 import 'supplier_detail_screen.dart';
+import '../../utils/readable_color.dart';
 
 class SupplierScreen extends ConsumerStatefulWidget {
   const SupplierScreen({super.key});
@@ -54,24 +56,31 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
     final phoneController = TextEditingController(text: existing?.phone ?? '');
     final addressController = TextEditingController(text: existing?.address ?? '');
     final gstController = TextEditingController(text: existing?.gstNumber ?? '');
+    // phone "123" and GSTIN "ABC" were accepted (QA #16)
+    final formKey = GlobalKey<FormState>();
 
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(existing != null ? 'Edit Supplier' : 'Add Supplier'),
         content: SingleChildScrollView(
-          child: Column(
+          child: Form(
+            key: formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
+              TextFormField(
                 controller: nameController,
                 decoration: const InputDecoration(labelText: 'Name *'),
+                validator: (v) => Validators.required(v, 'Name'),
               ),
               const SizedBox(height: 12),
-              TextField(
+              TextFormField(
                 controller: phoneController,
                 decoration: const InputDecoration(labelText: 'Phone'),
                 keyboardType: TextInputType.phone,
+                validator: _supplierPhone,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -80,11 +89,14 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
                 maxLines: 2,
               ),
               const SizedBox(height: 12),
-              TextField(
+              TextFormField(
                 controller: gstController,
                 decoration: const InputDecoration(labelText: 'GST Number'),
+                textCapitalization: TextCapitalization.characters,
+                validator: Validators.gstin,
               ),
             ],
+          ),
           ),
         ),
         actions: [
@@ -94,7 +106,7 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
           ),
           TextButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (formKey.currentState?.validate() ?? false) {
                 try {
                   if (existing != null) {
                     await ref.read(supplierServiceProvider).updateSupplier(
@@ -102,17 +114,17 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
                       name: nameController.text,
                       phone: phoneController.text.isNotEmpty ? phoneController.text : null,
                       address: addressController.text.isNotEmpty ? addressController.text : null,
-                      gstNumber: gstController.text.isNotEmpty ? gstController.text : null,
+                      gstNumber: gstController.text.isNotEmpty ? gstController.text.trim().toUpperCase() : null,
                     );
                   } else {
                     await ref.read(supplierServiceProvider).addSupplier(
                       name: nameController.text,
                       phone: phoneController.text.isNotEmpty ? phoneController.text : null,
                       address: addressController.text.isNotEmpty ? addressController.text : null,
-                      gstNumber: gstController.text.isNotEmpty ? gstController.text : null,
+                      gstNumber: gstController.text.isNotEmpty ? gstController.text.trim().toUpperCase() : null,
                     );
                   }
-                  Navigator.pop(ctx, true);
+                  if (ctx.mounted) Navigator.pop(ctx, true);
                 } catch (e) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
                     SnackBar(content: Text(ErrorMessages.parse(e))),
@@ -127,6 +139,14 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
     );
 
     if (result == true) _loadSuppliers();
+  }
+
+  /// Mobile or landline (with STD code): 10–12 digits. Empty is allowed.
+  static String? _supplierPhone(String? v) {
+    final digits = (v ?? '').replaceAll(RegExp(r'[\s\-+]'), '');
+    if (digits.isEmpty) return null;
+    if (!RegExp(r'^\d{10,12}$').hasMatch(digits)) return 'Enter a 10-digit mobile or a landline with STD code';
+    return null;
   }
 
   Future<void> _exportBalancePdf() async {
@@ -153,7 +173,7 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),
@@ -242,7 +262,7 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
                                   ),
                                   child: Text(
                                     supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
-                                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
+                                    style: TextStyle(color: readableText(color), fontWeight: FontWeight.bold, fontSize: 18),
                                   ),
                                 ),
                                 title: Text(supplier.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -284,7 +304,7 @@ class _SupplierScreenState extends ConsumerState<SupplierScreen> {
                                         ),
                                         child: const Text(
                                           'No dues',
-                                          style: TextStyle(color: Color(0xFF11998e), fontSize: 12),
+                                          style: TextStyle(color: Color(0xFF0F766E), fontSize: 12),
                                         ),
                                       ),
                                     Row(

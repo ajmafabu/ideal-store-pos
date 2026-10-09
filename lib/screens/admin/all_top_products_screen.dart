@@ -28,7 +28,7 @@ class _AllTopProductsScreenState extends State<AllTopProductsScreen> {
       final response = await Supabase.instance.client
           .from('products')
           .select()
-          .order('name');
+          .order('name', ascending: true);
       setState(() {
         _products = (response as List).map((e) => Product.fromJson(e)).toList();
         _products.sort((a, b) {
@@ -146,8 +146,8 @@ class _AllTopProductsScreenState extends State<AllTopProductsScreen> {
                       '${index + 1}',
                       style: TextStyle(
                         color: profit >= 0
-                            ? const Color(0xFF10B981)
-                            : Colors.red,
+                            ? Color(0xFF047857)
+                            : Color(0xFFC62828),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -164,7 +164,7 @@ class _AllTopProductsScreenState extends State<AllTopProductsScreen> {
                     'Rs${profit.toStringAsFixed(0)}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: profit >= 0 ? const Color(0xFF10B981) : Colors.red,
+                      color: profit >= 0 ? Color(0xFF047857) : Color(0xFFC62828),
                     ),
                   ),
                 );

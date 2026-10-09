@@ -94,6 +94,12 @@ class DamagedService {
     }
   }
 
+  /// Deletes a wrong entry; the database puts its stock back (QA #86).
+  Future<void> deleteDamaged(String id) async {
+    await _client.rpc('delete_damaged_atomic', params: {'p_id': id});
+    ProductService.invalidateCache();
+  }
+
   Future<int> getTodayDamagedCount() async {
     try {
       final start = AppTimezone.todayStartUtc();

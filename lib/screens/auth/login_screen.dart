@@ -108,7 +108,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         const SizedBox(height: 16),
                         Text('Ideal Store POS', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
-                        Text('Smart Store \u2022 Smart Business', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey)),
+                        Text('Smart Store \u2022 Smart Business', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Color(0xFF757575))),
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -118,7 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           child: Text(
                             _usePin ? 'Quick Login with PIN' : 'Sign In',
-                            style: const TextStyle(color: Color(0xFF667eea), fontWeight: FontWeight.w500),
+                            style: const TextStyle(color: Color(0xFF4C51BF), fontWeight: FontWeight.w500),
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -186,7 +186,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             onPressed: () => setState(() => _usePin = !_usePin),
                             child: Text(
                               _usePin ? 'Use password instead' : 'Quick login with PIN',
-                              style: const TextStyle(color: Color(0xFF667eea)),
+                              style: const TextStyle(color: Color(0xFF4C51BF)),
                             ),
                           ),
                         ),

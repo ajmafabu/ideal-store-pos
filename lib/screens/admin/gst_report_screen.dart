@@ -65,7 +65,9 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
         totalQty += h['qty'] as double;
         hsnData.add({
           'hsn': hsn.isEmpty ? 'NO-HSN' : hsn,
-          'name': h['desc'] ?? '',
+          // every line without an HSN code is one group; it was labelled with
+          // the first product's name ("MILK BIKIS", qty 44,510)
+          'name': hsn.isEmpty ? 'All products without an HSN code' : (h['desc'] ?? ''),
           'rate': h['rate'],
           'qty': h['qty'],
           'taxable_value': h['taxable'],
@@ -196,6 +198,8 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
       backgroundColor: const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: const Text('GST Reports'),
+        foregroundColor: const Color(0xFF1E293B), // white title on a light bar was unreadable
+        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
@@ -271,7 +275,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: _selectedTab == 0 ? Colors.white : Colors.grey,
+                                      color: _selectedTab == 0 ? Colors.white : Color(0xFF757575),
                                     ),
                                   ),
                                 ),
@@ -295,7 +299,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: _selectedTab == 1 ? Colors.white : Colors.grey,
+                                      color: _selectedTab == 1 ? Colors.white : Color(0xFF757575),
                                     ),
                                   ),
                                 ),
@@ -345,7 +349,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Center(child: Text('No GST sales in this period', style: TextStyle(color: Colors.grey))),
+                          child: const Center(child: Text('No GST sales in this period', style: TextStyle(color: Color(0xFF757575)))),
                         )
                       else
                         ..._hsnData.map((h) => _hsnCard(h)),
@@ -394,7 +398,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Center(child: Text('Tap refresh to load GSTR-3B data', style: TextStyle(color: Colors.grey))),
+            child: const Center(child: Text('Tap refresh to load GSTR-3B data', style: TextStyle(color: Color(0xFF757575)))),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -487,7 +491,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                 Text('Rs${row.value.toStringAsFixed(0)}', style: TextStyle(
                   fontSize: 13,
                   fontWeight: row.bold ? FontWeight.bold : FontWeight.normal,
-                  color: row.bold ? const Color(0xFF667eea) : null,
+                  color: row.bold ? Color(0xFF4C51BF) : null,
                 )),
               ],
             ),
@@ -538,7 +542,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
                   color: const Color(0xFF667eea).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(h['hsn'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF667eea))),
+                child: Text(h['hsn'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4C51BF))),
               ),
               const SizedBox(width: 8),
               Expanded(child: Text(h['name'], style: const TextStyle(fontWeight: FontWeight.w500))),
@@ -565,7 +569,7 @@ class _GSTReportScreenState extends ConsumerState<GSTReportScreen> {
   Widget _miniStat(String label, String value) {
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+        Text(label, style: TextStyle(fontSize: 10, color: Color(0xFF757575))),
         const SizedBox(height: 2),
         Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
       ],

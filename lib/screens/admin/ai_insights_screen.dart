@@ -17,6 +17,7 @@ import 'expense_screen.dart';
 import 'purchase_order_screen.dart';
 import 'gst_filing_screen.dart';
 import 'all_top_products_screen.dart';
+import '../../utils/readable_color.dart';
 
 class AiInsightsScreen extends ConsumerStatefulWidget {
   const AiInsightsScreen({super.key});
@@ -59,16 +60,6 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
     });
   }
 
-  void _exportPdf() async {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('PDF export coming soon')));
-  }
-
-  void _exportCsv() async {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('CSV export coming soon')));
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -98,31 +89,7 @@ class _AiInsightsScreenState extends ConsumerState<AiInsightsScreen> {
           ],
         ),
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (v) {
-              if (v == 'pdf') _exportPdf();
-              else if (v == 'csv') _exportCsv();
-            },
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                value: 'pdf',
-                child: Row(children: [
-                  Icon(Icons.picture_as_pdf, size: 18, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Export PDF'),
-                ]),
-              ),
-              const PopupMenuItem(
-                value: 'csv',
-                child: Row(children: [
-                  Icon(Icons.table_chart, size: 18, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('Export CSV'),
-                ]),
-              ),
-            ],
-          ),
+          // Export PDF / CSV only said "coming soon" — removed until they work
         ],
       ),
       body: RefreshIndicator(
@@ -337,7 +304,7 @@ class _BusinessHealthScore extends ConsumerWidget {
                             height: 1)),
                     Text(label,
                         style: TextStyle(
-                            color: color,
+                            color: readableText(color),
                             fontSize: 13,
                             fontWeight: FontWeight.w600)),
                   ],
@@ -389,7 +356,7 @@ class _MiniStat extends StatelessWidget {
       child: Column(children: [
         Text(value,
             style: TextStyle(
-                color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+                color: readableText(color), fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
         Text(label,
             style: const TextStyle(color: Colors.white60, fontSize: 11)),
@@ -464,7 +431,7 @@ class _SmartAlerts extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(10)),
             child: Text('${alerts.length}',
                 style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+                    fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFB91C1C))),
           ),
         ]),
         const SizedBox(height: 12),
@@ -1121,7 +1088,7 @@ class _TimeSeriesForecast extends ConsumerWidget {
                             padding: const EdgeInsets.only(bottom: 4),
                             child: Row(children: [
                               Expanded(child: Text('${item['name'] ?? ''}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
-                              Text('${item['stock'] ?? 0} left (need ${item['alert'] ?? 0})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFEF4444))),
+                              Text('${item['stock'] ?? 0} left (need ${item['alert'] ?? 0})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB91C1C))),
                             ]),
                           )),
                     ],
@@ -1196,7 +1163,7 @@ class _GstTaxIntelligence extends ConsumerWidget {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(color: const Color(0xFF0EA5E9).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-                                      child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0EA5E9))),
+                                      child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF0369A1))),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(child: Text('₹${e.value.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
@@ -1278,7 +1245,7 @@ class _ExpenseIntelligence extends ConsumerWidget {
                                 Expanded(child: Text(e.key, style: const TextStyle(fontSize: 12))),
                                 Text('₹${e.value.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
                                 const SizedBox(width: 8),
-                                Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                Text('${pct.toStringAsFixed(0)}%', style: TextStyle(fontSize: 11, color: Color(0xFF757575))),
                               ]),
                             );
                           }),
@@ -1419,7 +1386,7 @@ class _ActionRecommendations extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(10)),
             child: Text('${actions.length}',
                 style: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF667eea))),
+                    fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4C51BF))),
           ),
         ]),
         const SizedBox(height: 12),
@@ -1503,12 +1470,12 @@ class _InsightCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(value,
                     style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+                        fontSize: 18, fontWeight: FontWeight.bold, color: readableText(color))),
               ]),
         ),
         Expanded(
           child: Text(subtitle,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 11, color: Color(0xFF757575)),
               textAlign: TextAlign.end),
         ),
         if (onTap != null) ...[
@@ -1549,7 +1516,7 @@ class _DateRangeFilter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _buildChip('Today', 1),
+          _buildChip('Today', 0), // 1 meant "from yesterday" (QA #80)
           _buildChip('7 Days', 7),
           _buildChip('30 Days', 30),
           _buildChip('90 Days', 90),
@@ -1625,7 +1592,9 @@ class _SalesChart extends ConsumerWidget {
             data: (data) {
               if (data.isEmpty) return const SizedBox(height: 150, child: Center(child: Text('No data')));
               final spots = <FlSpot>[];
-              for (int i = 0; i < data.length && i < 30; i++) {
+              // every day of the range: capping at 30 drew only the oldest
+              // 30 days, so 90 Days showed Jul–Aug as a flat ₹0 (QA #80)
+              for (int i = 0; i < data.length; i++) {
                 spots.add(FlSpot(i.toDouble(), (data[i]['total_sales'] as num?)?.toDouble() ?? 0));
               }
               final maxY = spots.isEmpty ? 0.0 : spots.map((s) => s.y).reduce(max);
@@ -1635,12 +1604,12 @@ class _SalesChart extends ConsumerWidget {
                   LineChartData(
                     gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxY > 0 ? maxY / 4 : 1, getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey.shade100, strokeWidth: 1)),
                     titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (v, _) => Text('₹${_abbrev(v)}', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)))),
+                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (v, _) => Text('₹${_abbrev(v)}', style: TextStyle(fontSize: 10, color: Color(0xFF757575))))),
                       bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 20, interval: data.length > 7 ? (data.length / 7).ceilToDouble() : 1, getTitlesWidget: (v, _) {
                         final idx = v.toInt();
                         if (idx >= 0 && idx < data.length) {
                           final day = data[idx]['day']?.toString().substring(5) ?? '';
-                          return Text(day, style: TextStyle(fontSize: 10, color: Colors.grey.shade500));
+                          return Text(day, style: TextStyle(fontSize: 10, color: Color(0xFF757575)));
                         }
                         return const Text('');
                       })),
@@ -1801,7 +1770,7 @@ class _TopProductsChart extends ConsumerWidget {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(children: [
-                      SizedBox(width: 20, child: Text('${i + 1}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500))),
+                      SizedBox(width: 20, child: Text('${i + 1}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF757575)))),
                       Expanded(flex: 3, child: Text(name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
                       const SizedBox(width: 8),
                       Expanded(flex: 5, child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: pct, backgroundColor: Colors.grey.shade100, valueColor: AlwaysStoppedAnimation(barColors[i % barColors.length]), minHeight: 10))),

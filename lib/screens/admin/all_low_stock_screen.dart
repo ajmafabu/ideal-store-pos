@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/qty_format.dart';
+import '../../utils/readable_color.dart';
 
 class AllLowStockScreen extends ConsumerWidget {
   const AllLowStockScreen({super.key});
@@ -30,7 +31,7 @@ class AllLowStockScreen extends ConsumerWidget {
                   SizedBox(height: 16),
                   Text(
                     'All stock levels are healthy!',
-                    style: TextStyle(fontSize: 16, color: Colors.green),
+                    style: TextStyle(fontSize: 16, color: Color(0xFF2E7D32)),
                   ),
                 ],
               ),
@@ -120,7 +121,7 @@ class _SectionHeader extends StatelessWidget {
               '$label ($count)',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: color,
+                color: readableText(color),
                 fontSize: 13,
               ),
             ),
@@ -168,7 +169,7 @@ class _StockTile extends StatelessWidget {
             formatQty(product.stock),
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: color,
+              color: readableText(color),
               fontSize: 14,
             ),
           ),

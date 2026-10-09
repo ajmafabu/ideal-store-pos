@@ -18,6 +18,7 @@ import 'cash_flow_screen.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/logger.dart';
 import '../../utils/paged_query.dart';
+import '../../utils/readable_color.dart';
 
 class ReportData {
   final double totalSales;
@@ -248,9 +249,10 @@ final reportDataProvider = FutureProvider<ReportData>((ref) async {
   }
 
   // Previous month comparison
-  final prevStart = DateTime(range.start.year, range.start.month - 1, 1);
-  final prevEnd = DateTime(range.start.year, range.start.month, 0);
-  final prevEndExcl = prevEnd.add(const Duration(days: 1));
+  // the same length of time just before, like get_reports_summary in the
+  // database (1–9 Oct against 22–30 Sep)
+  final prevEndExcl = range.start;
+  final prevStart = range.start.subtract(range.end.difference(range.start));
 
   final prevSales = await fetchAllRows(() => client
       .from('sales')
@@ -348,8 +350,8 @@ class ReportsScreen extends ConsumerWidget {
                 _PeriodSelector(range: range, ref: ref),
                 const SizedBox(height: 12),
 
-                // Month comparison
-                _MonthComparison(report: report),
+                // against the same number of days just before
+                _MonthComparison(report: report, range: range),
                 const SizedBox(height: 12),
 
                 // Profit summary - P&L breakdown
@@ -481,7 +483,7 @@ class ReportsScreen extends ConsumerWidget {
                             if (data.isEmpty) {
                               return const Text(
                                 'No receivables data available',
-                                style: TextStyle(color: Colors.grey),
+                                style: TextStyle(color: Color(0xFF757575)),
                               );
                             }
                             return SingleChildScrollView(
@@ -491,7 +493,7 @@ class ReportsScreen extends ConsumerWidget {
                                 headingTextStyle: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
-                                  color: Colors.grey,
+                                  color: Color(0xFF757575),
                                 ),
                                 dataTextStyle: const TextStyle(fontSize: 12),
                                 columns: const [
@@ -710,7 +712,7 @@ class ReportsScreen extends ConsumerWidget {
                           child: Text(
                             '$i',
                             style: TextStyle(
-                              color: i <= 3 ? Colors.green : Colors.grey,
+                              color: i <= 3 ? Color(0xFF2E7D32) : Color(0xFF757575),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -1111,7 +1113,7 @@ class _PeriodChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.white : Colors.grey,
+            color: isSelected ? Colors.white : Color(0xFF757575),
           ),
         ),
       ),
@@ -1122,7 +1124,9 @@ class _PeriodChip extends StatelessWidget {
 class _MonthComparison extends StatelessWidget {
   final ReportData report;
 
-  const _MonthComparison({required this.report});
+  final DateRange range;
+
+  const _MonthComparison({required this.report, required this.range});
 
   @override
   Widget build(BuildContext context) {
@@ -1139,9 +1143,14 @@ class _MonthComparison extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'vs Last Month',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            // it compares with the same number of days just before, not
+            // with "last month" (QA #55, retest 9 Oct)
+            Text(
+              () {
+                final days = (range.end.difference(range.start).inHours / 24).ceil().clamp(1, 9999);
+                return days == 1 ? 'vs the day before' : 'vs the $days days before';
+              }(),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Row(
@@ -1187,9 +1196,7 @@ class _ComparisonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final change = previous > 0
-        ? ((current - previous) / previous * 100).abs()
-        : 0.0;
+    final change = previous > 0 ? (current - previous) / previous * 100 : null;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -1214,10 +1221,12 @@ class _ComparisonTile extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                '${change.toStringAsFixed(0)}%',
+                change == null
+                    ? '—'
+                    : '${change >= 0 ? '+' : '−'}${change.abs().toStringAsFixed(change.abs() < 10 ? 1 : 0)}%',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isUp ? Colors.green : Colors.red,
+                  color: isUp ? Color(0xFF2E7D32) : Color(0xFFC62828),
                 ),
               ),
             ],
@@ -1405,7 +1414,7 @@ class _ReportRow extends StatelessWidget {
             style: TextStyle(
               fontWeight: bold ? FontWeight.bold : FontWeight.normal,
               fontSize: bold ? 15 : 13,
-              color: color,
+              color: readableText(color),
             ),
           ),
         ],
@@ -1553,7 +1562,7 @@ class _TrialBalanceSection extends ConsumerWidget {
                 if (data.isEmpty) {
                   return const Text(
                     'No trial balance data available',
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: Color(0xFF757575)),
                   );
                 }
                 double totalDebit = 0;
@@ -1569,7 +1578,7 @@ class _TrialBalanceSection extends ConsumerWidget {
                     headingTextStyle: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
-                      color: Colors.grey,
+                      color: Color(0xFF757575),
                     ),
                     dataTextStyle: const TextStyle(fontSize: 12),
                     columns: const [

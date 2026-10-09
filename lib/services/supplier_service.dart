@@ -35,7 +35,7 @@ class SupplierService {
     }
 
     try {
-      final response = await _supabase.from('suppliers').select().order('name');
+      final response = await _supabase.from('suppliers').select().order('name', ascending: true);
       final list = (response as List)
           .map((json) => Supplier.fromJson(json))
           .toList();
@@ -224,7 +224,7 @@ class SupplierService {
           .from('suppliers')
           .select()
           .or('name.ilike.%$q%,phone.ilike.%$q%')
-          .order('name')
+          .order('name', ascending: true)
           .limit(20);
       return (response as List).map((json) => Supplier.fromJson(json)).toList();
     } catch (e) {

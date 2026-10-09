@@ -6,6 +6,7 @@ import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/qty_format.dart';
 import '../../utils/paged_query.dart';
+import '../../utils/readable_color.dart';
 
 class DailyReportScreen extends StatefulWidget {
   const DailyReportScreen({super.key});
@@ -36,8 +37,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       // Fetch all data in parallel
       final results = await Future.wait([
         fetchAllRows(() => Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, cash_amount, digital_amount, items').gte('created_at', startStr).lt('created_at', endStr)),
-        fetchAllRows(() => Supabase.instance.client.from('purchases').select('total_amount').gte('created_at', startStr).lt('created_at', endStr)),
-        fetchAllRows(() => Supabase.instance.client.from('expenses').select('amount').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('purchases').select('total_amount, amount_paid, payment_method').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('expenses').select('amount, payment_method').gte('created_at', startStr).lt('created_at', endStr)),
       ]);
 
       final sales = results[0] as List;
@@ -79,14 +80,23 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
         if (paid > 0) cashCollected += paid;
       }
 
+      // Net Cash takes off what left the drawer: cash paid for purchases
+      // too, not only expenses (QA #90)
+      bool isCash(Object? m) => (m as String? ?? 'cash').toLowerCase() == 'cash';
+
       double totalPurchases = 0;
+      double cashPurchases = 0;
       for (final p in purchases) {
         totalPurchases += (p['total_amount'] as num?)?.toDouble() ?? 0;
+        if (isCash(p['payment_method'])) cashPurchases += (p['amount_paid'] as num?)?.toDouble() ?? 0;
       }
 
       double totalExpenses = 0;
+      double cashExpenses = 0;
       for (final e in expenses) {
-        totalExpenses += (e['amount'] as num?)?.toDouble() ?? 0;
+        final amt = (e['amount'] as num?)?.toDouble() ?? 0;
+        totalExpenses += amt;
+        if (isCash(e['payment_method'])) cashExpenses += amt;
       }
 
       setState(() {
@@ -98,6 +108,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
           'cash_collected': cashCollected,
           'total_purchases': totalPurchases,
           'total_expenses': totalExpenses,
+          'cash_purchases': cashPurchases,
+          'cash_expenses': cashExpenses,
           'total_transactions': sales.length,
           'total_items_sold': totalItems,
         };
@@ -210,6 +222,13 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                       _StatRow(label: 'Total Transactions', value: '${_report!['total_transactions']}'),
                       _StatRow(label: 'Items Sold', value: formatQty(_report!['total_items_sold'] as num)),
                       const SizedBox(height: 20),
+                      Text(
+                        'Net Cash = cash sales Rs${(_report!['cash_sales'] as double).toStringAsFixed(0)}'
+                        ' − cash purchases Rs${(_report!['cash_purchases'] as double).toStringAsFixed(0)}'
+                        ' − cash expenses Rs${(_report!['cash_expenses'] as double).toStringAsFixed(0)}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
@@ -218,7 +237,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                           children: [
                             Text('Net Cash', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                             Text(
-                              'Rs${((_report!['cash_sales'] as double) - (_report!['total_expenses'] as double)).toStringAsFixed(0)}',
+                              'Rs${((_report!['cash_sales'] as double) - (_report!['cash_purchases'] as double) - (_report!['cash_expenses'] as double)).toStringAsFixed(0)}',
                               style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
                             ),
                           ],
@@ -282,9 +301,9 @@ class _MiniCard extends StatelessWidget {
       decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: color)),
+          Text(label, style: TextStyle(fontSize: 12, color: readableText(color))),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: readableText(color))),
         ],
       ),
     );

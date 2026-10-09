@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/providers.dart';
 import '../../admin/all_low_stock_screen.dart';
 import '../../admin/slow_moving_screen.dart';
+import '../../../models/product.dart';
+import '../product_form_screen.dart';
 import '../../../utils/qty_format.dart';
+import '../../../utils/readable_color.dart';
 
 class LowStockSection extends ConsumerWidget {
   const LowStockSection({super.key});
@@ -164,7 +167,7 @@ class LowStockSection extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.orange.shade700,
+                                color: Color(0xFFC2410C),
                               ),
                             ),
                             const Spacer(),
@@ -213,7 +216,7 @@ class _StockEmpty extends StatelessWidget {
             const Text(
               'All stock levels are healthy',
               style: TextStyle(
-                color: Color(0xFF10B981),
+                color: Color(0xFF047857),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -251,7 +254,7 @@ class _StockCategory extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: color,
+              color: readableText(color),
             ),
           ),
           const Spacer(),
@@ -266,7 +269,7 @@ class _StockCategory extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: color,
+                color: readableText(color),
               ),
             ),
           ),
@@ -276,16 +279,24 @@ class _StockCategory extends StatelessWidget {
   }
 }
 
-class _StockTile extends StatelessWidget {
+class _StockTile extends ConsumerWidget {
   final dynamic product;
   final Color color;
 
   const _StockTile({required this.product, required this.color});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // rows did nothing when tapped (QA #85): admins open the product
+    final isAdmin = ref.watch(dashboardIsAdminProvider).value ?? false;
     return ListTile(
+      onTap: isAdmin && product is Product
+          ? () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProductFormScreen(product: product as Product)),
+              ).then((_) => ref.invalidate(productsProvider))
+          : null,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       title: Text(
@@ -312,7 +323,7 @@ class _StockTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: color,
+            color: readableText(color),
           ),
         ),
       ),

@@ -39,6 +39,7 @@ import '../../widgets/rate_picker_dialog.dart';
 import 'dialogs/customer_picker_dialog.dart';
 import 'dialogs/invoice_options_dialog.dart';
 import '../../utils/qty_format.dart';
+import '../../widgets/my_account_sheet.dart';
 
 class DesktopBillingScreen extends ConsumerStatefulWidget {
   const DesktopBillingScreen({super.key});
@@ -372,8 +373,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     _startInactivityTimer();
   }
 
-  void _onInactivityTimeout() {
+  Future<void> _onInactivityTimeout() async {
     if (_isProcessing) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    // this PC's choice (My account → lock switch); off unless switched on —
+    // the owner asked for no lock on the main till (9 Oct 2026)
+    if (!(prefs.getBool(tillLockPrefKey) ?? false)) {
+      _startInactivityTimer();
+      return;
+    }
     // a user without a PIN could never unlock: don't lock them out
     final profile = ref.read(profileProvider).value ?? ref.read(authServiceProvider).cachedProfile();
     if (profile?.pin == null || profile!.pin!.isEmpty) {
@@ -1013,6 +1022,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       SnackBar(
         content: Text('Removed ${removed.name}'),
         duration: const Duration(seconds: 5),
+        persist: false, // with an action it otherwise stays until tapped (QA #65)
         action: SnackBarAction(
           label: 'UNDO',
           onPressed: () {
@@ -1228,7 +1238,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               });
               _searchFocusNode.requestFocus();
             },
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
+            child: const Text('Clear', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),
@@ -1351,7 +1361,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.orange),
+              style: TextButton.styleFrom(foregroundColor: Color(0xFFC2410C)),
               child: const Text('Save Offline'),
             ),
           ],
@@ -1979,7 +1989,14 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       onKeyEvent: handleKeyEvent,
-      child: Material(
+      // clicks, scrolling and mouse movement are activity too: only key
+      // presses kept the till open, so a cashier using the mouse was
+      // locked after 5 minutes
+      child: Listener(
+        onPointerDown: (_) => _resetInactivityTimer(),
+        onPointerHover: (_) => _resetInactivityTimer(),
+        onPointerSignal: (_) => _resetInactivityTimer(),
+        child: Material(
         color: const Color(0xFFF8FAFC),
         child: Stack(
           children: [
@@ -2081,6 +2098,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -2128,7 +2146,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: enabled ? const Color(0xFF334155) : const Color(0xFF94A3B8),
+                color: enabled ? const Color(0xFF334155) : Color(0xFF64748B),
               ),
             ),
             const SizedBox(width: 6),
@@ -2144,7 +2162,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   fontFamily: 'monospace',
-                  color: enabled ? const Color(0xFF64748B) : const Color(0xFFCBD5E1),
+                  color: enabled ? const Color(0xFF64748B) : Color(0xFF64748B),
                 ),
               ),
             ),
@@ -2277,7 +2295,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: _editingCartIndex >= 0
-                            ? const Color(0xFFF97316)
+                            ? Color(0xFFC2410C)
                             : const Color(0xFF2563EB),
                       ),
                       maxLines: 1,
@@ -2536,8 +2554,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: isSelected
-                                ? const Color(0xFF667eea)
-                                : Colors.grey,
+                                ? Color(0xFF4C51BF)
+                                : Color(0xFF757575),
                           ),
                         ),
                       ),
@@ -2686,7 +2704,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF94A3B8),
+                            color: Color(0xFF64748B),
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -2695,7 +2713,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                           'Scan barcode or search for a product',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Color(0xFFCBD5E1),
+                            color: Color(0xFF64748B),
                           ),
                         ),
                         SizedBox(height: 20),
@@ -2772,7 +2790,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                           'Code: ${item.productId.substring(0, item.productId.length > 8 ? 8 : item.productId.length)}',
                                           style: const TextStyle(
                                             fontSize: 10,
-                                            color: Color(0xFF94A3B8),
+                                            color: Color(0xFF64748B),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
@@ -2780,7 +2798,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                           '',
                                           style: TextStyle(
                                             fontSize: 10,
-                                            color: Color(0xFF94A3B8),
+                                            color: Color(0xFF64748B),
                                           ),
                                         ),
                                         if (item.tamilName != null &&
@@ -2791,7 +2809,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                               item.tamilName!,
                                               style: TextStyle(
                                                 fontSize: 10,
-                                                color: Colors.grey[500],
+                                                color: Color(0xFF757575),
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -2806,7 +2824,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                                         item.rateLabel!,
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: Colors.orange[700],
+                                          color: Color(0xFFC2410C),
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -3075,7 +3093,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFF97316),
+                        color: Color(0xFFC2410C),
                       ),
                     ),
                   ] else ...[
@@ -3085,7 +3103,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFF97316),
+                        color: Color(0xFFC2410C),
                       ),
                     ),
                   ],
@@ -3171,7 +3189,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             'Remaining: ₹${remaining.toStringAsFixed(0)} → Credit',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Color(0xFFF97316),
+                              color: Color(0xFFC2410C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3180,7 +3198,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             'Excess: ₹${(-remaining).toStringAsFixed(0)}',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Color(0xFFEF4444),
+                              color: Color(0xFFB91C1C),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3189,7 +3207,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             'Full amount covered',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Color(0xFF059669),
+                              color: Color(0xFF047857),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3239,7 +3257,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                         fontWeight: FontWeight.w500,
                         color: session.customerName != null
                             ? const Color(0xFF0F172A)
-                            : const Color(0xFF94A3B8),
+                            : Color(0xFF64748B),
                       ),
                     ),
                   ),
@@ -3276,7 +3294,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFFF97316),
+                      color: Color(0xFFC2410C),
                     ),
                   ),
                 ],
@@ -3377,7 +3395,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFF97316),
+                        color: Color(0xFFC2410C),
                       ),
                     ),
                   ),
@@ -3404,7 +3422,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEF4444),
+                        color: Color(0xFFB91C1C),
                       ),
                     ),
                   ),
@@ -3683,7 +3701,7 @@ class _EmptyHint extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           action,
-          style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
         ),
       ],
     );

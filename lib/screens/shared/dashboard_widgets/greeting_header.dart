@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../config/providers.dart';
 import '../../../utils/app_timezone.dart';
+import '../../../widgets/my_account_sheet.dart';
 
 class GreetingHeader extends ConsumerWidget {
   final VoidCallback? onRefresh;
@@ -148,14 +149,22 @@ class GreetingHeader extends ConsumerWidget {
                   ),
                 ),
               const SizedBox(width: 4),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: Text(
-                  profile.name.isNotEmpty ? profile.name[0].toUpperCase() : 'U',
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
+              // opens "My account" (Set / Change my PIN); it did nothing (QA #47)
+              Tooltip(
+                message: 'My account & PIN',
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => showMyAccountSheet(context, ref, profile),
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    child: Text(
+                      profile.name.isNotEmpty ? profile.name[0].toUpperCase() : 'U',
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ),

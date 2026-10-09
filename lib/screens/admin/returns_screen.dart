@@ -67,10 +67,41 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
     final q = _billSearch.toLowerCase();
     return _weekBills.where((b) {
       final id = (b['id'] as String? ?? '').toLowerCase();
+      final no = b['invoice_no']?.toString() ?? '';
       final customer =
           (b['customers'] as Map<String, dynamic>?)?['name']?.toString().toLowerCase() ?? '';
-      return id.contains(q) || customer.contains(q);
+      final bare = q.startsWith('#') ? q.substring(1) : q;
+      return no == bare || id.startsWith(bare) || customer.contains(q);
     }).toList();
+  }
+
+  bool _findingBill = false;
+
+  /// A bill older than the list, looked up by its number.
+  Future<void> _findOlderBill(int invoiceNo) async {
+    setState(() => _findingBill = true);
+    try {
+      final bill = await ref.read(returnServiceProvider).findSaleByInvoice(invoiceNo);
+      if (!mounted) return;
+      if (bill == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No bill #$invoiceNo')),
+        );
+      } else {
+        setState(() {
+          if (!_weekBills.any((b) => b['id'] == bill['id'])) _weekBills = [bill, ..._weekBills];
+        });
+        _selectBill(bill);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not find the bill: ${ErrorMessages.parse(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _findingBill = false);
+    }
   }
 
   List<CartItem> get _selectedItems =>
@@ -126,7 +157,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
-                          color: Colors.grey),
+                          color: Color(0xFF757575)),
                     ),
                   ),
                 ),
@@ -185,13 +216,13 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                       child: Text(
                                         'Sale: #${r.originalSaleId!.substring(0, r.originalSaleId!.length > 8 ? 8 : r.originalSaleId!.length)}',
                                         style: const TextStyle(
-                                            fontSize: 10, color: Colors.blue),
+                                            fontSize: 10, color: Color(0xFF1565C0)),
                                       ),
                                     ),
                                   if (r.reason != null && r.reason!.isNotEmpty)
-                                    Text(r.reason!,
+                                    Text(_reasonLabel(r.reason!),
                                         style: const TextStyle(
-                                            fontSize: 11, color: Colors.grey)),
+                                            fontSize: 11, color: Color(0xFF757575))),
                                 ],
                               ),
                               trailing: Text(
@@ -243,7 +274,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: Colors.blue.shade700),
+                    color: Color(0xFF1565C0)),
               ),
               const Spacer(),
               if (_selectedBill != null)
@@ -257,7 +288,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
           const SizedBox(height: 8),
           TextField(
             decoration: InputDecoration(
-              hintText: 'Search bill ID or customer...',
+              hintText: 'Bill number or customer',
               prefixIcon: const Icon(Icons.search, size: 18),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -279,31 +310,40 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else if (_filteredBills.isEmpty)
-            SizedBox(
-              height: 60,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Center(
-                child: Text(
-                  _weekBills.isEmpty
-                      ? 'No bills in last 7 days'
-                      : 'No matching bills',
-                  style:
-                      TextStyle(color: Colors.blue.shade400, fontSize: 13),
-                ),
+                child: int.tryParse(_billSearch.replaceAll('#', '').trim()) != null
+                    ? (_findingBill
+                        ? const CircularProgressIndicator(strokeWidth: 2)
+                        : OutlinedButton.icon(
+                            onPressed: () =>
+                                _findOlderBill(int.parse(_billSearch.replaceAll('#', '').trim())),
+                            icon: const Icon(Icons.search),
+                            label: Text('Find bill #${_billSearch.replaceAll('#', '').trim()} (older bills)'),
+                          ))
+                    : Text(
+                        _weekBills.isEmpty
+                            ? 'No bills in the last 30 days'
+                            : 'No matching bills. Type a bill number to find an older bill.',
+                        style: const TextStyle(color: Color(0xFF1565C0), fontSize: 13),
+                      ),
               ),
             )
           else
             SizedBox(
-              height: _selectedBill != null ? 120 : 200,
+              height: _selectedBill != null ? 150 : 340,
               child: ListView.builder(
                 itemCount: _filteredBills.length,
                 itemBuilder: (context, index) {
                   final bill = _filteredBills[index];
                   final id = bill['id'] as String? ?? '';
-                  final shortId = id.length > 8 ? id.substring(0, 8) : id;
+                  final shortId = bill['invoice_no']?.toString() ??
+                      (id.length > 8 ? id.substring(0, 8) : id);
                   final amount =
                       (bill['final_amount'] as num?)?.toDouble() ?? 0;
                   final date = DateTime.tryParse(
-                      bill['created_at'] as String? ?? '');
+                      bill['created_at'] as String? ?? '')?.toLocal();
                   final isCredit = bill['is_credit'] == true;
                   final customerName =
                       (bill['customers'] as Map<String, dynamic>?)?['name']
@@ -344,12 +384,12 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                           const SizedBox(width: 8),
                           Text('$itemCount items',
                               style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade500)),
+                                  fontSize: 11, color: Color(0xFF757575))),
                           if (isCredit) ...[
                             const SizedBox(width: 8),
                             const Text('Credit',
                                 style: TextStyle(
-                                    fontSize: 10, color: Colors.orange)),
+                                    fontSize: 10, color: Color(0xFFC2410C))),
                           ],
                         ],
                       ),
@@ -404,7 +444,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                     Text(
                       'Select items to return',
                       style: TextStyle(
-                          fontSize: 11, color: Colors.green.shade600),
+                          fontSize: 11, color: Color(0xFF2E7D32)),
                     ),
                   ],
                 ),
@@ -497,7 +537,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                                     style: TextStyle(
                                         fontSize: 10,
                                         color: item.tier == 'wholesale'
-                                            ? Colors.blue
+                                            ? Color(0xFF1565C0)
                                             : Colors.purple,
                                         fontWeight: FontWeight.bold),
                                   ),
@@ -564,7 +604,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                       Text(
                         'Max: ${formatQty(item.qty)}',
                         style:
-                            TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                            TextStyle(fontSize: 11, color: Color(0xFF757575)),
                       ),
                   ],
                 ),
@@ -692,7 +732,7 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
                       style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 18,
-                          color: Colors.orange),
+                          color: Color(0xFFC2410C)),
                     ),
                   ],
                 ),
@@ -803,6 +843,18 @@ class _ReturnsScreenState extends ConsumerState<ReturnsScreen> {
 class _ReasonDialog extends StatefulWidget {
   @override
   State<_ReasonDialog> createState() => _ReasonDialogState();
+}
+
+/// "customer_changed_mind" → "Customer changed mind" (QA #32)
+String _reasonLabel(String code) {
+  const labels = {
+    'expired': 'Expired',
+    'wrong_item': 'Wrong item',
+    'customer_changed_mind': 'Customer changed mind',
+    'damaged': 'Damaged',
+    'other': 'Other',
+  };
+  return labels[code] ?? code.replaceAll('_', ' ');
 }
 
 class _ReasonDialogState extends State<_ReasonDialog> {

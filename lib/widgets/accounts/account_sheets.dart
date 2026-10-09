@@ -65,7 +65,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
             const Text('Transfer Between Accounts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
 
-            const Text('From', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const Text('From', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF757575))),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -97,7 +97,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
                         const SizedBox(width: 6),
                         Text(acc.name, style: TextStyle(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                          color: isSelected ? Color(0xFF4C51BF) : Color(0xFF757575),
                           fontSize: 13,
                         )),
                       ],
@@ -111,7 +111,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
             const Center(child: Icon(Icons.arrow_downward, color: Color(0xFF667eea), size: 28)),
             const SizedBox(height: 16),
 
-            const Text('To', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+            const Text('To', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF757575))),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -143,7 +143,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
                         const SizedBox(width: 6),
                         Text(acc.name, style: TextStyle(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                          color: isSelected ? Color(0xFF4C51BF) : Color(0xFF757575),
                           fontSize: 13,
                         )),
                       ],
@@ -253,15 +253,17 @@ class AddEntrySheet extends ConsumerStatefulWidget {
 class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
   String? _selectedAccountId;
   String _selectedType = 'in';
-  String _selectedCategory = 'sale';
+  // "Other" first: a manual "Sale" counted as sales income without a bill
+  // and was the default (QA #53)
+  String _selectedCategory = 'other';
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   bool _loading = false;
   List<Account> _accounts = [];
 
   final _categories = {
-    'in': ['sale', 'credit_collection', 'opening', 'other'],
-    'out': ['purchase', 'expense', 'credit_payment', 'other'],
+    'in': ['other', 'opening', 'credit_collection', 'sale'],
+    'out': ['other', 'expense', 'credit_payment', 'purchase'],
   };
 
   @override
@@ -316,7 +318,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
             const SizedBox(height: 16),
 
             if (_accounts.isNotEmpty) ...[
-              const Text('Account', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              const Text('Account', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF757575))),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -343,7 +345,7 @@ class _AddEntrySheetState extends ConsumerState<AddEntrySheet> {
                           const SizedBox(width: 6),
                           Text(acc.name, style: TextStyle(
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                            color: isSelected ? const Color(0xFF667eea) : Colors.grey,
+                            color: isSelected ? Color(0xFF4C51BF) : Color(0xFF757575),
                             fontSize: 13,
                           )),
                         ],
@@ -522,7 +524,7 @@ class _AccountChoice extends StatelessWidget {
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-              color: selected ? const Color(0xFF667eea) : Colors.grey,
+              color: selected ? Color(0xFF4C51BF) : Color(0xFF757575),
             )),
           ],
         ),

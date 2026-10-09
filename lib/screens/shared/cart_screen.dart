@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/sale.dart';
 import '../../models/product.dart';
 import '../../models/customer.dart';
@@ -24,6 +25,7 @@ import '../../widgets/cart/customer_picker.dart';
 import '../../widgets/cart/payment_section.dart';
 import '../../widgets/rate_picker_dialog.dart';
 import '../../utils/qty_format.dart';
+import '../../utils/readable_color.dart';
 
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
@@ -203,8 +205,12 @@ class CartScreenState extends ConsumerState<CartScreen>
             StatefulBuilder(
               builder: (ctx, setDialogState) => TextField(
                 // decimal for loose goods (1.5 kg)
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}'))],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,3}')),
+                ],
                 decoration: const InputDecoration(
                   labelText: 'Quantity',
                   border: OutlineInputBorder(),
@@ -266,7 +272,8 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   double _effectivePurchasePrice(Product product) {
     if (product.purchasePrice > 0) return product.purchasePrice;
-    if (product.variants.isNotEmpty) return product.variants.first.purchasePrice;
+    if (product.variants.isNotEmpty)
+      return product.variants.first.purchasePrice;
     return 0;
   }
 
@@ -332,7 +339,9 @@ class CartScreenState extends ConsumerState<CartScreen>
             const SizedBox(height: 12),
             TextField(
               controller: priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
@@ -359,6 +368,18 @@ class CartScreenState extends ConsumerState<CartScreen>
                     .updateItemPrice(index, newPrice);
                 setState(() {});
                 Navigator.pop(ctx);
+                // allowed (clearance, a deal), but never by accident (QA #77)
+                if (item.purchasePrice > 0 && newPrice < item.purchasePrice) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Below cost: ₹${newPrice.toStringAsFixed(2)} vs cost ₹${item.purchasePrice.toStringAsFixed(2)} '
+                        '— loses ₹${(item.purchasePrice - newPrice).toStringAsFixed(2)} each',
+                      ),
+                      backgroundColor: Colors.orange.shade800,
+                    ),
+                  );
+                }
               } else {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(content: Text('Enter valid price')),
@@ -375,6 +396,10 @@ class CartScreenState extends ConsumerState<CartScreen>
   void _editItemQty(int index) {
     final item = _cart[index];
     String qtyText = formatQty(item.qty);
+    // first key replaces the shown qty: pressing 3 on "1" gave 13 (QA #76)
+    var fresh = true;
+    // half a soap is not a sale: pieces are whole numbers
+    final wholeOnly = item.unit.toLowerCase() == 'pcs';
 
     showDialog(
       context: context,
@@ -395,24 +420,35 @@ class CartScreenState extends ConsumerState<CartScreen>
                 child: Column(
                   children: [
                     Text(
-                      'Rs${item.price.toStringAsFixed(0)} × $qtyText',
+                      'Rs${item.price.toStringAsFixed(item.price == item.price.roundToDouble() ? 0 : 2)} × $qtyText',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
-                      '= Rs${(item.price * (double.tryParse(qtyText) ?? 0)).toStringAsFixed(0)}',
-                      style: const TextStyle(fontSize: 14, color: Colors.blue),
+                      '= Rs${(item.price * (double.tryParse(qtyText) ?? 0)).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF1565C0),
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
               // Number pad
-              _buildNumberPad(qtyText, (val) {
-                setDialogState(() => qtyText = val);
-              }),
+              _buildNumberPad(
+                qtyText,
+                (val) {
+                  setDialogState(() {
+                    qtyText = val;
+                    fresh = false;
+                  });
+                },
+                replaceNext: fresh,
+                allowDecimal: !wholeOnly,
+              ),
             ],
           ),
           actions: [
@@ -438,7 +474,24 @@ class CartScreenState extends ConsumerState<CartScreen>
     );
   }
 
-  Widget _buildNumberPad(String currentVal, ValueChanged<String> onChanged) {
+  Widget _buildNumberPad(
+    String currentVal,
+    ValueChanged<String> onChanged, {
+    bool replaceNext = false,
+    bool allowDecimal = true,
+  }) {
+    // a digit or '.' as the first press starts a new number
+    if (replaceNext) {
+      final shown = currentVal;
+      final orig = onChanged;
+      onChanged = (v) => orig(
+        v.length > shown.length && v.startsWith(shown) && shown != '0'
+            ? (v.substring(shown.length) == '.'
+                  ? '0.'
+                  : v.substring(shown.length))
+            : v,
+      );
+    }
     return Column(
       children: [
         Row(
@@ -466,7 +519,9 @@ class CartScreenState extends ConsumerState<CartScreen>
           children: [
             _numPadBtn('C', currentVal, onChanged, isAction: true),
             // decimal point for loose goods (1.5 kg)
-            _numPadBtn('.', currentVal, onChanged),
+            allowDecimal
+                ? _numPadBtn('.', currentVal, onChanged)
+                : const Expanded(child: SizedBox()),
             _numPadBtn('0', currentVal, onChanged),
             _numPadBtn('⌫', currentVal, onChanged, isAction: true),
           ],
@@ -487,11 +542,11 @@ class CartScreenState extends ConsumerState<CartScreen>
         child: Material(
           color: isAction
               ? (Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey.shade800
-                  : Colors.grey.shade200)
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade200)
               : (Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey.shade900
-                  : Colors.white),
+                    ? Colors.grey.shade900
+                    : Colors.white),
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             onTap: () {
@@ -524,11 +579,11 @@ class CartScreenState extends ConsumerState<CartScreen>
                   fontWeight: FontWeight.bold,
                   color: isAction
                       ? (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white70
-                          : Colors.grey.shade700)
+                            ? Colors.white70
+                            : Colors.grey.shade700)
                       : (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white
-                          : Colors.black87),
+                            ? Colors.white
+                            : Colors.black87),
                 ),
               ),
             ),
@@ -567,8 +622,8 @@ class CartScreenState extends ConsumerState<CartScreen>
               color: inCart > 0
                   ? Colors.green.shade300
                   : (Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.shade700
-                      : Colors.grey.shade200),
+                        ? Colors.grey.shade700
+                        : Colors.grey.shade200),
             ),
           ),
           child: Column(
@@ -583,7 +638,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: inCart > 0 ? Colors.green.shade700 : null,
+                        color: inCart > 0 ? Color(0xFF2E7D32) : null,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -615,7 +670,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                 style: TextStyle(
                   fontSize: 10,
                   color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey.shade400
+                      ? Color(0xFF757575)
                       : Colors.grey.shade600,
                 ),
               ),
@@ -667,11 +722,9 @@ class CartScreenState extends ConsumerState<CartScreen>
                   filteredCustomers: _filteredCustomers,
                   searchController: _searchController,
                   showSearch: _showCustomerSearch,
-                  onToggleSearch: () => setSheetState(
-                    () {
-                      setState(() => _showCustomerSearch = !_showCustomerSearch);
-                    },
-                  ),
+                  onToggleSearch: () => setSheetState(() {
+                    setState(() => _showCustomerSearch = !_showCustomerSearch);
+                  }),
                   onClearCustomer: () => setSheetState(() {
                     setState(() => _selectedCustomer = null);
                   }),
@@ -723,7 +776,9 @@ class CartScreenState extends ConsumerState<CartScreen>
                       }
                     });
                   }),
-                  onChanged: () => setSheetState(() {}),
+                  // refresh the bill behind the sheet too: the total
+                  // stayed stale after a discount change (QA #26)
+                  onChanged: () => setSheetState(() => setState(() {})),
                 ),
               ],
             ),
@@ -821,22 +876,24 @@ class CartScreenState extends ConsumerState<CartScreen>
   void _addVoiceItem(Product product, double qty) {
     // voice can say "one and a half kilo": keep the decimal (it was rounded)
     final lineQty = qty <= 0 ? 1.0 : qty;
-    ref.read(cartProvider.notifier).addItem(
-      CartItem(
-        productId: product.id,
-        name: product.name,
-        tamilName: product.tamilName,
-        price: product.sellingPrice,
-        qty: lineQty,
-        unit: product.unit,
-        purchasePrice: _effectivePurchasePrice(product),
-        gstRate: product.gstRate,
-        hsnCode: product.hsnCode,
-        unitType: product.unitType,
-        piecesPerUnit: product.piecesPerUnit,
-        stockFactor: 1,
-      ),
-    );
+    ref
+        .read(cartProvider.notifier)
+        .addItem(
+          CartItem(
+            productId: product.id,
+            name: product.name,
+            tamilName: product.tamilName,
+            price: product.sellingPrice,
+            qty: lineQty,
+            unit: product.unit,
+            purchasePrice: _effectivePurchasePrice(product),
+            gstRate: product.gstRate,
+            hsnCode: product.hsnCode,
+            unitType: product.unitType,
+            piecesPerUnit: product.piecesPerUnit,
+            stockFactor: 1,
+          ),
+        );
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -898,7 +955,10 @@ class CartScreenState extends ConsumerState<CartScreen>
                 // open with no message
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text(ErrorMessages.parse(e)), backgroundColor: Colors.red),
+                    SnackBar(
+                      content: Text(ErrorMessages.parse(e)),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -950,7 +1010,7 @@ class CartScreenState extends ConsumerState<CartScreen>
             ),
             TextButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.orange),
+              style: TextButton.styleFrom(foregroundColor: Color(0xFFC2410C)),
               child: const Text('Save Offline'),
             ),
           ],
@@ -982,6 +1042,41 @@ class CartScreenState extends ConsumerState<CartScreen>
       return;
     }
 
+    // Credit limit, same check as the desktop (QA #24). Offline: let it through.
+    if (_isCredit && _selectedCustomer != null) {
+      try {
+        final cust = await Supabase.instance.client
+            .from('customers')
+            .select('total_credit, credit_limit')
+            .eq('id', _selectedCustomer!.id)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 6));
+        if (cust != null) {
+          final current = (cust['total_credit'] as num?)?.toDouble() ?? 0;
+          final limit = (cust['credit_limit'] as num?)?.toDouble() ?? 0;
+          final newTotal = current + _dueAmount;
+          if (limit > 0 && newTotal > limit) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 8),
+                content: Text(
+                  'Credit limit crossed. Limit ₹${limit.toStringAsFixed(0)}, '
+                  'already owes ₹${current.toStringAsFixed(0)}, '
+                  'after this bill ₹${newTotal.toStringAsFixed(0)}.',
+                ),
+              ),
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        Logger.warning('Credit limit check skipped: $e');
+      }
+      if (!mounted) return;
+    }
+
     // Validate split payment
     if (_isSplitPayment && !_isCredit) {
       final cashAmount = double.tryParse(_cashAmountController.text) ?? 0;
@@ -998,29 +1093,29 @@ class CartScreenState extends ConsumerState<CartScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Complete Sale'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Items: ${_cart.length}'),
-                Text('Total: ₹${_total.toStringAsFixed(2)}'),
-                if (_isSplitPayment && !_isCredit) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Cash: ₹${(double.tryParse(_cashAmountController.text) ?? 0).toStringAsFixed(2)}',
-                  ),
-                  Text(
-                    'UPI: ₹${(double.tryParse(_upiAmountController.text) ?? 0).toStringAsFixed(2)}',
-                  ),
-                ],
-                if (_isCredit) ...[
-                  const SizedBox(height: 8),
-                  Text('Customer: ${_selectedCustomer?.name ?? ""}'),
-                  Text('Amount Paid: ₹${_amountPaid.toStringAsFixed(2)}'),
-                  Text(
-                    'Due: ₹${_dueAmount.toStringAsFixed(2)}',
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Items: ${_cart.length}'),
+            Text('Total: ₹${_total.toStringAsFixed(2)}'),
+            if (_isSplitPayment && !_isCredit) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Cash: ₹${(double.tryParse(_cashAmountController.text) ?? 0).toStringAsFixed(2)}',
+              ),
+              Text(
+                'UPI: ₹${(double.tryParse(_upiAmountController.text) ?? 0).toStringAsFixed(2)}',
+              ),
+            ],
+            if (_isCredit) ...[
+              const SizedBox(height: 8),
+              Text('Customer: ${_selectedCustomer?.name ?? ""}'),
+              Text('Amount Paid: ₹${_amountPaid.toStringAsFixed(2)}'),
+              Text(
+                'Due: ₹${_dueAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
-                  color: Colors.red,
+                  color: Color(0xFFC62828),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1063,7 +1158,9 @@ class CartScreenState extends ConsumerState<CartScreen>
 
       final method = _isCredit
           ? PaymentMethods.credit
-          : (_isSplitPayment ? PaymentMethods.split : PaymentMethods.normalize(_paymentMethod));
+          : (_isSplitPayment
+                ? PaymentMethods.split
+                : PaymentMethods.normalize(_paymentMethod));
       final splitCash = double.tryParse(_cashAmountController.text) ?? 0;
       final splitUpi = double.tryParse(_upiAmountController.text) ?? 0;
       double cashAmount = 0;
@@ -1127,101 +1224,101 @@ class CartScreenState extends ConsumerState<CartScreen>
             title: Text(_isCredit ? 'Credit Sale!' : 'Sale Completed!'),
             // credit customers get a bill too (it used to show only "OK")
             content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Total: ₹${_total.toStringAsFixed(2)}'
-                        '${_isCredit ? '\nDue: ₹${_dueAmount.toStringAsFixed(2)}' : ''}'
-                        '${savedOffline ? "\n(Saved offline)" : ""}',
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Total: ₹${_total.toStringAsFixed(2)}'
+                  '${_isCredit ? '\nDue: ₹${_dueAmount.toStringAsFixed(2)}' : ''}'
+                  '${savedOffline ? "\n(Saved offline)" : ""}',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.print,
+                        label: 'Bluetooth',
+                        action: 'bluetooth_print',
+                        color: Colors.blue,
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.print,
-                              label: 'Bluetooth',
-                              action: 'bluetooth_print',
-                              color: Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.usb,
-                              label: 'USB Print',
-                              action: 'print',
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.usb,
+                        label: 'USB Print',
+                        action: 'print',
+                        color: Colors.blue,
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.picture_as_pdf,
-                              label: 'PDF',
-                              action: 'share',
-                              color: Colors.green,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.message,
-                              label: 'WhatsApp',
-                              action: 'whatsapp',
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.picture_as_pdf,
+                        label: 'PDF',
+                        action: 'share',
+                        color: Colors.green,
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.text_snippet,
-                              label: 'Text',
-                              action: 'thermal_share',
-                              color: Colors.green,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _invoiceActionBtn(
-                              ctx,
-                              icon: Icons.email,
-                              label: 'Email',
-                              action: 'email',
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.message,
+                        label: 'WhatsApp',
+                        action: 'whatsapp',
+                        color: Colors.green,
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.pop(ctx, 'skip'),
-                          icon: const Icon(Icons.close, size: 18),
-                          label: const Text('Skip'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.grey.shade600,
-                            side: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.text_snippet,
+                        label: 'Text',
+                        action: 'thermal_share',
+                        color: Colors.green,
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _invoiceActionBtn(
+                        ctx,
+                        icon: Icons.email,
+                        label: 'Email',
+                        action: 'email',
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, 'skip'),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Skip'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade600,
+                      side: BorderSide(color: Colors.grey.shade300),
+                    ),
                   ),
+                ),
+              ],
+            ),
           ),
         );
 
@@ -1367,7 +1464,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: color.shade700,
+                  color: readableText(color.shade700),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -1409,7 +1506,9 @@ class CartScreenState extends ConsumerState<CartScreen>
           TextButton(
             onPressed: () async {
               final email = emailController.text.trim();
-              if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+              if (email.isEmpty ||
+                  !email.contains('@') ||
+                  !email.contains('.')) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
                     content: Text('Enter valid email'),
@@ -1458,7 +1557,9 @@ class CartScreenState extends ConsumerState<CartScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate/send email: ${ErrorMessages.parse(e)}'),
+            content: Text(
+              'Failed to generate/send email: ${ErrorMessages.parse(e)}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1470,6 +1571,156 @@ class CartScreenState extends ConsumerState<CartScreen>
     setState(() => _useTamilVoice = !_useTamilVoice);
   }
 
+  /// Opens the list of held bills: resume one into the cart, or delete it.
+  void showHeldBills() {
+    if (_heldBills.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => SafeArea(
+        child: StatefulBuilder(
+          builder: (sheetCtx, setSheet) => ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            children: [
+              Text(
+                'Bills on hold (${_heldBills.length})',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (var i = 0; i < _heldBills.length; i++)
+                _heldBillTile(sheetCtx, setSheet, i),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _heldBillTile(BuildContext sheetCtx, StateSetter setSheet, int i) {
+    final bill = _heldBills[i];
+    final lines = (bill['cart'] as List?) ?? const [];
+    final when = DateTime.tryParse(bill['timestamp']?.toString() ?? '');
+    final customer = (bill['customer'] as Map?)?['name']?.toString();
+    final total = (bill['total'] as num?)?.toDouble() ?? 0;
+    final info = [
+      if (customer != null && customer.isNotEmpty) customer,
+      if (when != null)
+        '${when.hour.toString().padLeft(2, '0')}:${when.minute.toString().padLeft(2, '0')}',
+    ].join(' · ');
+    return Card(
+      child: ListTile(
+        title: Text(
+          '₹${total.toStringAsFixed(0)} · ${lines.length} item${lines.length == 1 ? '' : 's'}',
+        ),
+        subtitle: info.isEmpty ? null : Text(info),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Delete held bill',
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: sheetCtx,
+                  builder: (d) => AlertDialog(
+                    title: const Text('Delete held bill?'),
+                    content: Text(
+                      '₹${total.toStringAsFixed(0)} · ${lines.length} items. This cannot be undone.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(d, false),
+                        child: const Text('Keep'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(d, true),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Color(0xFFC62828)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok != true || !mounted) return;
+                setState(() => _heldBills.removeAt(i));
+                _persistHeldBills();
+                if (_heldBills.isEmpty) {
+                  if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                } else {
+                  setSheet(() {});
+                }
+              },
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(sheetCtx);
+                _resumeHeldBill(i);
+              },
+              child: const Text('Resume'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resumeHeldBill(int index) async {
+    if (index < 0 || index >= _heldBills.length) return;
+    var bill = _heldBills[index];
+    if (_cart.isNotEmpty) {
+      final hold = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('The current bill has items'),
+          content: const Text('Hold the current bill and open the other one?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(d, true),
+              child: const Text('Hold & open'),
+            ),
+          ],
+        ),
+      );
+      if (hold != true || !mounted) return;
+      holdBill();
+    }
+    final items = <CartItem>[];
+    for (final l in (bill['cart'] as List?) ?? const []) {
+      try {
+        items.add(CartItem.fromJson(Map<String, dynamic>.from(l as Map)));
+      } catch (_) {
+        // a line from an old, unreadable held bill is skipped
+      }
+    }
+    Customer? customer;
+    final c = bill['customer'];
+    if (c is Map) {
+      final id = c['id']?.toString();
+      customer =
+          _customers.where((x) => x.id == id).firstOrNull ??
+          Customer.fromJson(Map<String, dynamic>.from(c));
+    }
+    setState(() {
+      _heldBills.remove(bill);
+      ref.read(cartProvider.notifier).replaceAll(items);
+      _selectedCustomer = customer;
+      _discountController.text = bill['discount']?.toString() ?? '';
+      _paymentMethod = bill['paymentMethod']?.toString() ?? 'cash';
+      _isCredit = bill['isCredit'] == true;
+      _amountPaidController.text = bill['amountPaid']?.toString() ?? '';
+    });
+    _persistHeldBills();
+  }
+
   void holdBill() {
     if (_cart.isEmpty) {
       ScaffoldMessenger.of(
@@ -1478,14 +1729,17 @@ class CartScreenState extends ConsumerState<CartScreen>
       return;
     }
 
-    final heldBill = {
-      'cart': List<CartItem>.from(_cart),
-      'customer': _selectedCustomer,
+    // plain data only: CartItem/Customer/DateTime objects could not be
+    // stored, so held bills were lost on restart (QA #23)
+    final heldBill = <String, dynamic>{
+      'cart': _cart.map((i) => i.toJson()).toList(),
+      'customer': _selectedCustomer?.toJson(),
       'discount': _discountController.text,
       'paymentMethod': _paymentMethod,
       'isCredit': _isCredit,
       'amountPaid': _amountPaidController.text,
-      'timestamp': DateTime.now(),
+      'timestamp': DateTime.now().toIso8601String(),
+      'total': _total,
     };
 
     setState(() {
@@ -1627,7 +1881,10 @@ class CartScreenState extends ConsumerState<CartScreen>
                   ? const Center(
                       child: Text(
                         'Start selling to see top products',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF757575),
+                          fontSize: 12,
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -1652,93 +1909,161 @@ class CartScreenState extends ConsumerState<CartScreen>
                   ? const Center(
                       child: Text(
                         'No products found',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        style: TextStyle(
+                          color: Color(0xFF757575),
+                          fontSize: 12,
+                        ),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       itemCount: _filteredProducts.length,
                       itemBuilder: (context, index) {
                         final product = _filteredProducts[index];
-                        final inCart = _cart.where((c) => c.productId == product.id).fold<double>(0, (sum, c) => sum + c.qty);
+                        final inCart = _cart
+                            .where((c) => c.productId == product.id)
+                            .fold<double>(0, (sum, c) => sum + c.qty);
                         return ListTile(
                           dense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                          ),
                           leading: Container(
                             width: 4,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: inCart > 0 ? Colors.green : Colors.grey.shade300,
+                              color: inCart > 0
+                                  ? Colors.green
+                                  : Colors.grey.shade300,
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                           title: Text(
                             product.name,
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
                             '₹${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                           trailing: inCart > 0
                               ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.green,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
                                     '×$inCart',
-                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 )
-                              : const Icon(Icons.add_circle_outline, size: 20, color: Colors.green),
+                              : const Icon(
+                                  Icons.add_circle_outline,
+                                  size: 20,
+                                  color: Colors.green,
+                                ),
                           onTap: () => _showQtyPopup(product),
                         );
                       },
                     ),
             ),
+          // held bills were impossible to reopen on the phone (QA #23)
+          if (_productSearchQuery.isEmpty && _heldBills.isNotEmpty)
+            Material(
+              color: Colors.orange.shade50,
+              child: InkWell(
+                onTap: showHeldBills,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.pause_circle_filled,
+                        color: Colors.orange.shade800,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${_heldBills.length} bill${_heldBills.length == 1 ? '' : 's'} on hold — tap to open',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFC2410C),
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: Colors.orange.shade800),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // Cart items (only when NOT searching)
           if (_productSearchQuery.isEmpty)
             Expanded(
               child: _cart.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.shopping_cart,
-                          size: 48,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Tap a product above to add',
-                          style: TextStyle(fontSize: 13, color: Colors.grey),
-                        ),
-                      ],
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.shopping_cart,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Tap a product above to add',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF757575),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      itemCount: _cart.length,
+                      itemBuilder: (context, index) {
+                        final item = _cart[index];
+                        return CartItemTile(
+                          item: item,
+                          onIncrement: () => _updateQty(index, 1),
+                          onDecrement: () => _updateQty(index, -1),
+                          onRemove: () => _removeFromCart(index),
+                          onEditPrice: () => _editItemPrice(index),
+                          onEditQty: () => _editItemQty(index),
+                          onDiscountChanged: (discount) =>
+                              _updateItemDiscount(index, discount),
+                        );
+                      },
                     ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    itemCount: _cart.length,
-                    itemBuilder: (context, index) {
-                      final item = _cart[index];
-                      return CartItemTile(
-                        item: item,
-                        onIncrement: () => _updateQty(index, 1),
-                        onDecrement: () => _updateQty(index, -1),
-                        onRemove: () => _removeFromCart(index),
-                        onEditPrice: () => _editItemPrice(index),
-                        onEditQty: () => _editItemQty(index),
-                        onDiscountChanged: (discount) =>
-                            _updateItemDiscount(index, discount),
-                      );
-                    },
-                  ),
-          ),
+            ),
           // Compact bottom bar
           if (_cart.isNotEmpty)
             Container(
@@ -1760,95 +2085,126 @@ class CartScreenState extends ConsumerState<CartScreen>
                     children: [
                       // Customer chip
                       if (_selectedCustomer != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _selectedCustomer!.totalCredit > 0
-                                ? Colors.orange.withValues(alpha: 0.1)
-                                : Colors.blue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.person,
-                                size: 12,
-                                color: _selectedCustomer!.totalCredit > 0
-                                    ? Colors.orange
-                                    : Colors.blue,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                _selectedCustomer!.name,
-                                style: TextStyle(
-                                  fontSize: 10,
-                            color: _selectedCustomer!.totalCredit > 0
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _selectedCustomer!.totalCredit > 0
+                                  ? Colors.orange.withValues(alpha: 0.1)
+                                  : Colors.blue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 12,
+                                  color: _selectedCustomer!.totalCredit > 0
                                       ? Colors.orange
                                       : Colors.blue,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
-                              if (_selectedCustomer!.totalCredit > 0)
-                                Text(
-                                  ' Due:₹${_selectedCustomer!.totalCredit.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
+                                const SizedBox(width: 2),
+                                Flexible(
+                                  child: Text(
+                                    _selectedCustomer!.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _selectedCustomer!.totalCredit > 0
+                                          ? Color(0xFFC2410C)
+                                          : Color(0xFF1565C0),
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                            ],
+                                if (_selectedCustomer!.totalCredit > 0)
+                                  Text(
+                                    ' Due:₹${_selectedCustomer!.totalCredit.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFFC62828),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       if (_selectedCustomer != null) const SizedBox(width: 6),
                       // Summary text
-                      Text(
-                        '${_cart.length} items · ₹${_total.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
+                      Expanded(
+                        child: Text(
+                          '${_cart.length} item${_cart.length == 1 ? '' : 's'}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade700,
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      // Payment chips compact
+                      // Payment chips in words, full-size tap areas: "₹ 📱 ⏱"
+                      // were unclear and small (QA #79); split showed nothing (QA #33)
+                      if (_isSplitPayment && !_isCredit) ...[
+                        ChoiceChip(
+                          label: const Text(
+                            'Split',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          selected: true,
+                          onSelected: (_) => _showPaymentOptionsSheet(context),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                       ChoiceChip(
-                        label: const Text('₹', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        selected: !_isCredit && _paymentMethod == 'cash',
+                        label: const Text(
+                          'Cash',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        selected:
+                            !_isCredit &&
+                            !_isSplitPayment &&
+                            _paymentMethod == 'cash',
                         onSelected: (_) => setState(() {
                           _paymentMethod = 'cash';
                           _isCredit = false;
                           _isSplitPayment = false;
                         }),
-                        visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: 4),
                       ChoiceChip(
-                        label: const Text('📱', style: TextStyle(fontSize: 11)),
-                        selected: !_isCredit && _paymentMethod == 'digital',
+                        label: const Text(
+                          'UPI',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        selected:
+                            !_isCredit &&
+                            !_isSplitPayment &&
+                            _paymentMethod == 'digital',
                         onSelected: (_) => setState(() {
                           _paymentMethod = 'digital';
                           _isCredit = false;
                           _isSplitPayment = false;
                         }),
-                        visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: 4),
                       ChoiceChip(
-                        label: const Text('⏱', style: TextStyle(fontSize: 11)),
+                        label: const Text(
+                          'Credit',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         selected: _isCredit,
                         onSelected: (_) => setState(() {
                           _isCredit = !_isCredit;
                           if (_isCredit) _amountPaidController.clear();
                           _isSplitPayment = false;
                         }),
-                        backgroundColor: Colors.orange.shade100,
-                        selectedColor: Colors.orange,
-                        visualDensity: VisualDensity.compact,
+                        backgroundColor: Colors.orange.shade50,
+                        selectedColor: Colors.orange.shade200,
                       ),
                     ],
                   ),
@@ -1858,7 +2214,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                     children: [
                       Expanded(
                         child: SizedBox(
-                          height: 40,
+                          height: 52,
                           child: ElevatedButton(
                             onPressed: _completeSale,
                             style: ElevatedButton.styleFrom(
@@ -1871,9 +2227,9 @@ class CartScreenState extends ConsumerState<CartScreen>
                               ),
                             ),
                             child: Text(
-                              _isCredit ? 'Complete Credit' : 'Complete Sale ₹${_total.toStringAsFixed(0)}',
+                              '${_isCredit ? 'Complete Credit' : 'Complete Sale'} ₹${_total.toStringAsFixed(0)}',
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 17,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -1882,8 +2238,8 @@ class CartScreenState extends ConsumerState<CartScreen>
                       ),
                       const SizedBox(width: 6),
                       SizedBox(
-                        height: 40,
-                        width: 40,
+                        height: 52,
+                        width: 52,
                         child: OutlinedButton(
                           onPressed: () => _showPaymentOptionsSheet(context),
                           style: OutlinedButton.styleFrom(
@@ -1892,7 +2248,10 @@ class CartScreenState extends ConsumerState<CartScreen>
                             ),
                             padding: EdgeInsets.zero,
                           ),
-                          child: const Icon(Icons.tune, size: 18),
+                          child: const Tooltip(
+                            message: 'Discount, split payment, amount given',
+                            child: Icon(Icons.tune, size: 24),
+                          ),
                         ),
                       ),
                     ],

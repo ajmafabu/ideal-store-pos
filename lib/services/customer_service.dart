@@ -37,7 +37,7 @@ class CustomerService {
     }
 
     try {
-      final response = await _supabase.from('customers').select().order('name');
+      final response = await _supabase.from('customers').select().order('name', ascending: true);
       final customers = (response as List)
           .map((json) => Customer.fromJson(json))
           .toList();
@@ -247,7 +247,7 @@ class CustomerService {
         .from('customers')
         .select()
         .or('name.ilike.%$q%,phone.ilike.%$q%')
-        .order('name')
+        .order('name', ascending: true)
         .limit(20);
     return (response as List).map((json) => Customer.fromJson(json)).toList();
   }

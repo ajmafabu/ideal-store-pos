@@ -365,7 +365,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ],
           if (_notice != null) ...[
             const SizedBox(height: 16),
-            Text(_notice!, style: TextStyle(color: Colors.orange.shade900, fontSize: 13)),
+            Text(_notice!, style: TextStyle(color: Color(0xFFC2410C), fontSize: 13)),
           ],
           if (_error != null) ...[
             const SizedBox(height: 16),

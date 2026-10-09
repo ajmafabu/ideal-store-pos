@@ -18,6 +18,7 @@ class StaffScreen extends ConsumerWidget {
         title: const Text('Staff Management'),
         actions: [
           IconButton(
+            tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(staffListProvider),
           ),
@@ -60,6 +61,7 @@ class StaffScreen extends ConsumerWidget {
                     '${person.isAdmin ? "Admin" : "Staff"} ${person.active ? "" : "(Inactive)"}',
                   ),
                   trailing: PopupMenuButton(
+                    tooltip: 'Edit, activate or delete',
                     itemBuilder: (ctx) => [
                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
                       PopupMenuItem(
@@ -67,7 +69,7 @@ class StaffScreen extends ConsumerWidget {
                         child: Text(person.active ? 'Deactivate' : 'Activate'),
                       ),
                       if (!person.isAdmin)
-                        const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                        const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Color(0xFFC62828)))),
                     ],
                     onSelected: (value) => _handleAction(context, ref, person, value),
                   ),
@@ -90,11 +92,13 @@ class StaffScreen extends ConsumerWidget {
             ),
           ],
         ),
-        child: FloatingActionButton(
+        // labelled: the bare icon was unclear (QA #84)
+        child: FloatingActionButton.extended(
           onPressed: () => _addStaff(context, ref),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          child: const Icon(Icons.person_add, color: Colors.white),
+          icon: const Icon(Icons.person_add, color: Colors.white),
+          label: const Text('Add staff', style: TextStyle(color: Colors.white)),
         ),
       ),
     );
@@ -127,7 +131,7 @@ class StaffScreen extends ConsumerWidget {
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
               ),
             ],
           ),
@@ -200,7 +204,7 @@ class StaffScreen extends ConsumerWidget {
             if (pinChanged && context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Name saved. The PIN can only be changed by the staff member after signing in.'),
+                  content: Text('Name saved. The PIN can only be changed by that person: after signing in, tap the round button at the top of the dashboard → Change my PIN.'),
                   backgroundColor: Colors.orange,
                 ),
               );
@@ -255,7 +259,9 @@ class _StaffFormState extends State<_StaffForm> {
     _nameController = TextEditingController(text: widget.existingName ?? '');
     _emailController = TextEditingController();
     _passwordController = TextEditingController();
-    _pinController = TextEditingController(text: widget.existingPin ?? '');
+    // never put the stored PIN hash in a text box: it was shown in full and a
+    // 4-6 digit PIN is recovered from its hash in seconds (QA #81)
+    _pinController = TextEditingController();
   }
 
   @override
@@ -305,16 +311,25 @@ class _StaffFormState extends State<_StaffForm> {
               ),
             ],
             const SizedBox(height: 12),
-            TextField(
-              controller: _pinController,
-              decoration: const InputDecoration(
-                labelText: 'PIN (for quick login)',
-                border: OutlineInputBorder(),
-                helperText: '4-6 digit PIN (used as password for quick login)',
+            if (widget.isEdit)
+              Text(
+                widget.existingPin == null
+                    ? 'No quick-login PIN set.'
+                    : 'Quick-login PIN is set. Only that person can change it: dashboard → round button at the top → Change my PIN.',
+                style: TextStyle(color: Colors.grey.shade700),
+              )
+            else
+              TextField(
+                controller: _pinController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'PIN (for quick login)',
+                  border: OutlineInputBorder(),
+                  helperText: '4-6 digit PIN (used as password for quick login)',
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 6,
               ),
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => widget.onSave(

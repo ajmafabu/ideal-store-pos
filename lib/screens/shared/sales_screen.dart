@@ -24,6 +24,7 @@ import '../../widgets/empty_state.dart';
 import 'cart_screen.dart';
 import 'product_form_screen.dart';
 import '../../utils/qty_format.dart';
+import '../../utils/readable_color.dart';
 
 class SalesScreen extends ConsumerStatefulWidget {
   const SalesScreen({super.key});
@@ -51,8 +52,10 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             color: bgColor,
             child: SafeArea(
               bottom: false,
+              // 52 high with labelled 48+ buttons: the old 30 dp icons were
+              // hard to hit and unlabelled (QA #79)
               child: SizedBox(
-                height: 40,
+                height: 52,
                 child: Row(
                   children: [
                     const SizedBox(width: 8),
@@ -65,21 +68,25 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                         icon: Icons.pause_circle_outline,
                         onTap: () => _cartKey.currentState?.holdBill(),
                         tooltip: 'Hold',
+                        label: 'Hold',
                       ),
                       _buildToolbarAction(
                         icon: Icons.qr_code_scanner,
                         onTap: () => _cartKey.currentState?.scanAndAdd(),
                         tooltip: 'Scan',
+                        label: 'Scan',
                       ),
                       _buildToolbarAction(
                         icon: Icons.translate,
                         onTap: () => _cartKey.currentState?.toggleLang(),
-                        tooltip: 'Lang',
+                        tooltip: 'Voice language (English / Tamil)',
+                        label: 'Voice lang',
                       ),
                       _buildToolbarAction(
                         icon: Icons.mic,
                         onTap: () => _cartKey.currentState?.toggleMic(),
-                        tooltip: 'Mic',
+                        tooltip: 'Voice billing',
+                        label: 'Mic',
                       ),
                     ],
                     const SizedBox(width: 4),
@@ -108,7 +115,9 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     return GestureDetector(
       onTap: () => setState(() => _currentTab = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        constraints: const BoxConstraints(minHeight: 44),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: isActive
               ? Colors.white.withValues(alpha: 0.2)
@@ -119,7 +128,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
           label,
           style: TextStyle(
             color: Colors.white,
-            fontSize: 13,
+            fontSize: 15,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -131,13 +140,29 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     required IconData icon,
     required VoidCallback? onTap,
     required String tooltip,
+    required String label,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Icon(icon, size: 18, color: Colors.white),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 22, color: Colors.white),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -170,8 +195,12 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     if (_loadingMore || !_hasMore || _all.isEmpty) return;
     setState(() => _loadingMore = true);
     try {
-      final oldest = _all.map((s) => s.createdAt).reduce((a, b) => a.isBefore(b) ? a : b);
-      final page = await ref.read(saleServiceProvider).getOlderSales(before: oldest, limit: _olderPageSize);
+      final oldest = _all
+          .map((s) => s.createdAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      final page = await ref
+          .read(saleServiceProvider)
+          .getOlderSales(before: oldest, limit: _olderPageSize);
       if (!mounted) return;
       final known = _all.map((s) => s.id).toSet();
       setState(() {
@@ -181,7 +210,11 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load older bills: ${ErrorMessages.parse(e)}')),
+          SnackBar(
+            content: Text(
+              'Could not load older bills: ${ErrorMessages.parse(e)}',
+            ),
+          ),
         );
       }
     } finally {
@@ -191,8 +224,14 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
 
   /// Keep loading older bills until the list reaches back to [cutoff].
   Future<void> _loadBackTo(DateTime cutoff) async {
-    while (mounted && _hasMore && !_loadingMore && _all.isNotEmpty &&
-        _all.map((s) => s.createdAt).reduce((a, b) => a.isBefore(b) ? a : b).isAfter(cutoff)) {
+    while (mounted &&
+        _hasMore &&
+        !_loadingMore &&
+        _all.isNotEmpty &&
+        _all
+            .map((s) => s.createdAt)
+            .reduce((a, b) => a.isBefore(b) ? a : b)
+            .isAfter(cutoff)) {
       final before = _older.length;
       await _loadOlder();
       if (_older.length == before) break; // error or nothing new
@@ -248,8 +287,9 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              Text(ErrorMessages.parse(e),
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              Text(
+                ErrorMessages.parse(e),
+                style: const TextStyle(color: Color(0xFF757575), fontSize: 12),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -300,7 +340,14 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
               final matchesName =
                   s.customerName?.toLowerCase().contains(q) == true;
               final matchesAmt = s.finalAmount.toString().contains(q);
-              if (!matchesName && !matchesAmt) return false;
+              // bill number and product too: walk-in bills could only be
+              // found by scrolling (QA #73)
+              final bare = q.startsWith('#') ? q.substring(1) : q;
+              final matchesBill = s.invoiceLabel.toLowerCase() == bare;
+              final matchesItem = s.items.any((i) =>
+                  i.name.toLowerCase().contains(q) ||
+                  (i.tamilName?.toLowerCase().contains(q) ?? false));
+              if (!matchesName && !matchesAmt && !matchesBill && !matchesItem) return false;
             }
             return true;
           }).toList();
@@ -315,7 +362,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                 ),
                 child: TextField(
                   decoration: InputDecoration(
-                    hintText: 'Search by customer or amount...',
+                    hintText: 'Bill no, customer, product or amount',
                     prefixIcon: const Icon(Icons.search, size: 20),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -331,7 +378,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
               ),
               // Payment method chips
               SizedBox(
-                height: 40,
+                height: 48,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(
@@ -395,7 +442,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
               ),
               // Status + Date chips
               SizedBox(
-                height: 40,
+                height: 48,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(
@@ -509,7 +556,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                               child: Text(
                                 sale.paymentMethod.toUpperCase(),
                                 style: TextStyle(
-                                  color: paymentColor,
+                                  color: readableText(paymentColor),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -541,7 +588,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                             ),
                             const PopupMenuItem(
                               value: 'whatsapp',
-                              child: Text('Share on WhatsApp'),
+                              child: Text('Share bill (WhatsApp, SMS…)'),
                             ),
                             const PopupMenuItem(
                               value: 'email',
@@ -551,7 +598,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                               value: 'delete',
                               child: Text(
                                 'Delete',
-                                style: TextStyle(color: Colors.red),
+                                style: TextStyle(color: Color(0xFFC62828)),
                               ),
                             ),
                           ],
@@ -598,15 +645,37 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                                 final useTamilBT =
                                     printLang == 'tamil' ||
                                     printLang == 'bilingual';
-                                final success = await thermalService.printText(
-                                  receiptData.toText(),
-                                  hasTamil: useTamilBT,
-                                );
+                                // feedback at once, and never wait forever on a
+                                // printer that is off or out of range (QA #70)
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Printing…'),
+                                      duration: Duration(seconds: 15),
+                                    ),
+                                  );
+                                }
+                                final success = await thermalService
+                                    .printText(
+                                      receiptData.toText(),
+                                      hasTamil: useTamilBT,
+                                    )
+                                    .timeout(
+                                      const Duration(seconds: 15),
+                                      onTimeout: () => false,
+                                    )
+                                    .catchError((_) => false);
+                                if (context.mounted)
+                                  ScaffoldMessenger.of(
+                                    context,
+                                  ).hideCurrentSnackBar();
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        success ? 'Printed!' : 'Print failed',
+                                        success
+                                            ? 'Printed!'
+                                            : 'Print failed — is the printer on and paired? (More → Printer Setup)',
                                       ),
                                       backgroundColor: success
                                           ? Colors.green
@@ -663,7 +732,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                               await thermalService.shareAsTextFile(
                                 receiptData.toText(),
                                 fileName:
-                                    'invoice_${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}',
+                                    'invoice_${sale.invoiceLabel}',
                               );
                             } else if (value == 'whatsapp') {
                               await _shareWhatsApp(context, ref, sale);
@@ -826,7 +895,9 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     final newTotal = result['total'] as double;
     final reason = (result['reason'] as String?)?.trim() ?? '';
     final billDiscount = sale.discount;
-    final finalAmount = (newTotal - billDiscount + sale.extraCharges).roundToDouble().clamp(0.0, double.infinity);
+    final finalAmount = (newTotal - billDiscount + sale.extraCharges)
+        .roundToDouble()
+        .clamp(0.0, double.infinity);
     final isCredit = sale.isCredit;
     final amountPaid = isCredit
         ? sale.amountPaid.clamp(0.0, finalAmount)
@@ -846,7 +917,8 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           cashAmount = finalAmount;
           digitalAmount = 0;
         }
-      } else if (method == PaymentMethods.upi || method == PaymentMethods.bank) {
+      } else if (method == PaymentMethods.upi ||
+          method == PaymentMethods.bank) {
         cashAmount = 0;
         digitalAmount = finalAmount;
       } else {
@@ -876,7 +948,10 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Save', style: TextStyle(color: Colors.green)),
+            child: const Text(
+              'Save',
+              style: TextStyle(color: Color(0xFF2E7D32)),
+            ),
           ),
         ],
       ),
@@ -885,23 +960,25 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     if (confirm != true || !context.mounted) return;
 
     try {
-      final outcome = await ref.read(saleServiceProvider).editSaleAtomic(
-        saleId: sale.id,
-        items: newItems,
-        totalAmount: newTotal,
-        discount: billDiscount,
-        finalAmount: finalAmount,
-        customerId: sale.customerId,
-        isCredit: isCredit,
-        amountPaid: amountPaid,
-        dueAmount: dueAmount,
-        paymentMethod: sale.paymentMethod,
-        cashAmount: cashAmount,
-        digitalAmount: digitalAmount,
-        reason: reason,
-        extraCharges: sale.extraCharges,
-        roundOff: 0,
-      );
+      final outcome = await ref
+          .read(saleServiceProvider)
+          .editSaleAtomic(
+            saleId: sale.id,
+            items: newItems,
+            totalAmount: newTotal,
+            discount: billDiscount,
+            finalAmount: finalAmount,
+            customerId: sale.customerId,
+            isCredit: isCredit,
+            amountPaid: amountPaid,
+            dueAmount: dueAmount,
+            paymentMethod: sale.paymentMethod,
+            cashAmount: cashAmount,
+            digitalAmount: digitalAmount,
+            reason: reason,
+            extraCharges: sale.extraCharges,
+            roundOff: 0,
+          );
 
       ref.invalidate(salesHistoryProvider);
       ref.invalidate(productsProvider);
@@ -910,10 +987,14 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(outcome == EditOutcome.saved
-                ? 'Sale updated'
-                : 'No connection — the edit will be applied when you are back online'),
-            backgroundColor: outcome == EditOutcome.saved ? Colors.green : Colors.orange,
+            content: Text(
+              outcome == EditOutcome.saved
+                  ? 'Sale updated'
+                  : 'No connection — the edit will be applied when you are back online',
+            ),
+            backgroundColor: outcome == EditOutcome.saved
+                ? Colors.green
+                : Colors.orange,
           ),
         );
       }
@@ -921,7 +1002,10 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       // the server refused: nothing changed, say why (#7)
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Edit NOT saved: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Edit NOT saved: ${ErrorMessages.parse(e)}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -954,7 +1038,10 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${ErrorMessages.parse(e)}'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error: ${ErrorMessages.parse(e)}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -1045,7 +1132,9 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate/send email: ${ErrorMessages.parse(e)}'),
+            content: Text(
+              'Failed to generate/send email: ${ErrorMessages.parse(e)}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1068,30 +1157,34 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
           ),
           TextButton(
             onPressed: () async {
+              // taken before the dialog closes so the result is always shown
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
               try {
                 await ref.read(saleServiceProvider).deleteSale(sale.id);
                 ref.invalidate(salesHistoryProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Sale deleted — stock, returns and cash book reversed'),
-                      backgroundColor: Colors.green,
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Sale deleted — stock, returns and cash book reversed',
                     ),
-                  );
-                }
+                    backgroundColor: Colors.green,
+                  ),
+                );
               } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: ${ErrorMessages.parse(e)}'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text('Not deleted: ${ErrorMessages.parse(e)}'),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 8),
+                  ),
+                );
               }
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Color(0xFFC62828)),
+            ),
           ),
         ],
       ),
@@ -1153,7 +1246,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                               Text(
                                 'Rs${item.total.toStringAsFixed(2)} (-${item.discount.toStringAsFixed(0)}%)',
                                 style: const TextStyle(
-                                  color: Colors.green,
+                                  color: Color(0xFF2E7D32),
                                   fontSize: 12,
                                 ),
                               ),
@@ -1196,7 +1289,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                     const Text('Item Discounts:'),
                     Text(
                       '-Rs${sale.totalDiscount.toStringAsFixed(2)}',
-                      style: const TextStyle(color: Colors.green),
+                      style: const TextStyle(color: Color(0xFF2E7D32)),
                     ),
                   ],
                 ),
@@ -1219,7 +1312,7 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
                     'Rs${sale.finalAmount.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.green,
+                      color: Color(0xFF2E7D32),
                     ),
                   ),
                 ],
@@ -1307,8 +1400,13 @@ class _SalesHistoryState extends ConsumerState<_SalesHistory> {
         visualDensity: VisualDensity.compact,
         onSelected: (_) {
           setState(() => _dateFilter = value);
-          final days = value == '7d' ? 7 : value == '30d' ? 30 : null;
-          if (days != null) _loadBackTo(DateTime.now().subtract(Duration(days: days)));
+          final days = value == '7d'
+              ? 7
+              : value == '30d'
+              ? 30
+              : null;
+          if (days != null)
+            _loadBackTo(DateTime.now().subtract(Duration(days: days)));
         },
       ),
     );
@@ -1341,7 +1439,7 @@ class _ReturnsBadge extends ConsumerWidget {
             '$returnCount return${returnCount > 1 ? 's' : ''}',
             style: const TextStyle(
               fontSize: 10,
-              color: Colors.orange,
+              color: Color(0xFFC2410C),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1393,7 +1491,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
           .select(
             'id, name, selling_price, purchase_price, stock, unit, gst_rate, hsn_code',
           )
-          .order('name');
+          .order('name', ascending: true);
       if (mounted) {
         setState(() {
           _allProducts = (response as List)
@@ -1453,9 +1551,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
             onPressed: () {
               final newPrice = double.tryParse(controller.text);
               if (newPrice != null && newPrice > 0) {
-                setState(
-                  () => _items[index] = item.copyWith(price: newPrice),
-                );
+                setState(() => _items[index] = item.copyWith(price: newPrice));
                 Navigator.pop(ctx);
               }
             },
@@ -1491,9 +1587,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
             onPressed: () {
               final newQty = double.tryParse(controller.text);
               if (newQty != null && newQty > 0) {
-                setState(
-                  () => _items[index] = item.copyWith(qty: newQty),
-                );
+                setState(() => _items[index] = item.copyWith(qty: newQty));
                 Navigator.pop(ctx);
               }
             },
@@ -1636,12 +1730,27 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   const Spacer(),
-                  Text(
-                    'Total: Rs${_total.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
+                  // what will be saved: items − bill discount + charges; it
+                  // showed the pre-discount total (QA #31)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Bill: ₹${(_total - widget.sale.discount + widget.sale.extraCharges).roundToDouble().clamp(0.0, double.infinity).toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Color(0xFF1565C0),
+                        ),
+                      ),
+                      if (widget.sale.discount > 0 || widget.sale.extraCharges > 0)
+                        Text(
+                          'Items ₹${_total.toStringAsFixed(2)}'
+                          '${widget.sale.discount > 0 ? ' − discount ₹${widget.sale.discount.toStringAsFixed(2)}' : ''}'
+                          '${widget.sale.extraCharges > 0 ? ' + charges ₹${widget.sale.extraCharges.toStringAsFixed(2)}' : ''}',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 8),
                   IconButton(
@@ -1696,9 +1805,13 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  GestureDetector(
+                                  // bigger − / + (QA #31)
+                                  InkWell(
                                     onTap: () => _updateQty(index, -1),
-                                    child: const Icon(Icons.remove, size: 14),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(Icons.remove, size: 20),
+                                    ),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
@@ -1712,9 +1825,12 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                                       ),
                                     ),
                                   ),
-                                  GestureDetector(
+                                  InkWell(
                                     onTap: () => _updateQty(index, 1),
-                                    child: const Icon(Icons.add, size: 14),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(Icons.add, size: 20),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1737,7 +1853,7 @@ class _EditSaleDialogState extends State<_EditSaleDialog> {
                                 'Rs${item.price.toStringAsFixed(0)}',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: Colors.blue,
+                                  color: Color(0xFF1565C0),
                                 ),
                               ),
                             ),

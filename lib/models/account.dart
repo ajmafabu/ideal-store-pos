@@ -59,7 +59,7 @@ class AccountTransaction {
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       category: json['category'] as String,
       description: json['description'] as String?,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
       refType: json['ref_type'] as String?,
       refId: json['ref_id'] as String?,
       source: json['source'] as String?,

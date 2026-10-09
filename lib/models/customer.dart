@@ -30,7 +30,7 @@ class Customer {
     address: json['address'] as String?,
     totalCredit: (json['total_credit'] as num?)?.toDouble() ?? 0,
     createdAt:
-        DateTime.tryParse(json['created_at'] as String? ?? '') ??
+        DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
         DateTime.now(),
     stateCode: json['state_code'] as String?,
     creditLimit: (json['credit_limit'] as num?)?.toDouble() ?? 0,

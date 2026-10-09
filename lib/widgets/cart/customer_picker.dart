@@ -49,7 +49,7 @@ class CustomerPicker extends StatelessWidget {
                         ),
                         child: const Row(
                           children: [
-                            Text('Select Customer (Optional)', style: TextStyle(color: Colors.grey)),
+                            Text('Select Customer (Optional)', style: TextStyle(color: Color(0xFF757575))),
                             Spacer(),
                             Icon(Icons.arrow_drop_down, color: Colors.grey),
                           ],
@@ -100,7 +100,7 @@ class CustomerPicker extends StatelessWidget {
                               subtitle: customer.phone != null ? Text(customer.phone!) : null,
                               trailing: customer.totalCredit > 0
                                   ? Text('Due: Rs ${customer.totalCredit.toStringAsFixed(0)}',
-                                      style: const TextStyle(color: Colors.red, fontSize: 12))
+                                      style: const TextStyle(color: Color(0xFFC62828), fontSize: 12))
                                   : null,
                               onTap: () => onSelectCustomer(customer),
                             );

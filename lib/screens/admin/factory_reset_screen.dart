@@ -86,7 +86,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: Color(0xFFC62828)),
                 child: const Text('Delete Everything'),
               ),
             ],
@@ -151,7 +151,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear', style: TextStyle(color: Colors.orange)),
+            child: const Text('Clear', style: TextStyle(color: Color(0xFFC2410C))),
           ),
         ],
       ),
@@ -192,7 +192,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Factory Reset'),
-        foregroundColor: Colors.red,
+        foregroundColor: Color(0xFFC62828),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -217,7 +217,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.red,
+                        color: Color(0xFFC62828),
                       ),
                     ),
                   ],
@@ -361,7 +361,7 @@ class _FactoryResetScreenState extends ConsumerState<FactoryResetScreen> {
                     const SizedBox(width: 8),
                     const Text(
                       'Clear Purchases & Accounts',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
                     ),
                   ],
                 ),

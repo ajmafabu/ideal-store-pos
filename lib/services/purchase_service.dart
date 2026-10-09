@@ -68,6 +68,27 @@ class PurchaseService {
     dueDate: p.dueDate,
   );
 
+  /// Purchases older than [before], newest first — for "Load older
+  /// purchases" (history held only the latest 500, QA #21).
+  Future<List<Purchase>> getOlderPurchases({required DateTime before, int limit = 200}) async {
+    final response = await _client
+        .from('purchases')
+        .select()
+        .lt('created_at', before.toUtc().toIso8601String())
+        .order('created_at', ascending: false)
+        .limit(limit)
+        .timeout(const Duration(seconds: 15));
+    final list = <Purchase>[];
+    for (final e in response as List) {
+      try {
+        list.add(Purchase.fromJson(Map<String, dynamic>.from(e as Map)));
+      } catch (ex) {
+        Logger.warning('Skipping unreadable purchase: $ex');
+      }
+    }
+    return list;
+  }
+
   Future<List<Purchase>> getPurchases({int limit = 100}) async {
     try {
       final response = await _client

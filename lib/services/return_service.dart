@@ -179,9 +179,12 @@ class ReturnService {
     }
   }
 
+  /// Bills to pick a return from: the last 30 days, up to 500. Was 7 days
+  /// and 50 bills — about one day at this shop (QA #27). Older bills are
+  /// found by number with [findSaleByInvoice].
   Future<List<Map<String, dynamic>>> getRecentWeekSales() async {
     try {
-      final weekAgo = AppTimezone.nowIst().subtract(const Duration(days: 7));
+      final weekAgo = AppTimezone.nowIst().subtract(const Duration(days: 30));
       final weekAgoUtc = weekAgo.toUtc();
 
       final response = await _client
@@ -191,13 +194,25 @@ class ReturnService {
           )
           .gte('created_at', weekAgoUtc.toIso8601String())
           .order('created_at', ascending: false)
-          .limit(50);
+          .limit(500);
 
       return (response as List).cast<Map<String, dynamic>>();
     } catch (e) {
       Logger.error('getRecentWeekSales', e);
       return [];
     }
+  }
+
+  /// Any bill by its number, however old.
+  Future<Map<String, dynamic>?> findSaleByInvoice(int invoiceNo) async {
+    final response = await _client
+        .from('sales')
+        .select(
+          'id, invoice_no, final_amount, payment_method, created_at, items, is_credit, due_amount, cash_amount, digital_amount, customer_id, customers(name)',
+        )
+        .eq('invoice_no', invoiceNo)
+        .maybeSingle();
+    return response;
   }
 
   /// Creates several returns; reports which ones the database refused

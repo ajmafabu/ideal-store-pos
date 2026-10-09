@@ -28,7 +28,7 @@ final staffListProvider = FutureProvider<List<Profile>>((ref) async {
     final response = await Supabase.instance.client
         .from('profiles')
         .select()
-        .order('name');
+        .order('name', ascending: true);
     return (response as List).map((e) => Profile.fromJson(e)).toList();
   } catch (e) {
     return [];

@@ -7,6 +7,7 @@ import '../../widgets/empty_state.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/validators.dart';
 import 'debt_detail_screen.dart';
+import '../../utils/readable_color.dart';
 
 class CustomerScreen extends ConsumerStatefulWidget {
   const CustomerScreen({super.key});
@@ -208,7 +209,7 @@ class _CustomerScreenState extends ConsumerState<CustomerScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),
@@ -318,7 +319,7 @@ class _CustomerScreenState extends ConsumerState<CustomerScreen> {
                                   ),
                                   child: Text(
                                     customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                                    style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18),
+                                    style: TextStyle(color: readableText(color), fontWeight: FontWeight.bold, fontSize: 18),
                                   ),
                                 ),
                                 title: Text(customer.name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -360,7 +361,7 @@ class _CustomerScreenState extends ConsumerState<CustomerScreen> {
                                         ),
                                         child: const Text(
                                           'No dues',
-                                          style: TextStyle(color: Color(0xFF11998e), fontSize: 12),
+                                          style: TextStyle(color: Color(0xFF0F766E), fontSize: 12),
                                         ),
                                       ),
                                     Row(

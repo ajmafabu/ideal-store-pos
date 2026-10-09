@@ -126,7 +126,8 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
   }
 
   Future<void> _connectByMac() async {
-    final controller = TextEditingController(text: 'A8:29:00:00:69:A6');
+    // was pre-filled with the developer's own printer (QA #83)
+    final controller = TextEditingController();
     final address = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -214,13 +215,13 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(_savedName ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w500)),
-                              Text(_savedAddress!, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(_savedAddress!, style: const TextStyle(fontSize: 12, color: Color(0xFF757575))),
                             ],
                           ),
                         ),
                         TextButton(
                           onPressed: _disconnect,
-                          child: const Text('Disconnect', style: TextStyle(color: Colors.red)),
+                          child: const Text('Disconnect', style: TextStyle(color: Color(0xFFC62828))),
                         ),
                       ],
                     ),
@@ -239,7 +240,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                       children: [
                         Icon(Icons.print_disabled, color: Colors.grey, size: 20),
                         SizedBox(width: 8),
-                        Text('No printer connected', style: TextStyle(color: Colors.grey)),
+                        Text('No printer connected', style: TextStyle(color: Color(0xFF757575))),
                       ],
                     ),
                   ],
@@ -289,7 +290,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                   color: _savedAddress == device.address ? Colors.green : const Color(0xFF667eea),
                 ),
                 title: Text(device.name ?? 'Unknown Device'),
-                subtitle: Text(device.address, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                subtitle: Text(device.address, style: const TextStyle(fontSize: 11, color: Color(0xFF757575))),
                 trailing: _savedAddress == device.address
                     ? const Chip(label: Text('Connected', style: TextStyle(fontSize: 10)), backgroundColor: Colors.green)
                     : const Icon(Icons.chevron_right),
@@ -308,7 +309,7 @@ class _PrinterSetupScreenState extends State<PrinterSetupScreen> {
                   Text('No printers found', style: TextStyle(color: Colors.grey.shade600)),
                   const SizedBox(height: 4),
                   Text('Make sure printer is on and paired in Android settings',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF757575))),
                 ],
               ),
             ),

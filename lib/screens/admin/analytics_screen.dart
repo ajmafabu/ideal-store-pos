@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../config/providers.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/readable_color.dart';
 
 class AnalyticsScreen extends ConsumerStatefulWidget {
   const AnalyticsScreen({super.key});
@@ -674,7 +675,7 @@ class _MetricCard extends StatelessWidget {
             title,
             style: TextStyle(
               fontSize: 10,
-              color: color,
+              color: readableText(color),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -684,7 +685,7 @@ class _MetricCard extends StatelessWidget {
             style: TextStyle(
               fontSize: isText ? 11 : 14,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: readableText(color),
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

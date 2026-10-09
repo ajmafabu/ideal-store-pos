@@ -29,7 +29,7 @@ class Expense {
     amount: (json['amount'] as num?)?.toDouble() ?? 0,
     createdBy: json['created_by'] as String? ?? '',
     createdAt:
-        DateTime.tryParse(json['created_at'] as String? ?? '') ??
+        DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
         DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     paymentMethod: json['payment_method'] as String? ?? 'cash',
   );

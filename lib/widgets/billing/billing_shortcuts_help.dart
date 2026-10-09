@@ -92,7 +92,7 @@ class BillingShortcutsHelp extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF667eea),
+                      color: Color(0xFF4C51BF),
                     ),
                   ),
                 ),

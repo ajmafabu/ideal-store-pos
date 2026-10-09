@@ -39,7 +39,7 @@ class BillingBottomBar extends StatelessWidget {
               if (billDiscount > 0) ...[
                 Text(
                   '-₹${billDiscount.toStringAsFixed(0)}  ',
-                  style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFC62828), fontWeight: FontWeight.w500),
                 ),
               ],
               if (extraCharges > 0) ...[
@@ -63,7 +63,7 @@ class BillingBottomBar extends StatelessWidget {
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       color: selectedTier == 'wholesale'
-                          ? Colors.orange.shade800
+                          ? Color(0xFFC2410C)
                           : Colors.purple.shade800,
                     ),
                   ),
@@ -83,7 +83,7 @@ class BillingBottomBar extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF059669),
+                      color: Color(0xFF047857),
                     ),
                   ),
                 ],

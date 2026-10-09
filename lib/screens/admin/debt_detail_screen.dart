@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../models/customer.dart';
 import '../../config/providers.dart';
 import '../../services/statement_pdf_generator.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/readable_color.dart';
+import '../../utils/money_flow.dart';
 
 class DebtDetailScreen extends ConsumerStatefulWidget {
   final Customer customer;
@@ -21,6 +24,9 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
   List<Map<String, dynamic>> _sales = [];
   List<Map<String, dynamic>> _payments = [];
   bool _loading = true;
+  /// Read again after every payment: the header kept the due it was opened
+  /// with (QA #29).
+  late double _totalDue = widget.customer.totalCredit;
 
   @override
   void initState() {
@@ -34,10 +40,16 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
     try {
       final sales = await ref.read(customerServiceProvider).getSalesByCustomer(widget.customer.id);
       final payments = await ref.read(customerServiceProvider).getPaymentsByCustomer(widget.customer.id);
+      final fresh = await Supabase.instance.client
+          .from('customers')
+          .select('total_credit')
+          .eq('id', widget.customer.id)
+          .maybeSingle();
       if (mounted) {
         setState(() {
           _sales = sales;
           _payments = payments;
+          if (fresh != null) _totalDue = (fresh['total_credit'] as num?)?.toDouble() ?? 0;
           _loading = false;
         });
       }
@@ -65,12 +77,17 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
     );
 
     if (result == true) {
+      ref.invalidate(customersProvider); // the list's due too
       _loadData();
     }
   }
 
   Future<void> _markAllPaid() async {
-    final totalDue = widget.customer.totalCredit;
+    // exactly what the loop below pays, not the due the screen opened with
+    final totalDue = _sales.fold<double>(0, (sum, x) {
+      final due = (x['due_amount'] as num?)?.toDouble() ?? 0;
+      return due > 0 ? sum + due : sum;
+    });
     if (totalDue <= 0) return;
 
     final confirm = await showDialog<bool>(
@@ -109,6 +126,9 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('All dues marked as paid'), backgroundColor: Colors.green),
         );
+      }
+      ref.invalidate(customersProvider);
+      if (mounted) {
         _loadData();
       }
     } catch (e) {
@@ -168,29 +188,29 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
-              color: widget.customer.totalCredit > 0 ? Colors.orange.shade50 : Colors.green.shade50,
+              color: _totalDue > 0 ? Colors.orange.shade50 : Colors.green.shade50,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    widget.customer.totalCredit > 0 ? Icons.warning : Icons.check_circle,
-                    color: widget.customer.totalCredit > 0 ? Colors.orange : Colors.green,
+                    _totalDue > 0 ? Icons.warning : Icons.check_circle,
+                    color: _totalDue > 0 ? Colors.orange : Colors.green,
                   ),
                   const SizedBox(width: 8),
                   Column(
                     children: [
                       const Text('Total Due', style: TextStyle(fontSize: 12)),
                       Text(
-                        'Rs ${widget.customer.totalCredit.toStringAsFixed(2)}',
+                        'Rs ${_totalDue.toStringAsFixed(2)}',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: widget.customer.totalCredit > 0 ? Colors.orange.shade800 : Colors.green.shade800,
+                          color: _totalDue > 0 ? Color(0xFFC2410C) : Colors.green.shade800,
                         ),
                       ),
                     ],
                   ),
-                  if (widget.customer.totalCredit > 0) ...[
+                  if (_totalDue > 0) ...[
                     const SizedBox(width: 16),
                     ElevatedButton.icon(
                       onPressed: _markAllPaid,
@@ -223,7 +243,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                                   final amount = (sale['final_amount'] as num?)?.toDouble() ?? 0;
                                   final paid = (sale['amount_paid'] as num?)?.toDouble() ?? 0;
                                   final due = (sale['due_amount'] as num?)?.toDouble() ?? 0;
-                                  final date = DateTime.tryParse(sale['created_at'] ?? '') ?? DateTime.now();
+                                  final date = (DateTime.tryParse(sale['created_at'] ?? '')?.toLocal() ?? DateTime.now());
 
                                   return Card(
                                     margin: const EdgeInsets.only(bottom: 12),
@@ -237,7 +257,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                                             children: [
                                               Text(
                                                 DateFormat('dd MMM yyyy, hh:mm a').format(date),
-                                                style: const TextStyle(color: Colors.grey),
+                                                style: const TextStyle(color: Color(0xFF757575)),
                                               ),
                                               if (due > 0)
                                                 ElevatedButton(
@@ -273,7 +293,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                                               Text(
                                                 'Rs ${due.toStringAsFixed(2)}',
                                                 style: TextStyle(
-                                                  color: due > 0 ? Colors.red : Colors.green,
+                                                  color: due > 0 ? Color(0xFFC62828) : Color(0xFF2E7D32),
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -296,7 +316,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                                 itemBuilder: (context, index) {
                                   final payment = _payments[index];
                                   final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
-                                  final date = DateTime.tryParse(payment['created_at'] ?? '') ?? DateTime.now();
+                                  final date = (DateTime.tryParse(payment['created_at'] ?? '')?.toLocal() ?? DateTime.now());
                                   final method = payment['payment_method'] ?? 'cash';
                                   final notes = payment['notes'] as String?;
 
@@ -336,9 +356,12 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
 
   Widget _buildMoneyFlowTab() {
     final allEntries = <_FlowEntry>[];
+    // money paid at the counter with each bill is taken off too (QA #14)
+    final paidAtBill = paidWithBill(
+      bills: _sales, payments: _payments, totalKey: 'final_amount', linkKey: 'sale_id');
 
     for (final sale in _sales) {
-      final date = DateTime.tryParse(sale['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(sale['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (sale['final_amount'] as num?)?.toDouble() ?? 0;
       final saleId = sale['invoice_number'] ?? (() { final s = sale['id']?.toString() ?? ''; return s.length >= 8 ? s.substring(0, 8) : s; })() ?? '';
       allEntries.add(_FlowEntry(
@@ -347,10 +370,19 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
         description: 'Sale #$saleId',
         amount: amount,
       ));
+      final paid = paidAtBill[sale['id']?.toString() ?? ''];
+      if (paid != null) {
+        allEntries.add(_FlowEntry(
+          date: date.add(const Duration(microseconds: 1)),
+          type: _FlowType.payment,
+          description: 'Paid with bill #$saleId (${sale['payment_method'] ?? 'cash'})',
+          amount: paid,
+        ));
+      }
     }
 
     for (final payment in _payments) {
-      final date = DateTime.tryParse(payment['created_at'] ?? '') ?? DateTime.now();
+      final date = (DateTime.tryParse(payment['created_at'] ?? '')?.toLocal() ?? DateTime.now());
       final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
       final method = payment['payment_method'] ?? 'cash';
       allEntries.add(_FlowEntry(
@@ -406,7 +438,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                     '$sign Rs ${entry.amount.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: color,
+                      color: readableText(color),
                       fontSize: 14,
                     ),
                   ),
@@ -417,14 +449,14 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen>
                 children: [
                   Text(
                     DateFormat('dd MMM yyyy, hh:mm a').format(entry.date),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF757575)),
                   ),
                   Text(
                     'Bal: Rs ${entry.runningBalance.toStringAsFixed(2)}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: entry.runningBalance > 0 ? Colors.orange : Colors.green,
+                      color: entry.runningBalance > 0 ? Color(0xFFC2410C) : Color(0xFF2E7D32),
                     ),
                   ),
                 ],
@@ -540,7 +572,19 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         TextButton(
           onPressed: () async {
             final amount = double.tryParse(_amountController.text) ?? 0;
-            if (amount > 0 && amount <= widget.dueAmount) {
+            // a wrong amount used to do nothing (QA #19)
+            final problem = amount <= 0
+                ? 'Enter an amount more than 0'
+                : amount > widget.dueAmount + 0.005
+                    ? 'Only Rs ${widget.dueAmount.toStringAsFixed(2)} is due — you entered Rs ${amount.toStringAsFixed(2)}'
+                    : null;
+            if (problem != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(problem), backgroundColor: Colors.orange.shade800),
+              );
+              return;
+            }
+            if (amount > 0 && amount <= widget.dueAmount + 0.005) {
               try {
                 final ref = ProviderScope.containerOf(context);
                 await ref.read(customerServiceProvider).recordPayment(

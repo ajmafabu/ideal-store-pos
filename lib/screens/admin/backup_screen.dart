@@ -81,12 +81,30 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   Future<void> _backup() => _run('Making backup…', () async {
-        final r = await _service.performBackup();
+        final r = await _service.performBackup(
+          onProgress: (step, of, what) {
+            if (mounted) setState(() => _busyText = 'Making backup… $step of $of: $what');
+          },
+        );
         if (!r.success) throw Exception(r.error ?? 'Backup failed');
-        _snack(r.cloudPath != null
-            ? 'Backup saved on this device and in the cloud (${r.fileSizeMB})'
-            : 'Backup saved on this device only (${r.fileSizeMB}) — cloud upload failed');
         await _refresh();
+        if (!mounted) return;
+        // a clear "done", not a message that is easy to miss (QA #3)
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: Icon(
+              r.cloudPath != null ? Icons.check_circle : Icons.warning_amber,
+              color: r.cloudPath != null ? Colors.green : Colors.orange,
+              size: 40,
+            ),
+            title: Text(r.cloudPath != null ? 'Backup done' : 'Backup saved on this phone only'),
+            content: Text(r.cloudPath != null
+                ? 'Saved on this device and in the cloud (${r.fileSizeMB}).'
+                : 'Saved on this device (${r.fileSizeMB}). The cloud upload failed — try again when the internet is better.'),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+          ),
+        );
       });
 
   /// Restore needs the word RESTORE typed in, because it replaces everything.

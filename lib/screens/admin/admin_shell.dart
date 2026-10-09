@@ -111,7 +111,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: Color(0xFFC62828)),
                 child: const Text('Exit'),
               ),
             ],
@@ -266,10 +266,10 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                               fontSize: 11,
                                               fontWeight: FontWeight.w600,
                                               color: status.lastSyncError != null
-                                                  ? Colors.red
+                                                  ? Color(0xFFC62828)
                                                   : status.isConnected
-                                                      ? Colors.orange
-                                                      : Colors.red,
+                                                      ? Color(0xFFC2410C)
+                                                      : Color(0xFFC62828),
                                             ),
                                           ),
                                           if (status.hasPending)
@@ -282,7 +282,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SyncIssuesScreen())),
                                               child: Text(
                                                 '${status.needsReview} need attention ›',
-                                                style: const TextStyle(fontSize: 11, color: Colors.redAccent, decoration: TextDecoration.underline),
+                                                style: const TextStyle(fontSize: 11, color: Color(0xFFC62828), decoration: TextDecoration.underline),
                                               ),
                                             ),
                                         ],
@@ -316,7 +316,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                                 TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                                 TextButton(
                                                   onPressed: () => Navigator.pop(ctx, true),
-                                                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                                  style: TextButton.styleFrom(foregroundColor: Color(0xFFC62828)),
                                                   child: const Text('Clear'),
                                                 ),
                                               ],
@@ -391,7 +391,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: Color(0xFFC62828)),
                 child: const Text('Exit'),
               ),
             ],
@@ -457,10 +457,10 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                               style: TextStyle(
                                 fontSize: 11,
                                 color: status.lastSyncError != null
-                                    ? Colors.red
+                                    ? Color(0xFFC62828)
                                     : status.isConnected
-                                        ? Colors.orange
-                                        : Colors.red,
+                                        ? Color(0xFFC2410C)
+                                        : Color(0xFFC62828),
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -501,6 +501,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
             ],
           ),
           child: FloatingActionButton(
+            tooltip: 'Billing', // had no label for screen readers (QA #35)
             onPressed: () {
               setState(() => ref.read(currentTabProvider.notifier).setTab(2));
               _fabAnimController.reset();
@@ -605,7 +606,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? color : Colors.grey.shade400,
+                color: isSelected ? color : Color(0xFF757575),
               ),
             ),
           ],
@@ -906,7 +907,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                                   TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+                                    child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
                                   ),
                                 ],
                               ),
@@ -1137,7 +1138,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         }
                       }
                     },
-              style: TextButton.styleFrom(foregroundColor: Colors.orange),
+              style: TextButton.styleFrom(foregroundColor: Color(0xFFC2410C)),
               child: loading
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Text('Change'),
@@ -1164,7 +1165,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+            child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),
@@ -1303,7 +1304,7 @@ class _MoreMenuSection extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: Theme.of(context).brightness == Brightness.dark
               ? Colors.white.withValues(alpha: 0.4)
-              : Colors.grey.shade500,
+              : Color(0xFF757575),
           letterSpacing: 1.2,
         ),
       ),
@@ -1339,7 +1340,7 @@ class _ThemeMenuItem extends ConsumerWidget {
               : currentMode == ThemeMode.dark
                   ? 'Dark'
                   : 'System',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
         ),
         children: [
           ListTile(

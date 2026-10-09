@@ -62,9 +62,13 @@ class BackupService {
 
   /// Reads every business table. A table that cannot be read stops the
   /// backup (a silent gap would make the backup useless for restore).
-  Future<Map<String, dynamic>> exportData() async {
+  /// [onProgress]: (step, of, what) — a minute of "Making backup…" with no
+  /// sign of life looked stuck (QA #3).
+  Future<Map<String, dynamic>> exportData({void Function(int step, int of, String what)? onProgress}) async {
     final data = <String, dynamic>{};
-    for (final t in tables) {
+    final steps = tables.length + 1; // + saving and upload
+    for (final (i, t) in tables.indexed) {
+      onProgress?.call(i + 1, steps, t.replaceAll('_', ' '));
       data[t] = await _readAll(t);
       Logger.info('Backup: $t ${(data[t] as List).length} rows');
     }
@@ -76,6 +80,13 @@ class BackupService {
     };
   }
 
+  /// 2026-10-09_14-05 — readable file names, not a raw number (QA #62)
+  static String _stamp() {
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}-${two(n.month)}-${two(n.day)}_${two(n.hour)}-${two(n.minute)}';
+  }
+
   Future<Directory> _localDir() async {
     final dir = Directory('${(await getApplicationDocumentsDirectory()).path}/ideal_pos_backups');
     if (!await dir.exists()) await dir.create(recursive: true);
@@ -83,12 +94,16 @@ class BackupService {
   }
 
   /// Makes a backup: local file + cloud copy + history record.
-  Future<BackupResult> performBackup({String type = 'manual'}) async {
+  Future<BackupResult> performBackup({
+    String type = 'manual',
+    void Function(int step, int of, String what)? onProgress,
+  }) async {
     final watch = Stopwatch()..start();
     String? backupId;
     try {
       backupId = (await _client.rpc('create_backup_record', params: {'p_backup_type': type}))?.toString();
-      final data = await exportData();
+      final data = await exportData(onProgress: onProgress);
+      onProgress?.call(tables.length + 1, tables.length + 1, 'saving and uploading');
       final bytes = Uint8List.fromList(utf8.encode(jsonEncode(data)));
       final checksum = sha256.convert(bytes).toString();
       final name = 'backup_${DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first}.json';
@@ -209,7 +224,7 @@ class BackupService {
         s['due_amount'] ?? 0,
       ].join(','));
     }
-    final file = File('${(await _localDir()).path}/sales_export_${DateTime.now().millisecondsSinceEpoch}.csv');
+    final file = File('${(await _localDir()).path}/sales_export_${_stamp()}.csv');
     await file.writeAsString(csv.toString());
     return file;
   }

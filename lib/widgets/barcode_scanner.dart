@@ -8,7 +8,7 @@ class BarcodeScannerScreen extends StatefulWidget {
   State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
 }
 
-class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
+class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> with WidgetsBindingObserver {
   bool _done = false;
   String _scannedCode = '';
   final MobileScannerController _controller = MobileScannerController(
@@ -20,7 +20,23 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   bool _torchOn = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  // The first time, Android's camera prompt pauses the app; the camera did
+  // not start after "Allow" until Scan was tapped again (QA #75).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_done && !_controller.value.isRunning) {
+      _controller.start().catchError((_) {});
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
@@ -36,6 +52,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            tooltip: _torchOn ? 'Torch off' : 'Torch on',
             icon: Icon(
               _torchOn ? Icons.flash_on : Icons.flash_off,
               color: _torchOn ? Colors.yellow : Colors.white,
@@ -52,6 +69,31 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           // Full screen camera
           MobileScanner(
             controller: _controller,
+            errorBuilder: (context, error) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.no_photography, color: Colors.white, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      error.errorCode == MobileScannerErrorCode.permissionDenied
+                          ? 'Camera permission is off. Allow the camera for this app in phone Settings.'
+                          : 'The camera did not start.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => _controller.start().catchError((_) {}),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             onDetect: (capture) {
               if (_done) return;
               final barcode = capture.barcodes.firstOrNull?.rawValue;

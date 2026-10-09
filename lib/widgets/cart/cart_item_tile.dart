@@ -157,7 +157,7 @@ class CartItemTile extends StatelessWidget {
                           ),
                           child: Text(
                             '${item.discount.toStringAsFixed(0)}%',
-                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Color(0xFF2E7D32), fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -173,7 +173,7 @@ class CartItemTile extends StatelessWidget {
                 if (item.rateLabel != null && item.rateLabel!.isNotEmpty)
                   Text(
                     item.rateLabel!,
-                    style: TextStyle(fontSize: 10, color: Colors.orange[700], fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 10, color: Color(0xFFC2410C), fontWeight: FontWeight.w500),
                   ),
                 const SizedBox(height: 2),
                 GestureDetector(
@@ -183,7 +183,7 @@ class CartItemTile extends StatelessWidget {
                         ? 'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}'
                         : 'Rs${item.price.toStringAsFixed(0)} x ${formatQty(item.qty)} = Rs${item.total.toStringAsFixed(0)}',
                     style: TextStyle(
-                      color: hasDiscount ? Colors.green : Colors.blue,
+                      color: hasDiscount ? Color(0xFF2E7D32) : Color(0xFF1565C0),
                       fontSize: 11,
                       decoration: TextDecoration.underline,
                     ),

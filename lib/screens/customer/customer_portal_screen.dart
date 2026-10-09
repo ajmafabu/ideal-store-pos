@@ -169,7 +169,7 @@ class _TransactionList extends ConsumerWidget {
           itemBuilder: (context, index) {
             final sale = sales[index];
             final amount = (sale['final_amount'] as num?)?.toDouble() ?? 0;
-            final date = DateTime.tryParse(sale['created_at'] ?? '') ?? DateTime.now();
+            final date = (DateTime.tryParse(sale['created_at'] ?? '')?.toLocal() ?? DateTime.now());
             final isCredit = sale['is_credit'] as bool? ?? false;
             final due = (sale['due_amount'] as num?)?.toDouble() ?? 0;
 
@@ -187,7 +187,7 @@ class _TransactionList extends ConsumerWidget {
       subtitleChildren.add(
         Padding(
           padding: const EdgeInsets.only(top: 4),
-          child: Text('Due: Rs${due.toStringAsFixed(2)}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+          child: Text('Due: Rs${due.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFC2410C), fontWeight: FontWeight.w600)),
         ),
       );
     }
@@ -208,7 +208,7 @@ class _TransactionList extends ConsumerWidget {
           label: Text(isCredit ? 'Credit' : 'Paid'),
           backgroundColor: isCredit ? Colors.orange.shade100 : Colors.green.shade100,
           labelStyle: TextStyle(
-            color: isCredit ? Colors.orange : Colors.green,
+            color: isCredit ? Color(0xFFC2410C) : Color(0xFF2E7D32),
             fontWeight: FontWeight.w600,
           ),
         ),

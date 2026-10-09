@@ -44,7 +44,7 @@ class _StaffShellState extends ConsumerState<StaffShell> {
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+            child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
           ),
         ],
       ),

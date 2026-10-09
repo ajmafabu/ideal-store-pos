@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_timezone.dart';
+import '../../utils/readable_color.dart';
 
 class CashFlowScreen extends StatefulWidget {
   const CashFlowScreen({super.key});
@@ -240,7 +241,7 @@ class _CashFlowScreenState extends State<CashFlowScreen> {
                 children: [
                   const Text(
                     'Net Cash Flow',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    style: TextStyle(fontSize: 14, color: Color(0xFF757575)),
                   ),
                   Text(
                     _fmt(netCashFlow),
@@ -282,7 +283,7 @@ class _CashFlowScreenState extends State<CashFlowScreen> {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: readableText(color),
                   ),
                 ),
               ],

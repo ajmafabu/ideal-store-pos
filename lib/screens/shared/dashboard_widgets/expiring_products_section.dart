@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../config/providers.dart';
 import '../../../utils/app_timezone.dart';
 import '../../../utils/qty_format.dart';
+import '../../../utils/readable_color.dart';
 
 class ExpiringProductsSection extends ConsumerWidget {
   const ExpiringProductsSection({super.key});
@@ -131,7 +132,7 @@ class _ExpiryEmpty extends StatelessWidget {
             const Text(
               'No products expiring soon',
               style: TextStyle(
-                color: Color(0xFF10B981),
+                color: Color(0xFF047857),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -169,7 +170,7 @@ class _ExpiryCategory extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: color,
+              color: readableText(color),
             ),
           ),
           const Spacer(),
@@ -184,7 +185,7 @@ class _ExpiryCategory extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: color,
+                color: readableText(color),
               ),
             ),
           ),
@@ -223,7 +224,7 @@ class _ExpiryTile extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(expiryText, style: TextStyle(fontSize: 11, color: color)),
+      subtitle: Text(expiryText, style: TextStyle(fontSize: 11, color: readableText(color))),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
@@ -235,7 +236,7 @@ class _ExpiryTile extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: color,
+            color: readableText(color),
           ),
         ),
       ),

@@ -135,7 +135,7 @@ class Purchase {
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
       roundOff: (json['round_off'] as num?)?.toDouble() ?? 0,
       createdBy: json['created_by'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
       supplierId: json['supplier_id'] as String?,
       isCredit: json['is_credit'] as bool? ?? false,
       amountPaid: (json['amount_paid'] as num?)?.toDouble() ?? 0,

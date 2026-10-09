@@ -132,9 +132,9 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                     children: [
                       Icon(Icons.trending_up, size: 64, color: Colors.green),
                       SizedBox(height: 16),
-                      Text('No slow moving products!', style: TextStyle(fontSize: 16, color: Colors.green)),
+                      Text('No slow moving products!', style: TextStyle(fontSize: 16, color: Color(0xFF2E7D32))),
                       SizedBox(height: 8),
-                      Text('All products are selling well', style: TextStyle(color: Colors.grey)),
+                      Text('All products are selling well', style: TextStyle(color: Color(0xFF757575))),
                     ],
                   ),
                 )
@@ -178,7 +178,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                                 backgroundColor: Colors.orange.withValues(alpha: 0.1),
                                 child: Text(
                                   '${index + 1}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFC2410C)),
                                 ),
                               ),
                               title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
@@ -205,7 +205,7 @@ class _SlowMovingScreenState extends ConsumerState<SlowMovingScreen> {
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
-                                    color: soldQty == 0 ? Colors.red : Colors.orange,
+                                    color: soldQty == 0 ? Color(0xFFC62828) : Color(0xFFC2410C),
                                   ),
                                 ),
                               ),

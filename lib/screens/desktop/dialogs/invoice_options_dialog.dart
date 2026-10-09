@@ -177,7 +177,7 @@ class _InvoiceOptionButton extends StatelessWidget {
               '[$shortcut]',
               style: TextStyle(
                 fontSize: 9,
-                color: Colors.grey.shade500,
+                color: Color(0xFF757575),
               ),
             ),
           ],

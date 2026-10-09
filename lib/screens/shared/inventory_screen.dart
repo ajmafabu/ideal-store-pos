@@ -84,6 +84,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   void _openAddProduct({String? barcode}) {
     if (!_canEdit()) return;
+    // coming back would reopen the keyboard on the search box (QA #13)
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ProductFormScreen(barcode: barcode)),
@@ -95,6 +97,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   void _openEditProduct(Product product) {
     if (!_canEdit()) return;
+    // coming back would reopen the keyboard on the search box (QA #13)
+    FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ProductFormScreen(product: product)),
@@ -176,7 +180,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               Text(
                 'MRP: Rs${apiProduct.mrp}',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: Color(0xFF2E7D32),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -187,7 +191,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             const SizedBox(height: 8),
             const Text(
               'Tap below to add this product to your inventory.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
             ),
           ],
         ),
@@ -286,6 +290,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             onPressed: () async {
               // decimals for kg/litre items: 10.5 kg used to do nothing (QA #10)
               final qty = double.tryParse(controller.text.trim()) ?? 0;
+              if (qty <= 0) {
+                _quickStockWarn(ctx, 'Enter a quantity more than 0');
+                return;
+              }
               if (qty > 0) {
                 try {
                   final left = await ref
@@ -309,12 +317,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             },
             child: const Text(
               'Stock In',
-              style: TextStyle(color: Colors.green),
+              style: TextStyle(color: Color(0xFF2E7D32)),
             ),
           ),
           TextButton(
             onPressed: () async {
               final qty = double.tryParse(controller.text.trim()) ?? 0;
+              // the button used to do nothing here (QA #11)
+              if (qty <= 0) {
+                _quickStockWarn(ctx, 'Enter a quantity more than 0');
+                return;
+              }
+              if (qty > product.stock) {
+                _quickStockWarn(ctx, 'Only ${formatQty(product.stock)} ${product.unit} in stock — cannot remove ${formatQty(qty)}');
+                return;
+              }
               if (qty > 0 && qty <= product.stock) {
                 try {
                   final left = await ref
@@ -338,11 +355,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             },
             child: const Text(
               'Stock Out',
-              style: TextStyle(color: Colors.orange),
+              style: TextStyle(color: Color(0xFFC2410C)),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  void _quickStockWarn(BuildContext ctx, String message) {
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.orange.shade800),
     );
   }
 
@@ -363,6 +386,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           // Load products if empty
           if (allProducts.isEmpty) {
             ref.read(productServiceProvider).getAllProducts().then((products) {
+              // A → Z whatever order the cache returns (QA #12)
+              products = [...products]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
               setSheetState(() {
                 allProducts = products;
                 filteredProducts = products;
@@ -464,10 +489,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: product.stock == 0
-                                        ? Colors.red
+                                        ? Color(0xFFC62828)
                                         : product.isLowStock
-                                        ? Colors.orange
-                                        : Colors.green,
+                                        ? Color(0xFFC2410C)
+                                        : Color(0xFF2E7D32),
                                   ),
                                 ),
                               ),
@@ -510,6 +535,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         builder: (ctx, setSheetState) {
           if (allProducts.isEmpty) {
             ref.read(productServiceProvider).getAllProducts().then((products) {
+              // A → Z whatever order the cache returns (QA #12)
+              products = [...products]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
               setSheetState(() {
                 allProducts = products;
                 filteredProducts = products;
@@ -1144,10 +1171,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: product.isExpired
-                                        ? Colors.red
+                                        ? Color(0xFFC62828)
                                         : product.isExpiringSoon
-                                        ? Colors.orange
-                                        : Colors.grey,
+                                        ? Color(0xFFC2410C)
+                                        : Color(0xFF757575),
                                   ),
                                 ),
                             ],
@@ -1485,7 +1512,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               Text(
                 'Rs.${product.sellingPrice}',
                 style: const TextStyle(
-                  color: Colors.green,
+                  color: Color(0xFF2E7D32),
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -1503,21 +1530,21 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                     '${formatQty(product.stock)} ${product.unit}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: product.isLowStock ? Colors.red : Colors.grey,
+                      color: product.isLowStock ? Color(0xFFC62828) : Color(0xFF757575),
                     ),
                   ),
                 ],
               ),
               Text(
                 'Worth: Rs.${(product.stock * product.purchasePrice).toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 10, color: Colors.blueGrey),
+                style: const TextStyle(fontSize: 10, color: Color(0xFF455A64)),
               ),
               if (product.expiryDate != null)
                 Text(
                   'Exp: ${product.expiryDate!.day}/${product.expiryDate!.month}/${product.expiryDate!.year}',
                   style: TextStyle(
                     fontSize: 10,
-                    color: product.isExpired ? Colors.red : Colors.grey,
+                    color: product.isExpired ? Color(0xFFC62828) : Color(0xFF757575),
                   ),
                 ),
             ],

@@ -76,7 +76,7 @@ class _CustomerPickerDialogState extends State<CustomerPickerDialog> {
       final response = await Supabase.instance.client
           .from('customers')
           .select('id, name, phone')
-          .order('name');
+          .order('name', ascending: true);
       setState(() {
         _customers = (response as List).cast<Map<String, dynamic>>();
         _filtered = _customers;

@@ -155,7 +155,7 @@ class _DesktopSalesHistoryDialogState
                 color: Colors.orange.shade100,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: const Text('OFFLINE', style: TextStyle(fontSize: 10, color: Colors.orange)),
+              child: const Text('OFFLINE', style: TextStyle(fontSize: 10, color: Color(0xFFC2410C))),
             ),
         ],
       ),
@@ -245,7 +245,7 @@ class _DesktopSalesHistoryDialogState
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: isPaid
-                                      ? Colors.green.shade700
+                                      ? Color(0xFF2E7D32)
                                       : Colors.red.shade700,
                                 ),
                               ),
@@ -275,13 +275,13 @@ class _DesktopSalesHistoryDialogState
                                 ),
                                 PopupMenuItem(
                                   value: 'return_sale',
-                                  child: Text('Return / Refund', style: TextStyle(color: Colors.orange)),
+                                  child: Text('Return / Refund', style: TextStyle(color: Color(0xFFC2410C))),
                                 ),
                                 PopupMenuItem(
                                   value: 'delete',
                                   child: Text(
                                     'Delete',
-                                    style: TextStyle(color: Colors.red),
+                                    style: TextStyle(color: Color(0xFFC62828)),
                                   ),
                                 ),
                               ],
@@ -401,7 +401,7 @@ class _DesktopSalesHistoryDialogState
                                   if (pdfBytes != null && context.mounted) {
                                     final dir = await getTemporaryDirectory();
                                     final file = File(
-                                      '${dir.path}/invoice_${sale.id.length >= 8 ? sale.id.substring(0, 8) : sale.id}.pdf',
+                                      '${dir.path}/invoice_${sale.invoiceLabel}.pdf',
                                     );
                                     await file.writeAsBytes(pdfBytes);
                                     await Share.shareXFiles([
@@ -432,7 +432,7 @@ class _DesktopSalesHistoryDialogState
                                               Navigator.pop(ctx, true),
                                           child: const Text(
                                             'Delete',
-                                            style: TextStyle(color: Colors.red),
+                                            style: TextStyle(color: Color(0xFFC62828)),
                                           ),
                                         ),
                                       ],

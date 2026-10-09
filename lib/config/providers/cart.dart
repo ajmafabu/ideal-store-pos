@@ -49,6 +49,12 @@ class CartNotifier extends Notifier<List<CartItem>> {
   void clear() {
     state = [];
   }
+
+  /// Puts a held bill's lines back exactly as they were (addItem would merge
+  /// lines of the same product).
+  void replaceAll(List<CartItem> items) {
+    state = List.of(items);
+  }
 }
 
 final cartProvider = NotifierProvider<CartNotifier, List<CartItem>>(
