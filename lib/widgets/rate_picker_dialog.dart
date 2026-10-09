@@ -24,8 +24,13 @@ class RatePickerDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rate1Label = product.sellingPrice2Label ?? 'Rate 1';
-    final rate2Label = 'Rate 2';
+    // The label belongs to the second rate ("Rate 2 Label" on the product
+    // form). It was shown on the normal price, so "Box ₹12 / Rate 2 ₹55"
+    // invited picking the wrong one (QA, Windows tills too).
+    final rate1Label = 'Normal (per ${product.unit})';
+    final rate2Label = (product.sellingPrice2Label?.trim().isNotEmpty ?? false)
+        ? product.sellingPrice2Label!.trim()
+        : 'Rate 2';
 
     return AlertDialog(
       title: Row(
