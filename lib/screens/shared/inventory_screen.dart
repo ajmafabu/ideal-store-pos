@@ -8,7 +8,10 @@ import 'package:printing/printing.dart';
 import '../../models/product.dart';
 import '../../config/app_colors.dart';
 import '../../config/providers.dart';
+import 'dart:io';
+import 'package:share_plus/share_plus.dart';
 import '../../services/barcode_service.dart';
+import '../../services/product_gst_export.dart';
 import '../../utils/app_timezone.dart';
 import '../../widgets/barcode_scanner.dart';
 import '../../utils/error_messages.dart';
@@ -847,6 +850,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             tooltip: 'Export PDF',
           ),
           IconButton(
+            icon: const Icon(Icons.table_view),
+            onPressed: _exportGstSheet,
+            tooltip: 'Export for GST (Excel)',
+          ),
+          IconButton(
             icon: const Icon(Icons.fact_check),
             onPressed: _showStockReconciliation,
             tooltip: 'Stock Reconciliation',
@@ -1263,6 +1271,35 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   static Future<pw.Font> _getPdfTamilFont() async {
     _pdfNotoSansTamil ??= pw.Font.ttf(await rootBundle.load('assets/fonts/NotoSansTamil-Regular.ttf'));
     return _pdfNotoSansTamil!;
+  }
+
+  /// All products as an Excel sheet for the accountant to fill HSN code
+  /// and GST %. Admin-only, like other product changes.
+  Future<void> _exportGstSheet() async {
+    if (!_canEdit()) return;
+    final products = ref.read(productsProvider).value;
+    if (products == null || products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No products to export')));
+      return;
+    }
+    try {
+      final file = await exportProductGstSheet(products);
+      if (!mounted) return;
+      if (Platform.isWindows) {
+        await Process.run('explorer', ['/select,', file.path]);
+      } else {
+        await Share.shareXFiles([XFile(file.path)], text: 'Products for GST');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Saved ${products.length} products: ${file.path}'),
+        duration: const Duration(seconds: 6),
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMessages.parse(e))));
+      }
+    }
   }
 
   Future<void> _exportPdf() async {

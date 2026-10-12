@@ -385,4 +385,42 @@ SELECT t.fails($$SELECT create_return_atomic('60000000-0000-0000-0000-0000000000
    '50000000-0000-0000-0000-0000000000d1','Toor Dal loose',1.25)$$, 'Cannot return', 'cannot return more than is left of the line (1 kg)');
 RESET ROLE;
 
+-- a supplier bill paid part cash, part UPI (2026_10_purchase_split.sql)
+CREATE TEMP TABLE sp0 AS SELECT t.bal('cash') AS c, t.bal('bank') AS b,
+  (SELECT total_dues FROM suppliers WHERE name='Agency') AS d;
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method, cash_amount, digital_amount)
+VALUES ('40000000-0000-0000-0000-0000000000e1', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-000000000002","name":"Soap","qty":15,"price":20}]', 300, 'split', 100, 200);
+RESET ROLE;
+SELECT t.eq(t.bal('cash'), (SELECT c FROM sp0) - 100, 'split purchase: the cash part leaves the cash book');
+SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 200, 'split purchase: the UPI part leaves the bank');
+SELECT t.eq((SELECT digital_amount FROM purchases WHERE id='40000000-0000-0000-0000-0000000000e1'), 200, 'the UPI part is kept on the purchase');
+
+-- part paid (cash 50 + UPI 100), the rest on credit
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, is_credit, amount_paid, payment_method, cash_amount, digital_amount)
+VALUES ('40000000-0000-0000-0000-0000000000e2', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-000000000002","name":"Soap","qty":20,"price":20}]', 400, true, 150, 'split', 50, 100);
+RESET ROLE;
+SELECT t.eq(t.bal('cash'), (SELECT c FROM sp0) - 150, 'credit purchase paid part cash: cash book');
+SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 300, 'credit purchase paid part UPI: bank');
+SELECT t.eq((SELECT total_dues FROM suppliers WHERE name='Agency'), (SELECT d FROM sp0) + 250, 'the unpaid 250 is owed to the supplier');
+
+-- UPI typed bigger than the bill is capped; editing without amounts (older app) = not a split
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method, cash_amount, digital_amount)
+VALUES ('40000000-0000-0000-0000-0000000000e3', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-000000000002","name":"Soap","qty":5,"price":20}]', 100, 'split', 0, 999);
+RESET ROLE;
+SELECT t.eq((SELECT digital_amount FROM purchases WHERE id='40000000-0000-0000-0000-0000000000e3'), 100, 'UPI part never more than the bill');
+SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 400, 'capped UPI part leaves the bank');
+SET ROLE authenticated;
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000e3',
+  '[{"product_id":"10000000-0000-0000-0000-000000000002","name":"Soap","qty":5,"price":20}]'::jsonb,
+  100, '20000000-0000-0000-0000-000000000001', 'Agency', false, 100, 0, 'cash', 'paid cash after all');
+RESET ROLE;
+SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 300, 'edit to plain cash gives the UPI part back to the bank');
+SELECT t.eq(t.bal('cash'), (SELECT c FROM sp0) - 250, '… and takes it from cash');
+
 \echo ALL SCENARIO TESTS PASSED

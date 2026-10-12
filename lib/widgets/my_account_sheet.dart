@@ -1,20 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/providers.dart';
 import '../models/profile.dart';
 import '../utils/error_messages.dart';
 
-/// This PC's choice: lock the Windows billing screen after 5 minutes
-/// without use. Off by default.
-const tillLockPrefKey = 'till_auto_lock';
-
 /// "My account" from the round profile button on the dashboard: who is
-/// signed in, and Set / Change my PIN (the PIN that unlocks the till).
+/// signed in, and Set / Change my PIN (for PIN sign-in). The Windows till
+/// lock was removed on the owner's request (13 Oct 2026).
 void showMyAccountSheet(BuildContext context, WidgetRef ref, Profile profile) {
   final email = ref.read(authServiceProvider).currentUser?.email ?? '';
   final hasPin = profile.pin != null && profile.pin!.isNotEmpty;
@@ -31,12 +24,11 @@ void showMyAccountSheet(BuildContext context, WidgetRef ref, Profile profile) {
             const SizedBox(height: 2),
             Text('$email · ${profile.isAdmin ? 'Admin' : 'Staff'}', style: TextStyle(color: Colors.grey.shade700)),
             const SizedBox(height: 12),
-            if (Platform.isWindows) const _TillLockSwitch(),
             const SizedBox(height: 4),
             Text(
               hasPin
-                  ? 'Your PIN unlocks the billing screen when the lock is on.'
-                  : 'No PIN set yet. A PIN is needed to unlock the billing screen when the lock is on.',
+                  ? 'You can sign in with your PIN.'
+                  : 'No PIN set yet. Set one to sign in with a PIN.',
               style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
@@ -163,38 +155,3 @@ void _showChangePin(BuildContext context, WidgetRef ref, bool hasPin) {
   );
 }
 
-class _TillLockSwitch extends StatefulWidget {
-  const _TillLockSwitch();
-
-  @override
-  State<_TillLockSwitch> createState() => _TillLockSwitchState();
-}
-
-class _TillLockSwitchState extends State<_TillLockSwitch> {
-  bool? _on;
-
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((p) {
-      if (mounted) setState(() => _on = p.getBool(tillLockPrefKey) ?? false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      title: const Text('Lock billing after 5 minutes without use'),
-      subtitle: const Text('On this computer only. Needs a PIN to unlock.'),
-      value: _on ?? false,
-      onChanged: _on == null
-          ? null
-          : (v) async {
-              final p = await SharedPreferences.getInstance();
-              await p.setBool(tillLockPrefKey, v);
-              if (mounted) setState(() => _on = v);
-            },
-    );
-  }
-}

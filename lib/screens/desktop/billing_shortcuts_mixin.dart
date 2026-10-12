@@ -16,6 +16,9 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
   void onF11();
   void onF12();
   void onCtrlShiftN();
+  void onCtrlN();
+  void onCtrlH();
+  void onCtrlZ();
   void onCtrlD();
   void onCtrlDelete();
   void onShiftEnter();
@@ -28,7 +31,6 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
   void onPlus();
   void onMinus();
   void onEscape();
-  void onResetInactivityTimer();
 
   bool get isProcessing;
   bool get hasActiveSessionItems;
@@ -50,7 +52,6 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
     final isShift = HardwareKeyboard.instance.isShiftPressed;
     final isCtrl = HardwareKeyboard.instance.isControlPressed;
     final isAlt = HardwareKeyboard.instance.isAltPressed;
-    onResetInactivityTimer();
 
     // ── F-KEYS ──
     if (key == LogicalKeyboardKey.f1) {
@@ -66,7 +67,8 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
       return;
     }
     if (key == LogicalKeyboardKey.f5) {
-      if (hasActiveSessionItems) onF5();
+      // the tier is chosen before the first item too (it did nothing then)
+      onF5();
       return;
     }
     if (key == LogicalKeyboardKey.f6) {
@@ -105,6 +107,21 @@ mixin BillingShortcutsMixin<T extends StatefulWidget> on State<T> {
     // ── CTRL+SHIFT+N → New product ──
     if (isCtrl && isShift && key == LogicalKeyboardKey.keyN) {
       onCtrlShiftN();
+      return;
+    }
+
+    // ── CTRL+N → New bill, CTRL+H → Sales History, CTRL+Z → undo remove ──
+    if (isCtrl && !isShift && key == LogicalKeyboardKey.keyN) {
+      onCtrlN();
+      return;
+    }
+    if (isCtrl && key == LogicalKeyboardKey.keyH) {
+      onCtrlH();
+      return;
+    }
+    // (inside typed search text Ctrl+Z stays the normal text undo)
+    if (isCtrl && key == LogicalKeyboardKey.keyZ && !(isSearchFocused && hasSearchText)) {
+      onCtrlZ();
       return;
     }
 

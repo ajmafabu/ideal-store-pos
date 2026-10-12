@@ -149,5 +149,18 @@ checks AS (
          CASE WHEN to_regprocedure('public.delete_damaged_atomic(uuid)') IS NULL
               THEN 'a wrong damaged entry cannot be deleted — run sql/2026_10_stage2_fixes.sql'
               ELSE 'delete puts the stock back' END
+  UNION ALL
+  SELECT 19, 'purchase cash / UPI split',
+         CASE WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_schema = 'public' AND table_name = 'purchases' AND column_name = 'digital_amount')
+                   OR to_regprocedure('public.edit_purchase_atomic(uuid, jsonb, numeric, uuid, text, boolean, numeric, numeric, text, text, numeric, numeric, numeric)') IS NULL
+              THEN 'MISSING'
+              WHEN pg_get_functiondef(to_regprocedure('public.purchase_postings(public.purchases)')) ILIKE '%p.digital_amount%'
+                   AND NOT has_function_privilege('anon', 'public.edit_purchase_atomic(uuid, jsonb, numeric, uuid, text, boolean, numeric, numeric, text, text, numeric, numeric, numeric)', 'EXECUTE')
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                           WHERE table_schema = 'public' AND table_name = 'purchases' AND column_name = 'digital_amount')
+              THEN 'a supplier bill can be paid part cash, part UPI'
+              ELSE 'split purchases are refused — run sql/2026_10_purchase_split.sql' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

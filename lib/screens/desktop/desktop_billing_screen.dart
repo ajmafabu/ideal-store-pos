@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:pdf/pdf.dart';
@@ -19,13 +18,13 @@ import '../../models/product.dart';
 import '../../services/email_service.dart';
 import '../../services/sale_service.dart';
 import '../../utils/payment_methods.dart';
+import '../../utils/validators.dart';
 
 import '../../services/thermal_printer_service.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/invoice_generator.dart';
 import '../../utils/logger.dart';
 import '../../utils/thermal_invoice.dart';
-import '../../utils/pin_auth.dart';
 import '../shared/product_form_screen.dart';
 import '../admin/barcode_label_screen.dart';
 
@@ -38,8 +37,13 @@ import 'widgets/billing_sale_tabs.dart';
 import '../../widgets/rate_picker_dialog.dart';
 import 'dialogs/customer_picker_dialog.dart';
 import 'dialogs/invoice_options_dialog.dart';
+import 'dialogs/sales_history_dialog.dart';
 import '../../utils/qty_format.dart';
-import '../../widgets/my_account_sheet.dart';
+
+/// ₹9 for whole rupees, ₹9.35 otherwise: the rate column showed "₹9" for
+/// a ₹9.35 soap, so lines did not add up to the total (QA 12 Oct).
+String _money(double v) =>
+    '₹${v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2)}';
 
 class DesktopBillingScreen extends ConsumerStatefulWidget {
   const DesktopBillingScreen({super.key});
@@ -51,7 +55,7 @@ class DesktopBillingScreen extends ConsumerStatefulWidget {
 
 class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> with BillingShortcutsMixin {
   final _searchController = TextEditingController();
-  final _searchFocusNode = FocusNode();
+  late final _searchFocusNode = FocusNode(onKeyEvent: _onSearchBoxKey);
   final _qtyController = TextEditingController(text: '1');
   final _priceController = TextEditingController();
   final _totalController = TextEditingController();
@@ -70,25 +74,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   final _resultsScrollController = ScrollController();
   final _cartScrollController = ScrollController();
 
-  // Field navigation order (left→right)
-  List<FocusNode> get _entryFieldOrder {
-    final fields = <FocusNode>[
-      if (_selectedProduct == null) _searchFocusNode,
-      _qtyFocusNode,
-      _priceFocusNode,
-      _totalFocusNode,
-      _costFocusNode,
-    ];
-    return fields;
-  }
-  List<FocusNode> get _paymentFieldOrder => [
-    _billDiscountFocusNode,
-    _extraChargesFocusNode,
-    _paidFocusNode,
-  ];
-
   List<Product> _allProducts = [];
   List<Product> _searchResults = [];
+  String _searchedQuery = ''; // the text _searchResults were built for
+  ({int index, DesktopCartItem item, int session})? _lastRemoved; // for Ctrl+Z
   Product? _selectedProduct;
   int _selectedResultIndex = 0;
   bool _showResults = false;
@@ -112,9 +101,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   final _splitUpiController = TextEditingController();
 
   // Session lock timer
-  Timer? _inactivityTimer;
-  static const _inactivityTimeout = Duration(minutes: 5);
-  String? _unlockErrorText;
 
   // Product list state
   String _selectedTier = 'normal';
@@ -238,6 +224,15 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   void onCtrlShiftN() => _addNewProduct();
 
   @override
+  void onCtrlN() => _newBill();
+
+  @override
+  void onCtrlH() => _openSalesHistory();
+
+  @override
+  void onCtrlZ() => _undoRemove();
+
+  @override
   void onCtrlD() => _addNewCustomer();
 
   @override
@@ -264,7 +259,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   @override
-  void onTab(bool isShift) => _focusNextField(isShift: isShift);
+  void onTab(bool isShift) {
+    // Flutter's own Tab already moves to the next box. Moving here as well
+    // made every Tab jump two boxes: Cash → Bill Discount → Extra Charges,
+    // so the UPI amount landed in Extra Charges (QA 12 Oct). Only step in
+    // when nothing has focus, to bring the cashier back to search.
+    if (FocusManager.instance.primaryFocus == null ||
+        FocusManager.instance.primaryFocus == _keyboardFocusNode) {
+      _searchFocusNode.requestFocus();
+    }
+  }
 
   @override
   void onCtrlTab() => _billDiscountFocusNode.requestFocus();
@@ -337,17 +341,63 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   @override
-  void onResetInactivityTimer() => _resetInactivityTimer();
-
-  @override
   void initState() {
     super.initState();
     _loadProducts();
     _loadHeldBills();
-    _startInactivityTimer();
+    HardwareKeyboard.instance.addHandler(_rescueKeyboard);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
+  }
+
+  /// With a bill line selected and nothing typed, + and − change that
+  /// line's quantity. The search box used to swallow them as text ("=" in
+  /// the box, qty unchanged — QA 12 Oct).
+  KeyEventResult _onSearchBoxKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (_searchController.text.isNotEmpty || _selectedCartIndex < 0 || _selectedProduct != null) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.equal || key == LogicalKeyboardKey.numpadAdd) {
+      _adjustCartQty(_selectedCartIndex, 1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.minus || key == LogicalKeyboardKey.numpadSubtract) {
+      _adjustCartQty(_selectedCartIndex, -1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// After a pop-up closed (sale done, customer picked, PDF opened…) the
+  /// till sometimes had no keyboard focus, so F-keys and typing did nothing
+  /// until the cashier clicked the search box (QA 12 Oct, K8). When a key
+  /// arrives and the till is on top but nothing in it has focus, put the
+  /// cursor back in search and still act on that key.
+  bool _rescueKeyboard(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    if (_keyboardFocusNode.hasFocus) return false; // the till has the keys
+    if (ModalRoute.of(context)?.isCurrent != true) return false; // a pop-up is open
+    _searchFocusNode.requestFocus();
+    final key = event.logicalKey;
+    final printable = event.character != null &&
+        event.character!.isNotEmpty &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed;
+    if (printable && key != LogicalKeyboardKey.enter && key != LogicalKeyboardKey.tab) {
+      // the letter would be lost: type it into search ourselves
+      _searchController.text += event.character!;
+      _searchController.selection =
+          TextSelection.collapsed(offset: _searchController.text.length);
+      _searchDebounce?.cancel();
+      _searchDebounce = Timer(const Duration(milliseconds: 200),
+          () => _searchProducts(_searchController.text));
+      return true;
+    }
+    handleKeyEvent(event);
+    return true;
   }
 
   Future<void> _loadProducts() async {
@@ -361,123 +411,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       }
     } catch (e) {
       Logger.error('Failed to load products', e);
-    }
-  }
-
-  void _startInactivityTimer() {
-    _inactivityTimer?.cancel();
-    _inactivityTimer = Timer(_inactivityTimeout, _onInactivityTimeout);
-  }
-
-  void _resetInactivityTimer() {
-    _startInactivityTimer();
-  }
-
-  Future<void> _onInactivityTimeout() async {
-    if (_isProcessing) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    // this PC's choice (My account → lock switch); off unless switched on —
-    // the owner asked for no lock on the main till (9 Oct 2026)
-    if (!(prefs.getBool(tillLockPrefKey) ?? false)) {
-      _startInactivityTimer();
-      return;
-    }
-    // a user without a PIN could never unlock: don't lock them out
-    final profile = ref.read(profileProvider).value ?? ref.read(authServiceProvider).cachedProfile();
-    if (profile?.pin == null || profile!.pin!.isEmpty) {
-      _startInactivityTimer();
-      return;
-    }
-    final session = ref.read(desktopBillingProvider).elementAt(
-        ref.read(desktopBillingProvider.notifier).activeSessionIndex);
-    if (session.items.isNotEmpty) {
-      _holdBill();
-    }
-    _showUnlockDialog();
-  }
-
-  void _showUnlockDialog() {
-    final pinController = TextEditingController();
-    bool obscurePin = true;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.lock_outline, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Session Locked'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Enter PIN to unlock'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: pinController,
-                obscureText: obscurePin,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'PIN',
-                  border: const OutlineInputBorder(),
-                  prefixIcon: const Icon(Icons.lock),
-                  errorText: _unlockErrorText,
-                  suffixIcon: IconButton(
-                    icon: Icon(obscurePin ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setDialogState(() => obscurePin = !obscurePin),
-                  ),
-                ),
-                onSubmitted: (_) => _verifyUnlockPin(ctx, pinController, setDialogState),
-              ),
-            ],
-          ),
-          actions: [
-            // no "Cancel": it closed the lock without a PIN
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                ref.invalidate(profileProvider);
-                await ref.read(authServiceProvider).signOut();
-                if (mounted) context.go('/login');
-              },
-              child: const Text('Sign out'),
-            ),
-            TextButton(
-              onPressed: () => _verifyUnlockPin(ctx, pinController, setDialogState),
-              child: const Text('Unlock'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _verifyUnlockPin(BuildContext ctx, TextEditingController controller, StateSetter setDialogState) {
-    final pin = controller.text.trim();
-    if (pin.isEmpty) return;
-
-    final profile = ref.read(profileProvider).value ?? ref.read(authServiceProvider).cachedProfile();
-    if (profile == null) {
-      setDialogState(() => _unlockErrorText = 'Profile not loaded');
-      return;
-    }
-
-    final storedHash = profile.pin;
-    if (storedHash != null && PinAuth.verifyPin(pin, storedHash)) {
-      _unlockErrorText = null;
-      _startInactivityTimer();
-      Navigator.pop(ctx);
-    } else if (storedHash == null) {
-      setDialogState(() => _unlockErrorText = 'No PIN set. Contact admin.');
-    } else {
-      setDialogState(() => _unlockErrorText = 'Incorrect PIN');
-      controller.clear();
     }
   }
 
@@ -546,23 +479,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     }
   }
 
-  // ── FIELD NAVIGATION ──
-  void _focusNextField({required bool isShift}) {
-    final fields = _selectedProduct != null
-        ? _entryFieldOrder
-        : _paymentFieldOrder;
-    final currentIdx = fields.indexWhere((f) => f.hasFocus);
-    if (currentIdx == -1) {
-      fields.first.requestFocus();
-    } else if (isShift) {
-      final prev = currentIdx > 0 ? currentIdx - 1 : fields.length - 1;
-      fields[prev].requestFocus();
-    } else {
-      final next = (currentIdx + 1) % fields.length;
-      fields[next].requestFocus();
-    }
-  }
-
   // ── SEARCH ──
   Future<void> _searchProducts(String query) async {
     Logger.info(
@@ -570,6 +486,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     );
     if (query.isEmpty) {
       setState(() {
+        _searchedQuery = '';
         _searchResults = [];
         _showResults = false;
         _selectedProduct = null;
@@ -624,44 +541,24 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       return aName.compareTo(bName);
     });
 
+    // A scanned barcode goes first, so the scanner's Enter picks it.
+    final exactCode = query.trim().toLowerCase();
+    final codeHit = results.indexWhere(
+        (p) => (p.barcode ?? '').toLowerCase() == exactCode && exactCode.isNotEmpty);
+    if (codeHit > 0) results.insert(0, results.removeAt(codeHit));
+
+    // Never pick a product on its own: a lone match used to jump to Qty
+    // while the cashier was still typing, so their Enter skipped Qty and
+    // the quantity they typed became the price (QA 12 Oct: 6 Lifebuoy
+    // billed as 1 × ₹6). Enter always picks the highlighted row.
     setState(() {
       _searchResults = results;
+      _searchedQuery = query;
       _selectedResultIndex = 0;
       _showResults = results.isNotEmpty;
-      if (results.length == 1) {
-        final p = results.first;
-        final cost = (p.purchasePrice > 0)
-            ? p.purchasePrice
-            : (p.variants.isNotEmpty
-                ? p.variants.first.purchasePrice
-                : 0.0);
-        _selectedProduct = p;
-        _qtyController.text = '1';
-        _costController.text = cost.toStringAsFixed(2);
-        _searchResults = [];
-        _showResults = false;
-      } else {
-        _selectedProduct = null;
-      }
+      _selectedProduct = null;
     });
-    if (_selectedProduct != null) {
-      // Show rate picker if product has dual rates
-      final picked = await RatePickerDialog.show(context, _selectedProduct!);
-      final price = picked?.price ?? _selectedProduct!.sellingPrice;
-      final rateLabel = picked?.label;
-      setState(() {
-        _selectedRateLabel = rateLabel;
-        _priceController.text = price.toStringAsFixed(2);
-        _totalController.text = price.toStringAsFixed(2);
-      });
-      _qtyFocusNode.requestFocus();
-      _qtyController.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _qtyController.text.length,
-      );
-    } else {
-      _scrollSelectedResultIntoView();
-    }
+    _scrollSelectedResultIntoView();
   }
 
   void _scrollSelectedResultIntoView() {
@@ -692,6 +589,12 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   Future<void> _onSearchEnter() async {
+    // A barcode scanner (or a fast cashier) presses Enter before the
+    // 200 ms search delay has run: search the current text now.
+    if (_searchedQuery != _searchController.text) {
+      _searchDebounce?.cancel();
+      await _searchProducts(_searchController.text);
+    }
     if (_searchResults.isNotEmpty) {
       _selectSearchResult();
     } else if (_searchController.text.isNotEmpty) {
@@ -733,28 +636,36 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             : 0.0);
     final qty = double.tryParse(_qtyController.text) ?? 1;
 
+    void applyPrice(double price, String? rateLabel) {
+      _selectedRateLabel = rateLabel;
+      _priceController.text = price.toStringAsFixed(2);
+      _totalController.text = (price * qty).toStringAsFixed(2);
+    }
+
     setState(() {
       _selectedUnitType = product.unitType;
       _piecesPerUnit = product.piecesPerUnit;
       _qtyController.text = formatQty(qty);
       _costController.text = cost.toStringAsFixed(2);
       _searchController.clear();
+      _searchedQuery = '';
       _searchResults = [];
       _showResults = false;
       _itemDiscountController.clear();
+      if (!product.hasDualRates) applyPrice(product.sellingPrice, null);
     });
+    // Qty takes the keys at once: the next digit typed is the quantity.
+    _focusQty();
 
-    // Show rate picker if product has dual rates
-    final picked = await RatePickerDialog.show(context, _selectedProduct!);
-    final price = picked?.price ?? _selectedProduct!.sellingPrice;
-    final rateLabel = picked?.label;
+    if (product.hasDualRates) {
+      final picked = await RatePickerDialog.show(context, product);
+      if (!mounted || _selectedProduct != product) return;
+      setState(() => applyPrice(picked?.price ?? product.sellingPrice, picked?.label));
+      _focusQty();
+    }
+  }
 
-    setState(() {
-      _selectedRateLabel = rateLabel;
-      _priceController.text = price.toStringAsFixed(2);
-      _totalController.text = (price * qty).toStringAsFixed(2);
-    });
-
+  void _focusQty() {
     _qtyFocusNode.requestFocus();
     _qtyController.selection = TextSelection(
       baseOffset: 0,
@@ -799,6 +710,24 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     _totalController.selection = TextSelection(
       baseOffset: 0,
       extentOffset: _totalController.text.length,
+    );
+  }
+
+  /// The bill now takes more of a product than the shop has: warn, but let
+  /// the sale go on (the shelf count is sometimes behind). QA 12 Oct: 10
+  /// billed with 3 in stock and no word.
+  void _warnIfOverStock(String productId) {
+    final product = _allProducts.where((p) => p.id == productId).firstOrNull;
+    if (product == null) return;
+    final session = ref.read(desktopBillingProvider).elementAt(
+        ref.read(desktopBillingProvider.notifier).activeSessionIndex);
+    final used = session.items
+        .where((i) => i.productId == productId)
+        .fold<double>(0, (sum, i) => sum + i.qty * i.stockFactor);
+    if (used <= product.stock) return;
+    _warn(
+      'Only ${formatQty(product.stock)} ${product.name} in stock — this bill takes ${formatQty(used)}',
+      color: Colors.deepOrange,
     );
   }
 
@@ -895,6 +824,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             );
       }
     }
+
+    _warnIfOverStock(_editingCartIndex >= 0
+        ? session.items[_editingCartIndex].productId
+        : _selectedProduct!.id);
 
     setState(() {
       _selectedProduct = null;
@@ -1010,6 +943,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     final removed = session.items[index];
     final sessionIndex = notifier.activeSessionIndex;
     notifier.removeItem(index);
+    _lastRemoved = (index: index, item: removed, session: sessionIndex);
     setState(() {
       final updated = ref.read(desktopBillingProvider).elementAt(notifier.activeSessionIndex);
       if (_selectedCartIndex >= updated.items.length) {
@@ -1020,15 +954,13 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Removed ${removed.name}'),
+        content: Text('Removed ${removed.name} — Ctrl+Z to undo'),
         duration: const Duration(seconds: 5),
         persist: false, // with an action it otherwise stays until tapped (QA #65)
         action: SnackBarAction(
           label: 'UNDO',
           onPressed: () {
-            if (!mounted || notifier.activeSessionIndex != sessionIndex) return;
-            notifier.insertItem(index, removed);
-            setState(() => _selectedCartIndex = index);
+            if (mounted) _undoRemove();
           },
         ),
       ),
@@ -1212,7 +1144,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       builder: (ctx) => AlertDialog(
         title: const Text('Clear Cart?'),
         content: Text(
-          'Remove all $itemCount item(s) worth Rs${total.toStringAsFixed(2)}?',
+          'Remove all $itemCount item(s) worth ₹${total.toStringAsFixed(2)}?',
         ),
         actions: [
           TextButton(
@@ -1295,7 +1227,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       selected: isSelected,
                       selectedTileColor: Colors.blue.shade50,
                       title: Text(
-                        'Rs${session.total.toStringAsFixed(0)} — ${session.customerName ?? "Walk-in"}',
+                        '₹${session.total.toStringAsFixed(0)} — ${session.customerName ?? "Walk-in"}',
                       ),
                       subtitle: Text(
                         '${session.itemCount} items • ${AppTimezone.formatTime(time)}',
@@ -1417,8 +1349,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         }
         final splitTotal = splitCash + splitUpi;
         if (splitTotal > total + 0.5) {
-          _warn('Split amounts (Rs${splitCash.toStringAsFixed(0)} + Rs${splitUpi.toStringAsFixed(0)} = '
-              'Rs${splitTotal.toStringAsFixed(0)}) exceed total Rs${total.toStringAsFixed(0)}');
+          _warn('Split amounts (₹${splitCash.toStringAsFixed(0)} + ₹${splitUpi.toStringAsFixed(0)} = '
+              '₹${splitTotal.toStringAsFixed(0)}) exceed total ₹${total.toStringAsFixed(0)}');
           return;
         }
         cashAmt = splitCash;
@@ -1457,8 +1389,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           final newTotalCredit = currentCredit + creditAmount;
           if (creditLimit > 0 && newTotalCredit > creditLimit) {
             _warn(
-              'Credit limit exceeded! Limit: Rs${creditLimit.toStringAsFixed(0)}, '
-              'Current: Rs${currentCredit.toStringAsFixed(0)}, New total: Rs${newTotalCredit.toStringAsFixed(0)}',
+              'Credit limit exceeded! Limit: ₹${creditLimit.toStringAsFixed(0)}, '
+              'Current: ₹${currentCredit.toStringAsFixed(0)}, New total: ₹${newTotalCredit.toStringAsFixed(0)}',
               color: Colors.red,
             );
             return;
@@ -1467,6 +1399,20 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       } catch (e) {
         Logger.warning('Credit limit validation failed: $e');
       }
+    }
+
+    // A split that doesn't cover the bill puts the rest on credit: say so
+    // and wait for a yes (QA 12 Oct: ₹56 went on credit without a word).
+    if (_selectedPayment == 'split' && isCredit) {
+      final ok = await _confirmSplitCredit(
+        customer: session.customerName ?? 'this customer',
+        total: total,
+        cash: cashAmt,
+        upi: digitalAmt,
+        credit: creditAmount,
+        extraCharges: extraCharges,
+      );
+      if (!ok || !mounted) return;
     }
 
     // Every line must still be a known product
@@ -1489,6 +1435,42 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       discount: discount,
       extraCharges: extraCharges,
     );
+  }
+
+  Future<bool> _confirmSplitCredit({
+    required String customer,
+    required double total,
+    required double cash,
+    required double upi,
+    required double credit,
+    required double extraCharges,
+  }) async {
+    String rs(double v) => '₹${v.toStringAsFixed(0)}';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Balance goes on credit'),
+        content: Text(
+          'Bill total: ${rs(total)}'
+          '${extraCharges > 0 ? ' (includes extra charges ${rs(extraCharges)})' : ''}\n'
+          'Cash ${rs(cash)} + UPI ${rs(upi)}\n\n'
+          '${rs(credit)} will be added to $customer\'s credit.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Go back (Esc)'),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save, put on credit (Enter)'),
+          ),
+        ],
+      ),
+    );
+    _searchFocusNode.requestFocus();
+    return ok == true;
   }
 
   Future<void> _saveSale({
@@ -1650,6 +1632,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       context: context,
       builder: (ctx) => InvoiceOptionsDialog(sale: sale),
     );
+    _backToSearch();
 
     if (action == 'skip' || action == null) return;
 
@@ -1863,8 +1846,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   // ── CUSTOMER ──
-  void _showCustomerPicker() {
-    showDialog(
+  Future<void> _showCustomerPicker() async {
+    await showDialog(
       context: context,
       builder: (ctx) => CustomerPickerDialog(
         onSelect: (id, name) {
@@ -1876,6 +1859,95 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         },
       ),
     );
+    _backToSearch();
+  }
+
+  /// Ctrl+H: Sales History without the mouse.
+  Future<void> _openSalesHistory() async {
+    await showDialog(
+      context: context,
+      builder: (_) => DesktopSalesHistoryDialog(
+        onEditSale: _loadSaleForEdit,
+        notifier: ref.read(desktopBillingProvider.notifier),
+      ),
+    );
+    _backToSearch();
+  }
+
+  /// Ctrl+N: a fresh bill; a bill in progress is held (F7 brings it back),
+  /// the same as the NEW button.
+  void _newBill() {
+    final ntf = ref.read(desktopBillingProvider.notifier);
+    bool held = false;
+    if (ntf.editingSale != null || ntf.activeSession.items.isNotEmpty) {
+      held = ntf.autoHoldCurrentSession();
+      _saveHeldBills();
+    }
+    ntf.createQuickSale();
+    setState(() => _selectedCartIndex = -1);
+    _searchFocusNode.requestFocus();
+    if (held) _warn('Previous sale held — retrieve from F7');
+  }
+
+  /// Ctrl+Z: put back the line removed last (the UNDO button needed the mouse).
+  void _undoRemove() {
+    final last = _lastRemoved;
+    final notifier = ref.read(desktopBillingProvider.notifier);
+    if (last == null || notifier.activeSessionIndex != last.session) return;
+    _lastRemoved = null;
+    notifier.insertItem(last.index, last.item);
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    setState(() => _selectedCartIndex = last.index);
+  }
+
+  /// Loads a saved bill into the till for editing (Sales History → Edit).
+  void _loadSaleForEdit(Sale sale) {
+    final ntf = ref.read(desktopBillingProvider.notifier);
+    bool held = false;
+    if (ntf.activeSession.items.isNotEmpty) {
+      held = ntf.autoHoldCurrentSession();
+      _saveHeldBills();
+    }
+    ntf.setEditingSale(sale);
+    for (final item in sale.items) {
+      ntf.addItem(DesktopCartItem.fromCartItem(item));
+    }
+    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+      ntf.setCustomer(sale.customerId, sale.customerName);
+    }
+    setState(() {
+      _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
+      _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
+      _applySalePaymentToForm(sale);
+      _editingCartIndex = -1;
+      _selectedCartIndex = -1;
+      _selectedProduct = null;
+      _searchController.clear();
+      _searchResults = [];
+      _showResults = false;
+    });
+    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+      _loadCustomerCredit(sale.customerId!);
+    } else {
+      setState(() => _customerCredit = 0);
+    }
+    if (held && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Previous sale held — retrieve from F7'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  /// Cursor back in the search box once a pop-up has closed.
+  void _backToSearch() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _selectedProduct == null) _searchFocusNode.requestFocus();
+    });
   }
 
   Future<void> _addNewCustomer() async {
@@ -1883,58 +1955,91 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     final phoneController = TextEditingController();
     final addressController = TextEditingController();
 
+    // Keyboard first (QA 12 Oct): the cursor starts in Name, Enter in any
+    // box saves, and the phone is checked like everywhere else.
+    String? nameError;
+    String? phoneError;
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add New Customer'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Name *',
-                border: OutlineInputBorder(),
-              ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          void save() {
+            final name = nameController.text.trim();
+            final phone = phoneController.text.trim();
+            setDialogState(() {
+              nameError = name.isEmpty ? 'Name is required' : null;
+              phoneError = Validators.phone(phone);
+            });
+            if (nameError != null || phoneError != null) return;
+            Navigator.pop(ctx, {
+              'name': name,
+              'phone': phone,
+              'address': addressController.text.trim(),
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('Add New Customer'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'Name *',
+                    border: const OutlineInputBorder(),
+                    errorText: nameError,
+                  ),
+                  // keep the cursor in the box, so a wrong value can be fixed by keyboard
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phoneController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Phone',
+                    border: const OutlineInputBorder(),
+                    errorText: phoneError,
+                  ),
+                  // keep the cursor in the box, so a wrong value can be fixed by keyboard
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    border: OutlineInputBorder(),
+                  ),
+                  // keep the cursor in the box, so a wrong value can be fixed by keyboard
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 8),
+                const Text('Enter = Save   ·   Esc = Cancel',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
               ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: addressController,
-              decoration: const InputDecoration(
-                labelText: 'Address',
-                border: OutlineInputBorder(),
+              FilledButton(
+                onPressed: save,
+                child: const Text('Save'),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                Navigator.pop(ctx, {
-                  'name': nameController.text,
-                  'phone': phoneController.text,
-                  'address': addressController.text,
-                });
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
+    _backToSearch();
 
     if (result != null) {
       try {
@@ -1989,14 +2094,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       onKeyEvent: handleKeyEvent,
-      // clicks, scrolling and mouse movement are activity too: only key
-      // presses kept the till open, so a cashier using the mouse was
-      // locked after 5 minutes
-      child: Listener(
-        onPointerDown: (_) => _resetInactivityTimer(),
-        onPointerHover: (_) => _resetInactivityTimer(),
-        onPointerSignal: (_) => _resetInactivityTimer(),
-        child: Material(
+      child: Material(
         color: const Color(0xFFF8FAFC),
         child: Stack(
           children: [
@@ -2013,46 +2111,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     _saveHeldBills();
                     setState(() {});
                   },
-                  onEditSale: (sale) {
-                    final ntf = ref.read(desktopBillingProvider.notifier);
-                    bool held = false;
-                    if (ntf.activeSession.items.isNotEmpty) {
-                      held = ntf.autoHoldCurrentSession();
-                      _saveHeldBills();
-                    }
-                    ntf.setEditingSale(sale);
-                    for (final item in sale.items) {
-                      ntf.addItem(DesktopCartItem.fromCartItem(item));
-                    }
-                    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
-                      ntf.setCustomer(sale.customerId, sale.customerName);
-                    }
-                    setState(() {
-                      _billDiscountController.text = sale.discount > 0 ? sale.discount.toStringAsFixed(0) : '';
-                      _extraChargesController.text = sale.extraCharges > 0 ? sale.extraCharges.toStringAsFixed(0) : '';
-                      _applySalePaymentToForm(sale);
-                      _editingCartIndex = -1;
-                      _selectedCartIndex = -1;
-                      _selectedProduct = null;
-                      _searchController.clear();
-                      _searchResults = [];
-                      _showResults = false;
-                    });
-                    if (sale.customerId != null && sale.customerId!.isNotEmpty) {
-                      _loadCustomerCredit(sale.customerId!);
-                    } else {
-                      setState(() => _customerCredit = 0);
-                    }
-                    if (held && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Previous sale held — retrieve from F7'),
-                          backgroundColor: Colors.orange,
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
+                  onEditSale: _loadSaleForEdit,
                 ),
                 Expanded(
                   child: Row(
@@ -2084,9 +2143,17 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                       ),
                       SizedBox(
                         width: 320,
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _buildPaymentPanel(activeSession, total),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildPaymentPanel(activeSession, total),
+                              ),
+                            ),
+                            const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                            _buildPanelActions(activeSession),
+                          ],
                         ),
                       ),
                     ],
@@ -2097,7 +2164,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             BillingProcessingOverlay(isProcessing: _isProcessing),
           ],
         ),
-      ),
       ),
     );
   }
@@ -2581,7 +2647,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                               ),
                             ),
                           Text(
-                            'Rs${product.sellingPrice.toStringAsFixed(0)} | Stock: ${formatQty(product.stock)}',
+                            '${_money(product.sellingPrice)} | Stock: ${formatQty(product.stock)}',
                           ),
                         ],
                       ),
@@ -2846,7 +2912,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             SizedBox(
                               width: 80,
                               child: Text(
-                                '₹${item.price.toStringAsFixed(0)}',
+                                _money(item.price),
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(fontSize: 13),
                               ),
@@ -2854,7 +2920,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                             SizedBox(
                               width: 80,
                               child: Text(
-                                '₹${item.total.toStringAsFixed(0)}',
+                                _money(item.total),
                                 textAlign: TextAlign.right,
                                 style: const TextStyle(
                                   fontSize: 13,
@@ -2905,6 +2971,177 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         ],
       ),
     );
+  }
+
+  /// Edit banner, Complete Sale and Hold/Retrieve stay pinned under the
+  /// scrolling payment panel: opening Partial or Split pushed Complete Sale
+  /// (and the "Editing" banner) off the bottom of the screen (QA 12 Oct).
+  Widget _buildPanelActions(SaleSession session) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Edit mode banner
+          if (ref.read(desktopBillingProvider.notifier).editingSale != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                border: Border.all(color: const Color(0xFFF97316)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit, size: 16, color: Color(0xFFF97316)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Editing bill #${ref.read(desktopBillingProvider.notifier).editingSale!.invoiceLabel} · ₹${ref.read(desktopBillingProvider.notifier).editingSale!.finalAmount.toStringAsFixed(0)} (${ref.read(desktopBillingProvider.notifier).editingSale!.items.length} items)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFC2410C),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        ref.read(desktopBillingProvider.notifier).clearEditingSale();
+                      });
+                      final idx = ref
+                          .read(desktopBillingProvider.notifier)
+                          .activeSessionIndex;
+                      ref
+                          .read(desktopBillingProvider.notifier)
+                          .resetAfterSale(idx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Edit cancelled'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'CANCEL',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Complete Sale
+          SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: (session.items.isEmpty || _isProcessing)
+                  ? null
+                  : _completeSale,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF059669),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFFCBD5E1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.check, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        ref.read(desktopBillingProvider.notifier).editingSale != null
+                            ? 'UPDATE SALE'
+                            : 'COMPLETE SALE',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'SHIFT+ENTER',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Hold/Retrieve
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: session.items.isEmpty ? null : _holdBill,
+                  icon: const Icon(Icons.pause, size: 14),
+                  label: const Text('F6 Hold Sale', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    foregroundColor: const Color(0xFF64748B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: ref.read(desktopBillingProvider.notifier).heldBills.isEmpty ? null : _retrieveBill,
+                  icon: const Icon(Icons.play_arrow, size: 14),
+                  label: Text(
+                    'F7 Retrieve${ref.read(desktopBillingProvider.notifier).heldBills.isNotEmpty ? ' (${ref.read(desktopBillingProvider.notifier).heldBills.length})' : ''}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    foregroundColor: const Color(0xFF64748B),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The customer's due before this bill. While a bill is being edited its
+  /// own due is already inside total_credit, so it was counted twice
+  /// ("Previous Due ₹71" = 15 + this bill's 56, QA 12 Oct).
+  double _previousDue(SaleSession session) {
+    final editing = ref.read(desktopBillingProvider.notifier).editingSale;
+    final own = (editing != null && editing.customerId == session.customerId)
+        ? editing.dueAmount
+        : 0.0;
+    return (_customerCredit - own).clamp(0.0, double.infinity);
   }
 
   // ── PAYMENT PANEL ──
@@ -3074,7 +3311,10 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     Wrap(
                       spacing: 4,
                       runSpacing: 4,
-                      children: [100, 200, 500, 1000, 2000].map((amt) {
+                      // only amounts below the bill make sense as "paid now"
+                      children: [100, 200, 500, 1000, 2000]
+                          .where((amt) => amt < finalTotal)
+                          .map((amt) {
                         return ActionChip(
                           label: Text('₹$amt', style: const TextStyle(fontSize: 11)),
                           onPressed: () {
@@ -3089,7 +3329,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Due: ₹${dueAmount.toStringAsFixed(2)}',
+                      dueAmount < 0
+                          ? 'Paid is more than the bill (₹${finalTotal.toStringAsFixed(2)})'
+                          : 'Due: ₹${dueAmount.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -3276,7 +3518,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           ),
           if (session.customerId != null &&
               session.customerId!.isNotEmpty &&
-              _customerCredit > 0) ...[
+              _previousDue(session) > 0.5) ...[
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.all(8),
@@ -3290,7 +3532,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
                   const Icon(Icons.warning_amber_rounded, size: 16, color: Color(0xFFF97316)),
                   const SizedBox(width: 8),
                   Text(
-                    'Previous Due: ₹${_customerCredit.toStringAsFixed(2)}',
+                    'Previous Due: ₹${_previousDue(session).toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -3375,150 +3617,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           ),
           const SizedBox(height: 14),
 
-          // Edit mode banner
-          if (ref.read(desktopBillingProvider.notifier).editingSale != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
-                border: Border.all(color: const Color(0xFFF97316)),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.edit, size: 16, color: Color(0xFFF97316)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Editing sale ₹${ref.read(desktopBillingProvider.notifier).editingSale!.finalAmount.toStringAsFixed(0)} (${ref.read(desktopBillingProvider.notifier).editingSale!.items.length} items)',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFC2410C),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        ref.read(desktopBillingProvider.notifier).clearEditingSale();
-                      });
-                      final idx = ref
-                          .read(desktopBillingProvider.notifier)
-                          .activeSessionIndex;
-                      ref
-                          .read(desktopBillingProvider.notifier)
-                          .resetAfterSale(idx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Edit cancelled'),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'CANCEL',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFB91C1C),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Complete Sale
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: (session.items.isEmpty || _isProcessing)
-                  ? null
-                  : _completeSale,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF059669),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFCBD5E1),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.check, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        ref.read(desktopBillingProvider.notifier).editingSale != null
-                            ? 'UPDATE SALE'
-                            : 'COMPLETE SALE',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    'SHIFT+ENTER',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Hold/Retrieve
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: session.items.isEmpty ? null : _holdBill,
-                  icon: const Icon(Icons.pause, size: 14),
-                  label: const Text('F6 Hold Sale', style: TextStyle(fontSize: 11)),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF64748B),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: ref.read(desktopBillingProvider.notifier).heldBills.isEmpty ? null : _retrieveBill,
-                  icon: const Icon(Icons.play_arrow, size: 14),
-                  label: Text(
-                    'F7 Retrieve${ref.read(desktopBillingProvider.notifier).heldBills.isNotEmpty ? ' (${ref.read(desktopBillingProvider.notifier).heldBills.length})' : ''}',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    side: const BorderSide(color: Color(0xFFE2E8F0)),
-                    foregroundColor: const Color(0xFF64748B),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -3642,6 +3740,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_rescueKeyboard);
     _searchDebounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -3665,7 +3764,6 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
     _keyboardFocusNode.dispose();
     _splitCashController.dispose();
     _splitUpiController.dispose();
-    _inactivityTimer?.cancel();
     super.dispose();
   }
 }

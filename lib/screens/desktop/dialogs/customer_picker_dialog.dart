@@ -27,8 +27,11 @@ class _CustomerPickerDialogState extends State<CustomerPickerDialog> {
   void initState() {
     super.initState();
     _loadCustomers();
+    // Cursor in the search box, so the cashier can type a name straight
+    // after F4 (it sat on the key listener and typing went nowhere). The
+    // listener wraps the box, so ↑ ↓ Enter Esc still reach it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _keyboardFocusNode.requestFocus();
+      _searchFocusNode.requestFocus();
     });
   }
 
@@ -145,11 +148,12 @@ class _CustomerPickerDialogState extends State<CustomerPickerDialog> {
                 ),
                 onChanged: (v) {
                   setState(() {
+                    final q = v.toLowerCase().trim();
                     _filtered = _customers
                         .where(
-                          (c) => c['name'].toString().toLowerCase().contains(
-                            v.toLowerCase(),
-                          ),
+                          (c) =>
+                              c['name'].toString().toLowerCase().contains(q) ||
+                              (c['phone'] ?? '').toString().contains(q),
                         )
                         .toList();
                     _selectedIndex = 0;

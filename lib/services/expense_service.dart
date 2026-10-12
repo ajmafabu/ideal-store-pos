@@ -107,6 +107,43 @@ class ExpenseService {
     }
   }
 
+  /// Expenses in [from, to) and, when given, of one [category] (any case:
+  /// older rows say "other", the form says "Other"). For the History filter;
+  /// the plain list only held the latest 100. Offline: filters the cache.
+  Future<List<Expense>> getExpensesFiltered({
+    DateTime? from,
+    DateTime? to,
+    String? category,
+    int limit = 2000,
+  }) async {
+    bool keep(Expense e) =>
+        (from == null || !e.createdAt.isBefore(from)) &&
+        (to == null || e.createdAt.isBefore(to)) &&
+        (category == null || e.category.toLowerCase() == category.toLowerCase());
+    try {
+      var query = _client.from('expenses').select();
+      if (from != null) query = query.gte('created_at', from.toUtc().toIso8601String());
+      if (to != null) query = query.lt('created_at', to.toUtc().toIso8601String());
+      if (category != null) query = query.ilike('category', category);
+      final response = await query
+          .order('created_at', ascending: false)
+          .limit(limit)
+          .timeout(const Duration(seconds: 15));
+      return (response as List).map((e) => Expense.fromJson(e)).toList();
+    } catch (e) {
+      Logger.warning('Filtered expenses from server failed, using cache: $e');
+      try {
+        return _offlineService
+            .getCachedExpenses()
+            .map((e) => Expense.fromJson(e))
+            .where(keep)
+            .toList();
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
   Future<double> getTotalExpenses() async {
     double total = 0;
     var offset = 0;

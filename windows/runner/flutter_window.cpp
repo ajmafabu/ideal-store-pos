@@ -65,6 +65,14 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_SYSCOMMAND:
+      // F10 (and a lone Alt) open the window's system menu, which stole F10
+      // from the till's "Credit" shortcut. The app has no menu bar, so drop
+      // the keyboard menu request. Alt+Space and Alt+F4 still work.
+      if ((wparam & 0xFFF0) == SC_KEYMENU && lparam == 0) {
+        return 0;
+      }
+      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

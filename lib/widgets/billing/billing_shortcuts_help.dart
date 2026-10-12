@@ -31,7 +31,8 @@ class BillingShortcutsHelp extends StatelessWidget {
     _ShortcutGroup(
       title: 'Cart',
       items: [
-        _Shortcut('Delete / Backspace', 'Remove selected cart item (Undo appears)'),
+        _Shortcut('Delete / Backspace', 'Remove selected cart item'),
+        _Shortcut('Ctrl + Z', 'Undo the last removed item'),
         _Shortcut('+ / -', 'Increment / Decrement selected item qty'),
         _Shortcut('F2', 'Edit selected cart item'),
         _Shortcut('Ctrl + Delete', 'Clear entire cart'),
@@ -63,6 +64,8 @@ class BillingShortcutsHelp extends StatelessWidget {
         _Shortcut('F12', 'Open calculator (Windows)'),
         _Shortcut('Ctrl + Shift + N', 'Add new product'),
         _Shortcut('Ctrl + D', 'Add new customer'),
+        _Shortcut('Ctrl + N', 'New bill (current bill is held)'),
+        _Shortcut('Ctrl + H', 'Sales history (↑ ↓, Enter, Ctrl+P/E/R)'),
       ],
     ),
   ];
@@ -104,7 +107,9 @@ class BillingShortcutsHelp extends StatelessWidget {
         ),
       ),
       actions: [
+        // focused, so Esc / Enter close the list (Esc did nothing before)
         TextButton(
+          autofocus: true,
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),

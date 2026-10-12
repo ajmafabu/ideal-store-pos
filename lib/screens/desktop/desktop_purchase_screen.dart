@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/sale.dart' show newDocumentId;
 import '../../utils/payment_methods.dart';
+import '../../utils/validators.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/logger.dart';
@@ -36,6 +37,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   final _priceFocus = FocusNode();
   final _batchFocus = FocusNode();
   final _discountFocus = FocusNode();
+  final _keyListenerFocus = FocusNode();
 
   List<Product> _products = [];
   List<Product> _results = [];
@@ -48,6 +50,16 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   bool _isProcessing = false;
   double _supplierDues = 0;
   final _discountController = TextEditingController();
+  // Split (cash + UPI) and part-paid credit (owner, 12 Oct 2026)
+  final _splitCashController = TextEditingController();
+  final _splitUpiController = TextEditingController();
+  final _paidNowController = TextEditingController();
+  final _splitCashFocus = FocusNode();
+  final _paidNowFocus = FocusNode();
+  String _creditPaidBy = 'cash'; // how the "paid now" part of a credit bill left
+  /// New selling prices typed in "Edit Prices": saved with the purchase,
+  /// not at once (a cancelled purchase used to change them anyway).
+  final Map<String, double> _pendingSellPrices = {};
   final _purchaseSearchController = TextEditingController();
   String _purchaseSearchQuery = '';
 
@@ -61,9 +73,40 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     super.initState();
     _searchFocus = FocusNode(onKeyEvent: _handleSearchKey);
     _loadProducts();
+    HardwareKeyboard.instance.addHandler(_rescueKeyboard);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _searchFocus.requestFocus(),
     );
+  }
+
+  /// After a pop-up closed (supplier picked, purchase saved…) the screen had
+  /// no keyboard focus, so F2 and typing did nothing until a click (QA 12
+  /// Oct). The next key brings the cursor back to product search and still
+  /// does its job.
+  bool _rescueKeyboard(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    if (_keyListenerFocus.hasFocus) return false;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    final key = event.logicalKey;
+    final printable = event.character != null &&
+        event.character!.isNotEmpty &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        key != LogicalKeyboardKey.enter &&
+        key != LogicalKeyboardKey.tab;
+    if (_showHistory) {
+      _onKey(event);
+      return true;
+    }
+    _searchFocus.requestFocus();
+    if (printable) {
+      _searchController.text += event.character!;
+      _searchController.selection = TextSelection.collapsed(offset: _searchController.text.length);
+      _search(_searchController.text);
+      return true;
+    }
+    _onKey(event);
+    return true;
   }
 
   KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
@@ -223,90 +266,115 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     });
   }
 
+  /// F4 / click. Type to filter, ↑ ↓ to choose, Enter to pick, Esc to close,
+  /// Ctrl+N for a new supplier (it was mouse-only, QA 12 Oct).
   Future<void> _selectSupplier() async {
     final suppliers = await ref.read(supplierServiceProvider).getSuppliers();
     if (!mounted) return;
-    showDialog(
+    final listController = ScrollController();
+    final picked = await showDialog<Object>(
       context: context,
       builder: (ctx) {
         String query = '';
+        int highlight = 0;
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            final filtered = query.isEmpty
+            final q = query.toLowerCase();
+            final filtered = q.isEmpty
                 ? suppliers
                 : suppliers.where((s) =>
-                    s.name.toLowerCase().contains(query.toLowerCase()) ||
-                    (s.phone?.toLowerCase().contains(query.toLowerCase()) ?? false)).toList();
+                    s.name.toLowerCase().contains(q) ||
+                    (s.phone?.toLowerCase().contains(q) ?? false)).toList();
+            if (highlight >= filtered.length) highlight = 0;
+
+            void move(int step) {
+              if (filtered.isEmpty) return;
+              setDialogState(() => highlight = (highlight + step).clamp(0, filtered.length - 1));
+              if (listController.hasClients) {
+                const row = 56.0;
+                final top = highlight * row;
+                final view = listController.position.viewportDimension;
+                if (top < listController.offset) {
+                  listController.jumpTo(top);
+                } else if (top + row > listController.offset + view) {
+                  listController.jumpTo(top + row - view);
+                }
+              }
+            }
+
             return AlertDialog(
               title: const Text('Select Supplier'),
               content: SizedBox(
-                width: 400,
+                width: 420,
                 height: 450,
                 child: Column(
                   children: [
-                    TextField(
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Search supplier...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: query.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () => setDialogState(() => query = ''),
-                              )
-                            : null,
+                    Focus(
+                      onKeyEvent: (node, event) {
+                        if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                          return KeyEventResult.ignored;
+                        }
+                        final k = event.logicalKey;
+                        if (k == LogicalKeyboardKey.arrowDown) {
+                          move(1);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.arrowUp) {
+                          move(-1);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.enter && filtered.isNotEmpty) {
+                          Navigator.pop(ctx, filtered[highlight]);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.keyN && HardwareKeyboard.instance.isControlPressed) {
+                          Navigator.pop(ctx, 'new');
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search supplier name or phone...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => setDialogState(() {
+                          query = v.trim();
+                          highlight = 0;
+                        }),
                       ),
-                      onChanged: (v) => setDialogState(() => query = v),
                     ),
-                    const SizedBox(height: 8),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text('↑ ↓ choose  ·  Enter pick  ·  Ctrl+N new supplier  ·  Esc close',
+                          style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    ),
                     Expanded(
                       child: filtered.isEmpty
-                          ? const Center(child: Text('No suppliers found'))
+                          ? const Center(child: Text('No supplier found — Ctrl+N to add'))
                           : ListView.builder(
+                              controller: listController,
+                              itemExtent: 56,
                               itemCount: filtered.length,
-                              itemBuilder: (_, index) => ListTile(
-                                title: Text(filtered[index].name),
-                                subtitle: Text(
-                                  filtered[index].totalDues > 0
-                                      ? 'Dues: Rs${filtered[index].totalDues.toStringAsFixed(2)}'
-                                      : (filtered[index].phone ?? ''),
-                                  style: TextStyle(
-                                    color: filtered[index].totalDues > 0
-                                        ? Color(0xFFC2410C)
-                                        : Color(0xFF757575),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                trailing: filtered[index].totalDues > 0
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.shade100,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          'Rs${filtered[index].totalDues.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFFC2410C),
-                                          ),
-                                        ),
-                                      )
-                                    : null,
-                                onTap: () {
-                                  ref
-                                      .read(desktopPurchaseProvider.notifier)
-                                      .setSupplier(filtered[index]);
-                                  _loadSupplierDues(filtered[index].id);
-                                  Navigator.pop(ctx);
-                                },
-                              ),
+                              itemBuilder: (_, index) {
+                                final s = filtered[index];
+                                return ListTile(
+                                  dense: true,
+                                  selected: index == highlight,
+                                  selectedTileColor: const Color(0xFFE0F2FE),
+                                  title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(s.phone ?? '', maxLines: 1),
+                                  trailing: s.totalDues > 0
+                                      ? Text('Due ₹${s.totalDues.toStringAsFixed(0)}',
+                                          style: const TextStyle(
+                                              fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFC2410C)))
+                                      : null,
+                                  onTap: () => Navigator.pop(ctx, s),
+                                );
+                              },
                             ),
                     ),
                   ],
@@ -318,11 +386,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   child: const Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    await _addSupplier();
-                  },
-                  child: const Text('Add New Supplier'),
+                  onPressed: () => Navigator.pop(ctx, 'new'),
+                  child: const Text('Add New Supplier (Ctrl+N)'),
                 ),
               ],
             );
@@ -330,61 +395,109 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         );
       },
     );
+    listController.dispose();
+    if (!mounted) return;
+    if (picked is Supplier) {
+      ref.read(desktopPurchaseProvider.notifier).setSupplier(picked);
+      setState(() => _supplierDues = picked.totalDues);
+      _loadSupplierDues(picked.id);
+    } else if (picked == 'new') {
+      await _addSupplier();
+    }
+    _focusProductSearch();
   }
 
+  /// Name gets the cursor, Enter saves, the phone is checked, and a failed
+  /// save says why (it threw silently before).
   Future<void> _addSupplier() async {
     final name = TextEditingController();
     final phone = TextEditingController();
+    String? nameError;
+    String? phoneError;
+    bool saving = false;
     final result = await showDialog<Supplier>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add New Supplier'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Supplier name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: phone,
-              decoration: const InputDecoration(
-                labelText: 'Phone',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (name.text.trim().isEmpty) return;
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          Future<void> save() async {
+            if (saving) return;
+            final n = name.text.trim();
+            final ph = phone.text.trim();
+            setDialogState(() {
+              nameError = n.isEmpty ? 'Supplier name is required' : null;
+              phoneError = Validators.phone(ph);
+            });
+            if (nameError != null || phoneError != null) return;
+            setDialogState(() => saving = true);
+            try {
               final supplier = await ref
                   .read(supplierServiceProvider)
-                  .addSupplier(
-                    name: name.text.trim(),
-                    phone: phone.text.trim().isEmpty ? null : phone.text.trim(),
-                  );
+                  .addSupplier(name: n, phone: ph.isEmpty ? null : ph);
               if (ctx.mounted) Navigator.pop(ctx, supplier);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+            } catch (e) {
+              setDialogState(() {
+                saving = false;
+                nameError = ErrorMessages.parse(e);
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Add New Supplier'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Supplier name *',
+                    border: const OutlineInputBorder(),
+                    errorText: nameError,
+                  ),
+                  // keep the cursor in the box, so a wrong value can be fixed by keyboard
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Phone',
+                    border: const OutlineInputBorder(),
+                    errorText: phoneError,
+                  ),
+                  // keep the cursor in the box, so a wrong value can be fixed by keyboard
+                  onEditingComplete: () {},
+                  onSubmitted: (_) => save(),
+                ),
+                const SizedBox(height: 8),
+                const Text('Enter = Save   ·   Esc = Cancel',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: saving ? null : save,
+                child: Text(saving ? 'Saving...' : 'Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
     name.dispose();
     phone.dispose();
-    if (result != null && mounted)
+    if (result != null && mounted) {
       ref.read(desktopPurchaseProvider.notifier).setSupplier(result);
+      setState(() => _supplierDues = 0);
+    }
+    _focusProductSearch();
   }
 
   void _editPurchasePrice(int index) {
@@ -404,7 +517,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       ),
     );
     final sellController = TextEditingController(
-      text: product.sellingPrice.toStringAsFixed(2),
+      text: (_pendingSellPrices[product.id] ?? product.sellingPrice).toStringAsFixed(2),
     );
     showDialog(
       context: context,
@@ -434,7 +547,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'DB Purchase: Rs${product.purchasePrice.toStringAsFixed(2)}',
+                            'Current cost: ₹${product.purchasePrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFFC2410C),
@@ -449,7 +562,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           const Icon(Icons.sell, size: 16, color: Colors.green),
                           const SizedBox(width: 6),
                           Text(
-                            'DB Selling: Rs${product.sellingPrice.toStringAsFixed(2)}',
+                            'Current selling: ₹${product.sellingPrice.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFF2E7D32),
@@ -469,8 +582,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 decimal: true,
               ),
               decoration: const InputDecoration(
-                prefixText: 'Rs ',
-                labelText: 'New Purchase Price',
+                prefixText: '₹ ',
+                labelText: 'Purchase price (this bill)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -481,8 +594,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 decimal: true,
               ),
               decoration: const InputDecoration(
-                prefixText: 'Rs ',
-                labelText: 'New Selling Price',
+                prefixText: '₹ ',
+                labelText: 'New selling price (saved with the purchase)',
                 border: OutlineInputBorder(),
               ),
               onSubmitted: (_) =>
@@ -492,11 +605,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              controller.dispose();
-              sellController.dispose();
-              Navigator.pop(ctx);
-            },
+            // the controllers are disposed once, below (disposed twice before)
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -535,11 +645,15 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         unit: '',
       ),
     );
-    if (product.id.isNotEmpty &&
-        (price != product.purchasePrice || sellPrice != product.sellingPrice)) {
-      ref
-          .read(productServiceProvider)
-          .updatePrices(product.id, purchasePrice: price, sellingPrice: sellPrice);
+    // The purchase itself sets the cost price when it is saved. A new selling
+    // price waits for the save too: it was written at once, so a purchase
+    // that was then cancelled still changed the shop's prices.
+    if (product.id.isNotEmpty) {
+      if (sellPrice != product.sellingPrice) {
+        _pendingSellPrices[product.id] = sellPrice;
+      } else {
+        _pendingSellPrices.remove(product.id);
+      }
     }
     ref
         .read(desktopPurchaseProvider.notifier)
@@ -551,48 +665,144 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     setState(() {}); // Force rebuild
   }
 
+  /// Purchase total after discount, rounded to the rupee.
+  double get _roundedTotal {
+    final session = _activeSession;
+    return (session.subtotal - session.discount).clamp(0.0, double.infinity).roundToDouble();
+  }
+
+  void _toast(String message, {Color color = Colors.orange}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color),
+    );
+  }
+
+  /// F8 Cash, F9 UPI, F10 Credit, F11 Split (same keys as the billing till).
+  void _selectMethod(String method) {
+    ref.read(desktopPurchaseProvider.notifier).setPaymentMethod(method);
+    setState(() {
+      if (method == 'split') {
+        _splitCashController.text = _roundedTotal.toStringAsFixed(0);
+        _splitUpiController.text = '0';
+      }
+      if (method == 'credit') _paidNowController.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (method == 'split') {
+        _splitCashFocus.requestFocus();
+        _splitCashController.selection =
+            TextSelection(baseOffset: 0, extentOffset: _splitCashController.text.length);
+      } else if (method == 'credit') {
+        _paidNowFocus.requestFocus();
+      }
+    });
+  }
+
+  bool _completing = false;
+
+  /// One save at a time: Shift+Enter in a payment box reached both the box
+  /// and the screen, which could start two saves.
   Future<void> _completePurchase() async {
+    if (_completing) return;
+    _completing = true;
+    try {
+      await _completePurchaseOnce();
+    } finally {
+      _completing = false;
+    }
+  }
+
+  Future<void> _completePurchaseOnce() async {
     final session = _activeSession;
     if (session.items.isEmpty || _loading) return;
-    if (session.isCredit && session.supplier == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select supplier for credit purchase')),
-      );
+    final total = _roundedTotal;
+    final method = session.paymentMethod;
+
+    // what is paid now, and how
+    double paidNow;
+    double cashPart = 0, upiPart = 0;
+    String paidBy;
+    switch (method) {
+      case 'split':
+        cashPart = double.tryParse(_splitCashController.text) ?? 0;
+        upiPart = double.tryParse(_splitUpiController.text) ?? 0;
+        if (cashPart < 0 || upiPart < 0) {
+          _toast('Split amounts cannot be negative');
+          return;
+        }
+        paidNow = cashPart + upiPart;
+        if (paidNow > total + 0.5) {
+          _toast('Cash ₹${cashPart.toStringAsFixed(0)} + UPI ₹${upiPart.toStringAsFixed(0)} is more than the bill ₹${total.toStringAsFixed(0)}');
+          return;
+        }
+        paidBy = 'split';
+      case 'credit':
+        final typed = _paidNowController.text.trim();
+        paidNow = typed.isEmpty ? 0 : (double.tryParse(typed) ?? -1);
+        if (paidNow < 0 || paidNow >= total) {
+          _toast('Paid now must be from ₹0 to less than the bill ₹${total.toStringAsFixed(0)}');
+          return;
+        }
+        paidBy = _creditPaidBy;
+      default:
+        paidNow = total;
+        paidBy = PaymentMethods.normalize(method);
+    }
+    final owed = (total - paidNow) > 0.5 ? total - paidNow : 0.0;
+    if (owed > 0 && session.supplier == null) {
+      _toast('Select the supplier (F4): ₹${owed.toStringAsFixed(0)} will be owed to them');
       return;
     }
+    // Anything left owing on a split is said out loud before saving (as on the till)
+    if (owed > 0 && method == 'split') {
+      final ok = await _confirmOwed(
+        supplier: session.supplier!.name,
+        total: total,
+        cash: cashPart,
+        upi: upiPart,
+        owed: owed,
+      );
+      if (!ok || !mounted) return;
+    }
+
     setState(() {
       _loading = true;
       _isProcessing = true;
     });
     try {
       final user = ref.read(authServiceProvider).currentUser;
-      final discount = double.tryParse(_discountController.text) ?? 0;
-      final rawTotal = (session.subtotal - discount).clamp(
-        0.0,
-        double.infinity,
-      );
-      final roundedTotal = rawTotal.roundToDouble();
-      final roundOffAmount = roundedTotal - rawTotal;
+      final rawTotal = (session.subtotal - session.discount).clamp(0.0, double.infinity);
+      final isCredit = owed > 0;
       final purchase = Purchase(
         id: newDocumentId(), // same id on retry: never saved twice (#5)
         supplierId: session.supplier?.id,
         supplierName: session.supplier?.name,
         items: List.from(session.items),
-        totalAmount: roundedTotal,
-        roundOff: roundOffAmount,
+        totalAmount: total,
+        roundOff: total - rawTotal,
         createdBy: user?.id ?? '',
         createdAt: DateTime.now(),
-        isCredit: session.isCredit,
-        amountPaid: session.isCredit ? 0 : roundedTotal,
-        dueAmount: session.isCredit ? roundedTotal : 0,
-        paymentMethod: PaymentMethods.normalize(session.paymentMethod),
-        dueDate: session.isCredit
-            ? DateTime.now().add(const Duration(days: 30))
-            : null,
+        isCredit: isCredit,
+        amountPaid: isCredit ? paidNow : total,
+        dueAmount: owed,
+        // the money paid now leaves cash or bank; a split goes by the amounts
+        paymentMethod: paidBy == 'split' ? 'split' : PaymentMethods.normalize(paidBy),
+        dueDate: isCredit ? DateTime.now().add(const Duration(days: 30)) : null,
+        cashAmount: paidBy == 'split' ? cashPart : 0,
+        digitalAmount: paidBy == 'split' ? upiPart : 0,
       );
-      final created = await ref
-          .read(purchaseServiceProvider)
-          .createPurchase(purchase);
+      final created = await ref.read(purchaseServiceProvider).createPurchase(purchase);
+      // selling prices typed in "Edit Prices" are saved only now
+      for (final e in _pendingSellPrices.entries) {
+        try {
+          await ref.read(productServiceProvider).updatePrices(e.key, sellingPrice: e.value);
+        } catch (err) {
+          Logger.warning('Selling price not saved for ${e.key}: $err');
+        }
+      }
+      _pendingSellPrices.clear();
       ref.invalidate(productsProvider);
       ref.invalidate(purchasesProvider);
       await _loadProducts();
@@ -600,51 +810,116 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         ref.read(desktopPurchaseProvider.notifier).resetAfterPurchase();
         setState(() {
           _discountController.clear();
+          _splitCashController.clear();
+          _splitUpiController.clear();
+          _paidNowController.clear();
+          _creditPaidBy = 'cash';
+          _supplierDues = 0;
         });
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Purchase Completed'),
-            content: Text('Total: Rs${created.totalAmount.toStringAsFixed(2)}'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Skip'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await PurchaseInvoiceGenerator.generateAndPrint(created);
-                },
-                child: const Text('Print'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  await PurchaseInvoiceGenerator.shareInvoice(created);
-                },
-                child: const Text('Share'),
-              ),
-            ],
-          ),
-        );
-        _searchFocus.requestFocus();
+        await _showPurchaseDone(created, paidNow: paidNow, owed: owed);
+        _focusProductSearch();
       }
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Purchase NOT saved: ${ErrorMessages.parse(e)}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      final msg = ErrorMessages.parse(e);
+      final raw = e.toString().toLowerCase();
+      _toast(
+        cashPart + upiPart > 0 &&
+                (raw.contains('cash_amount') || raw.contains('digital_amount') || raw.contains('column'))
+            ? 'Purchase NOT saved: split payment needs the database update (sql/2026_10_purchase_split.sql)'
+            : 'Purchase NOT saved: $msg',
+        color: Colors.red,
+      );
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _isProcessing = false;
         });
+      }
     }
+  }
+
+  Future<bool> _confirmOwed({
+    required String supplier,
+    required double total,
+    required double cash,
+    required double upi,
+    required double owed,
+  }) async {
+    String rs(double v) => '₹${v.toStringAsFixed(0)}';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Balance stays owed'),
+        content: Text(
+          'Purchase total: ${rs(total)}\n'
+          'Cash ${rs(cash)} + UPI ${rs(upi)}\n\n'
+          '${rs(owed)} will be added to what you owe $supplier.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Go back (Esc)')),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save, rest on credit (Enter)'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  /// After saving: what was saved, and 1 / 2 / 3 or Enter to finish.
+  Future<void> _showPurchaseDone(Purchase created, {required double paidNow, required double owed}) async {
+    String rs(double v) => '₹${v.toStringAsFixed(2)}';
+    final how = created.isSplit
+        ? 'Cash ${rs(created.cashAmount)} + UPI ${rs(created.digitalAmount)}'
+        : '${PaymentMethods.normalize(created.paymentMethod).toUpperCase()} ${rs(paidNow)}';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.digit1): () => Navigator.pop(ctx),
+          const SingleActivator(LogicalKeyboardKey.digit2): () {
+            Navigator.pop(ctx);
+            PurchaseInvoiceGenerator.generateAndPrint(created);
+          },
+          const SingleActivator(LogicalKeyboardKey.digit3): () {
+            Navigator.pop(ctx);
+            PurchaseInvoiceGenerator.shareInvoice(created);
+          },
+        },
+        child: AlertDialog(
+          title: Text('Purchase saved · ${rs(created.totalAmount)}'),
+          content: Text(
+            '${created.supplierName ?? 'No supplier'}\n'
+            'Paid now: $how'
+            '${owed > 0 ? '\nOwed to supplier: ${rs(owed)}' : ''}',
+          ),
+          actions: [
+            TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done (1 / Enter)'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await PurchaseInvoiceGenerator.generateAndPrint(created);
+              },
+              child: const Text('Print (2)'),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await PurchaseInvoiceGenerator.shareInvoice(created);
+              },
+              child: const Text('Share (3)'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildProcessingOverlay() {
@@ -689,18 +964,36 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final _activeSession = sessions[notifier.activeSessionIndex];
 
     return KeyboardListener(
-      focusNode: FocusNode(),
-      onKeyEvent: (event) {
+      // one node for the screen's life (a new FocusNode on every build leaked)
+      focusNode: _keyListenerFocus,
+      onKeyEvent: _onKey,
+      child: _buildScreen(_activeSession),
+    );
+  }
+
+  void _onKey(KeyEvent event) {
         if (event is! KeyDownEvent) return;
         final key = event.logicalKey;
         final ctrl = HardwareKeyboard.instance.isControlPressed;
         final alt = HardwareKeyboard.instance.isAltPressed;
+        final shift = HardwareKeyboard.instance.isShiftPressed;
+        final _activeSession = this._activeSession;
 
-        // Ctrl+Enter: Complete purchase
-        if (ctrl && key == LogicalKeyboardKey.enter) {
+        // Ctrl+Enter or Shift+Enter (as on the till): Complete purchase
+        if ((ctrl || shift) && key == LogicalKeyboardKey.enter) {
           if (_activeSession.items.isNotEmpty && !_loading) _completePurchase();
           return;
         }
+
+        // F4 supplier, F8 cash, F9 UPI, F10 credit, F11 split (same as the till)
+        if (key == LogicalKeyboardKey.f4) {
+          _selectSupplier();
+          return;
+        }
+        if (key == LogicalKeyboardKey.f8) return _selectMethod('cash');
+        if (key == LogicalKeyboardKey.f9) return _selectMethod('upi');
+        if (key == LogicalKeyboardKey.f10) return _selectMethod('credit');
+        if (key == LogicalKeyboardKey.f11) return _selectMethod('split');
 
         // Ctrl+1 / F1: New Purchase tab
         if ((ctrl && key == LogicalKeyboardKey.digit1) || key == LogicalKeyboardKey.f1) {
@@ -747,20 +1040,12 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           return;
         }
 
-        // Alt+1: Cash, Alt+2: UPI, Alt+3: Credit
+        // Alt+1: Cash, Alt+2: UPI, Alt+3: Credit, Alt+4: Split
         if (alt) {
-          if (key == LogicalKeyboardKey.digit1) {
-            ref.read(desktopPurchaseProvider.notifier).setPaymentMethod('cash');
-            return;
-          }
-          if (key == LogicalKeyboardKey.digit2) {
-            ref.read(desktopPurchaseProvider.notifier).setPaymentMethod('upi');
-            return;
-          }
-          if (key == LogicalKeyboardKey.digit3) {
-            ref.read(desktopPurchaseProvider.notifier).setPaymentMethod('credit');
-            return;
-          }
+          if (key == LogicalKeyboardKey.digit1) return _selectMethod('cash');
+          if (key == LogicalKeyboardKey.digit2) return _selectMethod('upi');
+          if (key == LogicalKeyboardKey.digit3) return _selectMethod('credit');
+          if (key == LogicalKeyboardKey.digit4) return _selectMethod('split');
         }
 
         // Enter: context-sensitive — skip if entry field has focus (handled by onSubmitted)
@@ -816,8 +1101,10 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
           });
           _searchFocus.requestFocus();
         }
-      },
-      child: Material(
+  }
+
+  Widget _buildScreen(PurchaseSession _activeSession) {
+    return Material(
         color: const Color(0xFFF1F5F9),
         child: Stack(
           children: [
@@ -895,8 +1182,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
             _buildProcessingOverlay(),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _purchaseTab(String label, bool selected, VoidCallback onTap) {
@@ -945,7 +1231,9 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 final supplier = (p.supplierName ?? '').toLowerCase();
                 final amount = p.totalAmount.toStringAsFixed(2);
                 final date = AppTimezone.formatDateTime(p.createdAt).toLowerCase();
-                return supplier.contains(q) || amount.contains(q) || date.contains(q);
+                return supplier.contains(q) || amount.contains(q) || date.contains(q) ||
+                    p.paymentLabel.toLowerCase().contains(q) ||
+                    p.items.any((i) => i.name.toLowerCase().contains(q));
               }).toList();
         if (items.isEmpty) {
           return Center(
@@ -1003,7 +1291,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           style: const TextStyle(color: Colors.white, fontSize: 12),
                           onChanged: (v) => setState(() => _purchaseSearchQuery = v),
                           decoration: InputDecoration(
-                            hintText: 'Search by supplier, amount...',
+                            hintText: 'Search by supplier, product, amount, CASH / UPI / SPLIT / CREDIT...',
                             hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                             prefixIcon: Icon(Icons.search, color: Colors.white.withValues(alpha: 0.5), size: 16),
                             suffixIcon: _purchaseSearchQuery.isNotEmpty
@@ -1039,6 +1327,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                     const Expanded(child: Text('SUPPLIER', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
                     const SizedBox(width: 80, child: Text('ITEMS', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
                     const SizedBox(width: 120, child: Text('AMOUNT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                    const SizedBox(width: 150, child: Text('PAYMENT', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
                     const SizedBox(width: 140, child: Text('DATE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
                     const SizedBox(width: 48),
                   ],
@@ -1103,6 +1392,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
                               ),
                             ),
+                            SizedBox(width: 150, child: _paymentBadge(purchase)),
                             SizedBox(
                               width: 140,
                               child: Text(
@@ -1113,22 +1403,28 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                             PopupMenuButton<String>(
                               padding: EdgeInsets.zero,
                               itemBuilder: (_) => const [
-                                PopupMenuItem(value: 'details', child: Text('View Items')),
+                                PopupMenuItem(value: 'details', child: Text('View Details')),
+                                PopupMenuItem(value: 'print', child: Text('Print')),
                                 PopupMenuItem(value: 'edit', child: Text('Edit Purchase')),
                                 PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Color(0xFFC62828)))),
                               ],
                               onSelected: (action) async {
                                 if (action == 'details') {
                                   _showPurchaseDetails(purchase);
+                                } else if (action == 'print') {
+                                  await PurchaseInvoiceGenerator.generateAndPrint(purchase);
                                 } else if (action == 'edit') {
                                   await _editPurchase(purchase);
                                 } else if (action == 'delete') {
                                   final confirm = await showDialog<bool>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      title: const Text('Delete Purchase?'),
-                                      content: const Text(
-                                        'This will deduct stock and reverse account entries. This action cannot be undone.',
+                                      title: Text('Delete purchase from ${purchase.supplierName ?? 'no supplier'}?'),
+                                      content: Text(
+                                        '₹${purchase.totalAmount.toStringAsFixed(2)} · ${purchase.items.length} items · '
+                                        '${AppTimezone.formatDateTime(purchase.createdAt)}\n\n'
+                                        'Its stock is taken back out and the money entries are reversed. '
+                                        'This cannot be undone.',
                                       ),
                                       actions: [
                                         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -1140,9 +1436,15 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                     ),
                                   );
                                   if (confirm == true) {
-                                    await ref.read(purchaseServiceProvider).deletePurchase(purchase.id);
-                                    ref.invalidate(purchasesProvider);
-                                    ref.invalidate(productsProvider);
+                                    // a refused delete (stock already sold…) failed silently
+                                    try {
+                                      await ref.read(purchaseServiceProvider).deletePurchase(purchase.id);
+                                      ref.invalidate(purchasesProvider);
+                                      ref.invalidate(productsProvider);
+                                      _toast('Purchase deleted', color: Colors.green);
+                                    } catch (e) {
+                                      _toast('Delete failed: ${ErrorMessages.parse(e)}', color: Colors.red);
+                                    }
                                   }
                                 }
                               },
@@ -1161,48 +1463,93 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     );
   }
 
+  /// CASH / UPI / SPLIT / CREDIT, and what is still owed.
+  Widget _paymentBadge(Purchase p) {
+    final owed = p.dueAmount > 0.5;
+    final color = owed ? const Color(0xFFC2410C) : const Color(0xFF047857);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(
+          owed ? '${p.paymentLabel} · due ₹${p.dueAmount.toStringAsFixed(0)}' : p.paymentLabel,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  /// Items, plus how the bill was paid and what is still owed (only the
+  /// items and the total were shown).
   void _showPurchaseDetails(Purchase purchase) {
+    String rs(double v) => '₹${v.toStringAsFixed(2)}';
+    final itemsTotal = purchase.items.fold<double>(0, (s, i) => s + i.total);
+    final discount = itemsTotal + purchase.roundOff - purchase.totalAmount;
+    Widget line(String label, String value, {bool bold = false, Color? color}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            Expanded(child: Text(label, style: TextStyle(color: color))),
+            Text(value, style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, color: color)),
+          ]),
+        );
+    final paidNow = purchase.isCredit ? purchase.amountPaid : purchase.totalAmount;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Purchase Items'),
+        title: Text('Purchase · ${purchase.supplierName ?? 'No supplier'}'),
         content: SizedBox(
-          width: 500,
+          width: 520,
           child: ListView(
             shrinkWrap: true,
             children: [
-              if (purchase.supplierName != null &&
-                  purchase.supplierName!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Supplier: ${purchase.supplierName}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+              Text('Date: ${AppTimezone.formatDateTime(purchase.createdAt)}'),
+              Text('Payment: ${purchase.paymentLabel}'),
+              const Divider(),
               ...purchase.items.map(
                 (item) => ListTile(
                   dense: true,
+                  contentPadding: EdgeInsets.zero,
                   title: Text(item.name),
                   subtitle: Text(
-                    'ID: ${item.productId} | ${formatQty(item.qty)} × Rs${item.price.toStringAsFixed(2)}${item.batchNumber != null ? ' | Batch: ${item.batchNumber}' : ''}',
+                    '${formatQty(item.qty)} × ${rs(item.price)}${item.batchNumber != null ? ' · Batch ${item.batchNumber}' : ''}',
                   ),
-                  trailing: Text('Rs${item.total.toStringAsFixed(2)}'),
+                  trailing: Text(rs(item.total)),
                 ),
               ),
               const Divider(),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'TOTAL: Rs${purchase.totalAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
+              line('Items', rs(itemsTotal)),
+              if (discount > 0.009) line('Discount', '− ${rs(discount)}'),
+              if (purchase.roundOff.abs() >= 0.01)
+                line('Round off', '${purchase.roundOff >= 0 ? '+' : '−'} ${rs(purchase.roundOff.abs())}'),
+              line('TOTAL', rs(purchase.totalAmount), bold: true),
+              const Divider(),
+              if (purchase.isSplit) ...[
+                line('Paid cash', rs(purchase.cashAmount)),
+                line('Paid UPI / bank', rs(purchase.digitalAmount)),
+              ] else if (paidNow > 0)
+                line('Paid (${PaymentMethods.normalize(purchase.paymentMethod).toUpperCase()})', rs(paidNow)),
+              if (purchase.dueAmount > 0.5)
+                line('Still owed to supplier', rs(purchase.dueAmount), bold: true, color: const Color(0xFFC2410C)),
             ],
           ),
         ),
         actions: [
           TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await PurchaseInvoiceGenerator.generateAndPrint(purchase);
+            },
+            child: const Text('Print'),
+          ),
+          TextButton(
+            autofocus: true,
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),
           ),
@@ -1221,11 +1568,27 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
 
     String? editSupplierId = purchase.supplierId;
     String? editSupplierName = purchase.supplierName;
-    String editPaymentMethod = purchase.paymentMethod;
+    // CASH / UPI / SPLIT / CREDIT (split added 12 Oct 2026)
+    String editPaymentMethod = purchase.isSplit
+        ? 'split'
+        : purchase.isCredit
+            ? 'credit'
+            : PaymentMethods.normalize(purchase.paymentMethod);
     bool editIsCredit = purchase.isCredit;
+    // how the part paid on a credit purchase left (cash or UPI) is kept
+    final creditPaidBy = PaymentMethods.normalize(purchase.paymentMethod) == 'upi' ? 'upi' : 'cash';
+    final splitCashController = TextEditingController(
+        text: purchase.isSplit ? purchase.cashAmount.toStringAsFixed(0) : '');
+    final splitUpiController = TextEditingController(
+        text: purchase.isSplit ? purchase.digitalAmount.toStringAsFixed(0) : '');
     final reasonController = TextEditingController();
     final searchController = TextEditingController();
-    final discountController = TextEditingController();
+    // The bill's discount was not filled in, so saving an edit quietly put
+    // it back on the total. Work it out from the saved items and total.
+    final savedItemsTotal = purchase.items.fold<double>(0, (s, i) => s + i.total);
+    final savedDiscount = savedItemsTotal + purchase.roundOff - purchase.totalAmount;
+    final discountController = TextEditingController(
+        text: savedDiscount > 0.009 ? savedDiscount.toStringAsFixed(2) : '');
     List<Product> editResults = [];
     int editResultIndex = 0;
     Product? editSelectedProduct;
@@ -1290,7 +1653,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Rs${finalTotal.toStringAsFixed(0)}',
+                    '₹${finalTotal.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1349,7 +1712,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  'Purchase: Rs${product.purchasePrice} | Sell: Rs${product.sellingPrice} | Stock: ${formatQty(product.stock)}',
+                                  'Cost: ₹${product.purchasePrice.toStringAsFixed(2)} | Sell: ₹${product.sellingPrice.toStringAsFixed(2)} | Stock: ${formatQty(product.stock)}',
                                   style: TextStyle(
                                     color: isSel
                                         ? const Color(0xFF065F46)
@@ -1651,7 +2014,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                                       autofocus: true,
                                                       decoration:
                                                           const InputDecoration(
-                                                            prefixText: 'Rs ',
+                                                            prefixText: '₹ ',
                                                             border:
                                                                 OutlineInputBorder(),
                                                           ),
@@ -1689,7 +2052,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                             }
                                           },
                                           child: Text(
-                                            'Rs${item.price.toStringAsFixed(0)}',
+                                            '₹${item.price.toStringAsFixed(2)}',
                                             style: const TextStyle(
                                               color: Color(0xFF1565C0),
                                               fontSize: 13,
@@ -1700,7 +2063,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                       SizedBox(
                                         width: 80,
                                         child: Text(
-                                          'Rs${item.total.toStringAsFixed(0)}',
+                                          '₹${item.total.toStringAsFixed(2)}',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,
@@ -1842,7 +2205,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                                           title: Text(filtered[i].name),
                                                           subtitle: Text(
                                                             filtered[i].totalDues > 0
-                                                                ? 'Dues: Rs${filtered[i].totalDues.toStringAsFixed(0)}'
+                                                                ? 'Dues: ₹${filtered[i].totalDues.toStringAsFixed(0)}'
                                                                 : (filtered[i].phone ?? ''),
                                                           ),
                                                           onTap: () =>
@@ -1901,11 +2264,24 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                         ),
                         const SizedBox(width: 4),
                         ChoiceChip(
+                          label: const Text('SPLIT', style: TextStyle(fontSize: 11)),
+                          selected: editPaymentMethod == 'split',
+                          onSelected: (_) => setLocal(() {
+                            editPaymentMethod = 'split';
+                            editIsCredit = false;
+                            if (splitCashController.text.isEmpty) {
+                              splitCashController.text = finalTotal.toStringAsFixed(0);
+                              splitUpiController.text = '0';
+                            }
+                          }),
+                        ),
+                        const SizedBox(width: 4),
+                        ChoiceChip(
                           label: const Text(
                             'CREDIT',
                             style: TextStyle(fontSize: 11),
                           ),
-                          selected: editIsCredit,
+                          selected: editPaymentMethod == 'credit',
                           onSelected: (_) => setLocal(() {
                             editPaymentMethod = 'credit';
                             editIsCredit = true;
@@ -1913,6 +2289,54 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                         ),
                       ],
                     ),
+                    if (editPaymentMethod == 'split') ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: splitCashController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Cash paid',
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setLocal(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: splitUpiController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'UPI / bank paid',
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              onChanged: (_) => setLocal(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Builder(builder: (_) {
+                            final left = finalTotal -
+                                (double.tryParse(splitCashController.text) ?? 0) -
+                                (double.tryParse(splitUpiController.text) ?? 0);
+                            return Text(
+                              left > 0.5 ? 'Owed ₹${left.toStringAsFixed(0)}' : left < -0.5 ? 'Too much' : 'Covered',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: left.abs() <= 0.5 ? const Color(0xFF047857) : const Color(0xFFC2410C),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -1922,7 +2346,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Discount',
-                              prefixText: 'Rs ',
+                              prefixText: '₹ ',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
@@ -1957,14 +2381,23 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   onPressed: () {
                     final reason = reasonController.text.trim();
                     if (reason.isEmpty || items.isEmpty) return;
+                    final splitCash = double.tryParse(splitCashController.text) ?? 0;
+                    final splitUpi = double.tryParse(splitUpiController.text) ?? 0;
+                    if (editPaymentMethod == 'split' &&
+                        (splitCash < 0 || splitUpi < 0 || splitCash + splitUpi > finalTotal + 0.5)) {
+                      return; // the "Too much" note shows why
+                    }
                     Navigator.pop(ctx, {
                       'items': List<PurchaseItem>.from(items),
-                      'total': finalTotal,
+                      'total': finalTotal.roundToDouble(),
+                      'roundOff': finalTotal.roundToDouble() - finalTotal,
                       'reason': reason,
                       'supplierId': editSupplierId,
                       'supplierName': editSupplierName,
                       'paymentMethod': editPaymentMethod,
                       'isCredit': editIsCredit,
+                      'splitCash': splitCash,
+                      'splitUpi': splitUpi,
                     });
                   },
                   child: const Text('Save'),
@@ -1978,6 +2411,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     reasonController.dispose();
     searchController.dispose();
     discountController.dispose();
+    splitCashController.dispose();
+    splitUpiController.dispose();
     qtyController.dispose();
     priceController.dispose();
     batchController.dispose();
@@ -1989,13 +2424,21 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final reason = result['reason'] as String;
     final supplierId = result['supplierId'] as String?;
     final supplierName = result['supplierName'] as String?;
-    final paymentMethod = result['paymentMethod'] as String;
-    final isCredit = result['isCredit'] as bool;
+    final chosen = result['paymentMethod'] as String;
+    final splitCash = result['splitCash'] as double;
+    final splitUpi = result['splitUpi'] as double;
+    final isSplit = chosen == 'split';
+    // a split that does not cover the bill leaves the rest owed
+    final isCredit = isSplit ? (newTotal - splitCash - splitUpi) > 0.5 : result['isCredit'] as bool;
 
-    final amountPaid = isCredit
-        ? (purchase.isCredit ? purchase.amountPaid.clamp(0.0, newTotal) : 0.0)
-        : newTotal;
+    final double amountPaid = isSplit
+        ? (splitCash + splitUpi).clamp(0.0, newTotal).toDouble()
+        : isCredit
+            ? (purchase.isCredit ? purchase.amountPaid.clamp(0.0, newTotal).toDouble() : 0.0)
+            : newTotal;
     final dueAmount = isCredit ? (newTotal - amountPaid) : 0.0;
+    // the money paid now leaves cash or bank: keep how a credit bill was paid
+    final paymentMethod = isSplit ? 'split' : (chosen == 'credit' ? creditPaidBy : chosen);
 
     try {
       await ref
@@ -2011,6 +2454,9 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
             dueAmount: dueAmount,
             paymentMethod: paymentMethod,
             reason: reason,
+            roundOff: result['roundOff'] as double,
+            cashAmount: isSplit ? splitCash : 0,
+            digitalAmount: isSplit ? splitUpi : 0,
           );
       ref.invalidate(purchasesProvider);
       ref.invalidate(productsProvider);
@@ -2631,7 +3077,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
             children: [
               _buildFooterStat('TOTAL ITEMS', '${session.itemCount}'),
               const SizedBox(width: 32),
-              _buildFooterStat('TOTAL QTY', '${session.totalQty}'),
+              _buildFooterStat('TOTAL QTY', formatQty(session.totalQty)),
               const Spacer(),
               if (session.discount > 0) ...[
                 Text(
@@ -2670,11 +3116,13 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
               _Separator(),
               _ShortcutHint(label: 'F2', action: 'History'),
               _Separator(),
-              _ShortcutHint(label: 'F5', action: 'Refresh'),
+              _ShortcutHint(label: 'F4', action: 'Supplier'),
+              _Separator(),
+              _ShortcutHint(label: 'F8/F9/F10/F11', action: 'Cash/UPI/Credit/Split'),
               _Separator(),
               _ShortcutHint(label: 'Ctrl+F', action: 'Search'),
               _Separator(),
-              _ShortcutHint(label: 'Ctrl+Enter', action: 'Complete'),
+              _ShortcutHint(label: 'Shift+Enter', action: 'Complete'),
               _Separator(),
               _ShortcutHint(label: 'Ctrl+D', action: 'Discount'),
               _Separator(),
@@ -2892,13 +3340,73 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: _buildPaymentMethodButton('CASH', 'cash', false)),
-                      const SizedBox(width: 6),
-                      Expanded(child: _buildPaymentMethodButton('UPI', 'upi', false)),
-                      const SizedBox(width: 6),
-                      Expanded(child: _buildPaymentMethodButton('CREDIT', 'credit', true)),
+                      Expanded(child: _buildPaymentMethodButton('CASH', 'cash', 'F8')),
+                      const SizedBox(width: 4),
+                      Expanded(child: _buildPaymentMethodButton('UPI', 'upi', 'F9')),
+                      const SizedBox(width: 4),
+                      Expanded(child: _buildPaymentMethodButton('SPLIT', 'split', 'F11')),
+                      const SizedBox(width: 4),
+                      Expanded(child: _buildPaymentMethodButton('CREDIT', 'credit', 'F10')),
                     ],
                   ),
+                  if (session.paymentMethod == 'split') ...[
+                    const SizedBox(height: 10),
+                    _buildMoneyField('Cash paid', _splitCashController, focusNode: _splitCashFocus),
+                    const SizedBox(height: 8),
+                    _buildMoneyField('UPI / bank paid', _splitUpiController),
+                    const SizedBox(height: 6),
+                    Builder(builder: (_) {
+                      final paid = (double.tryParse(_splitCashController.text) ?? 0) +
+                          (double.tryParse(_splitUpiController.text) ?? 0);
+                      final left = roundedTotal - paid;
+                      return Text(
+                        left > 0.5
+                            ? 'Remaining ₹${left.toStringAsFixed(0)} → owed to supplier'
+                            : left < -0.5
+                                ? 'Paid is ₹${(-left).toStringAsFixed(0)} more than the bill'
+                                : 'Full amount covered',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: left.abs() <= 0.5 ? const Color(0xFF047857) : const Color(0xFFC2410C),
+                        ),
+                      );
+                    }),
+                  ],
+                  if (session.paymentMethod == 'credit') ...[
+                    const SizedBox(height: 10),
+                    _buildMoneyField('Paid now (0 = full credit)', _paidNowController, focusNode: _paidNowFocus),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Text('Paid by: ', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                        ChoiceChip(
+                          label: const Text('Cash', style: TextStyle(fontSize: 11)),
+                          selected: _creditPaidBy == 'cash',
+                          onSelected: (_) => setState(() => _creditPaidBy = 'cash'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        const SizedBox(width: 4),
+                        ChoiceChip(
+                          label: const Text('UPI', style: TextStyle(fontSize: 11)),
+                          selected: _creditPaidBy == 'upi',
+                          onSelected: (_) => setState(() => _creditPaidBy = 'upi'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Owed to supplier: ₹${(roundedTotal - (double.tryParse(_paidNowController.text) ?? 0)).clamp(0, double.infinity).toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFC2410C)),
+                    ),
+                    if (session.supplier == null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('Select the supplier (F4) for a credit purchase',
+                            style: TextStyle(fontSize: 11, color: Color(0xFFB91C1C))),
+                      ),
+                  ],
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -2959,32 +3467,61 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     );
   }
 
-  Widget _buildPaymentMethodButton(String label, String value, bool isCredit) {
-    final session = _activeSession;
-    final isActive = isCredit
-        ? session.isCredit
-        : (session.paymentMethod == value && !session.isCredit);
+  Widget _buildPaymentMethodButton(String label, String value, String keyHint) {
+    final active = _activeSession.paymentMethod == value;
     return GestureDetector(
-      onTap: () => ref.read(desktopPurchaseProvider.notifier).setPaymentMethod(value),
+      onTap: () => _selectMethod(value),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? const Color(0xFF059669) : Colors.white,
+          color: active ? const Color(0xFF059669) : Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isActive ? const Color(0xFF059669) : Colors.grey.shade300,
+            color: active ? const Color(0xFF059669) : Colors.grey.shade300,
           ),
         ),
         alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.white : const Color(0xFF475569),
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: active ? Colors.white : const Color(0xFF475569),
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+            ),
+            Text(
+              keyHint,
+              style: TextStyle(
+                color: active ? Colors.white70 : const Color(0xFF94A3B8),
+                fontSize: 9,
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildMoneyField(String label, TextEditingController controller, {FocusNode? focusNode}) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      textAlign: TextAlign.right,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixText: '₹ ',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        isDense: true,
+      ),
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      onChanged: (_) => setState(() {}),
+      // Enter in a payment box saves the purchase (Esc / Tab still move on)
+      onSubmitted: (_) => _completePurchase(),
     );
   }
 
@@ -3020,12 +3557,19 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     _priceController.dispose();
     _batchController.dispose();
     _discountController.dispose();
+    _splitCashController.dispose();
+    _splitUpiController.dispose();
+    _paidNowController.dispose();
+    _splitCashFocus.dispose();
+    _paidNowFocus.dispose();
     _purchaseSearchController.dispose();
     _searchFocus.dispose();
     _qtyFocus.dispose();
     _priceFocus.dispose();
     _batchFocus.dispose();
     _discountFocus.dispose();
+    _keyListenerFocus.dispose();
+    HardwareKeyboard.instance.removeHandler(_rescueKeyboard);
     _resultsScrollController.dispose();
     _cartScrollController.dispose();
     super.dispose();

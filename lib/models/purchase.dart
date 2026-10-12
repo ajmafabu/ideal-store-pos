@@ -1,4 +1,5 @@
 import 'sale.dart' show isUuid;
+import '../utils/payment_methods.dart';
 
 class PurchaseItem {
   final String productId;
@@ -106,6 +107,19 @@ class Purchase {
   final double dueAmount;
   final String paymentMethod;
   final DateTime? dueDate;
+  /// How the money paid at purchase time was split (both 0 = not split:
+  /// [paymentMethod] decides the account). Needs 2026_10_purchase_split.sql.
+  final double cashAmount;
+  final double digitalAmount;
+
+  bool get isSplit => cashAmount > 0.004 && digitalAmount > 0.004;
+
+  /// "CASH", "UPI", "SPLIT", "CREDIT" for lists.
+  String get paymentLabel {
+    if (isSplit) return 'SPLIT';
+    if (isCredit) return 'CREDIT';
+    return PaymentMethods.normalize(paymentMethod).toUpperCase();
+  }
 
   Purchase({
     required this.id,
@@ -121,6 +135,8 @@ class Purchase {
     this.dueAmount = 0,
     this.paymentMethod = 'cash',
     this.dueDate,
+    this.cashAmount = 0,
+    this.digitalAmount = 0,
   });
 
   factory Purchase.fromJson(Map<String, dynamic> json) {
@@ -142,6 +158,8 @@ class Purchase {
       dueAmount: (json['due_amount'] as num?)?.toDouble() ?? 0,
       paymentMethod: json['payment_method'] as String? ?? 'cash',
       dueDate: json['due_date'] != null ? DateTime.tryParse(json['due_date'].toString()) : null,
+      cashAmount: (json['cash_amount'] as num?)?.toDouble() ?? 0,
+      digitalAmount: (json['digital_amount'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -163,5 +181,11 @@ class Purchase {
     'amount_paid': amountPaid,
     'due_amount': dueAmount,
     'due_date': dueDate?.toIso8601String().split('T').first,
+    // only for a split: a database without the split columns
+    // (2026_10_purchase_split.sql not run) still takes every other purchase
+    if (cashAmount + digitalAmount > 0.004) ...{
+      'cash_amount': cashAmount,
+      'digital_amount': digitalAmount,
+    },
   };
 }

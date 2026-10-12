@@ -37,7 +37,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       // Fetch all data in parallel
       final results = await Future.wait([
         fetchAllRows(() => Supabase.instance.client.from('sales').select('final_amount, payment_method, is_credit, amount_paid, cash_amount, digital_amount, items').gte('created_at', startStr).lt('created_at', endStr)),
-        fetchAllRows(() => Supabase.instance.client.from('purchases').select('total_amount, amount_paid, payment_method').gte('created_at', startStr).lt('created_at', endStr)),
+        fetchAllRows(() => Supabase.instance.client.from('purchases').select('*').gte('created_at', startStr).lt('created_at', endStr)),
         fetchAllRows(() => Supabase.instance.client.from('expenses').select('amount, payment_method').gte('created_at', startStr).lt('created_at', endStr)),
       ]);
 
@@ -88,7 +88,14 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       double cashPurchases = 0;
       for (final p in purchases) {
         totalPurchases += (p['total_amount'] as num?)?.toDouble() ?? 0;
-        if (isCash(p['payment_method'])) cashPurchases += (p['amount_paid'] as num?)?.toDouble() ?? 0;
+        // a split purchase took only its cash part from the drawer
+        final splitCash = (p['cash_amount'] as num?)?.toDouble() ?? 0;
+        final splitUpi = (p['digital_amount'] as num?)?.toDouble() ?? 0;
+        if (splitCash + splitUpi > 0.004) {
+          cashPurchases += splitCash;
+        } else if (isCash(p['payment_method'])) {
+          cashPurchases += (p['amount_paid'] as num?)?.toDouble() ?? 0;
+        }
       }
 
       double totalExpenses = 0;

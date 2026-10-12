@@ -178,16 +178,35 @@ Field issues on shop PCs:
   - screenshots, `app_*.txt`, Tamil one-off JSON/PS1 scripts in the root.
 - Commit only what you changed. `release.ps1` refuses to run when tracked files are dirty.
 
-## Open items (as of v1.1.1, Oct 2026)
+## Owner decisions (keep as they are)
 
-- 1.1.2:
+- Bills print "QUOTATION".
+- The Windows till adds a line after three Enters (qty, price, total).
+- No PIN locks in the Windows app (13 Oct 2026): the till auto-lock and its switch were removed,
+  and Delete Sale asks only for a confirmation. Re-add only if the owner asks. PIN sign-in stays.
+- Phone app: update only with `adb install -r build\app\outputs\flutter-apk\app-release.apk`.
+  Never use `flutter install` and never uninstall: that wipes unsent offline bills and held bills.
+  (The old `install_android.bat` used `flutter install`; it was deleted 11 Oct 2026.)
+- Commit, push and release only when the owner asks.
+
+## Open items (as of v1.2.0, 10 Oct 2026)
+
+- v1.2.0 is released: stages 1–3 of the 8 Oct QA. The owner has applied
+  `sql/2026_10_stage2_fixes.sql`. CI "Test & Analyze" is green.
+- Next code fix:
   - bundle trusted CA roots for the updater (fresh-laptop TLS failure);
   - optionally bundle the VC++ runtime DLLs in the zip.
-- CI "Test & Analyze" fails at the Analyze step only. Locally it is clean; CI uses the latest
-  stable Flutter. Fix one of two ways:
-  - pin `flutter-version` in both workflows to the local version (`flutter --version`);
-  - or use `--no-fatal-warnings` in CI.
+- Not tested on real devices yet:
+  - offline billing and sync;
+  - Bluetooth printing;
+  - real barcode scan;
+  - staff login;
+  - voice billing.
+- Accounts: opening balances need the accountant (the bank shows −₹56,536 and the balance
+  sheet is not balanced).
 - Product data:
   - 38 products are in category "Other";
   - all products have empty HSN and 0% GST (needed only for GST billing);
   - 5 same-name pairs were kept on purpose (different pack sizes or barcodes).
+- Future: universal multi-shop POS. The plan is in `dream project.md` (not committed). The
+  current DB is single-shop, so tenant isolation comes first.

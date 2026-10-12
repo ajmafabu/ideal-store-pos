@@ -66,6 +66,8 @@ class PurchaseService {
     dueAmount: p.dueAmount,
     paymentMethod: p.paymentMethod,
     dueDate: p.dueDate,
+    cashAmount: p.cashAmount,
+    digitalAmount: p.digitalAmount,
   );
 
   /// Purchases older than [before], newest first — for "Load older
@@ -147,6 +149,12 @@ class PurchaseService {
                 amountPaid: p.amountPaid,
                 dueAmount: p.dueAmount,
                 paymentMethod: p.paymentMethod,
+                // these were dropped here, so lists lost the round off,
+                // due date and (now) the cash/UPI split
+                roundOff: p.roundOff,
+                dueDate: p.dueDate,
+                cashAmount: p.cashAmount,
+                digitalAmount: p.digitalAmount,
               );
             }
             return p;
@@ -227,12 +235,26 @@ class PurchaseService {
       }
 
       // 2. Also check cache for orphaned purchases (pending write removed after max retries)
+      // Only purchases newer than the oldest one the server sent can be
+      // "missing": older ones are simply outside the latest-500 window.
+      // Without this, once the shop passed 500 purchases the oldest cached
+      // one (27 Aug) jumped to the top of the list as if new (QA 12 Oct).
+      DateTime? oldestOnServer;
+      for (final p in supabasePurchases) {
+        if (oldestOnServer == null || p.createdAt.isBefore(oldestOnServer)) {
+          oldestOnServer = p.createdAt;
+        }
+      }
       final cachedPurchases = _offlineService.getCachedPurchases();
       for (final cached in cachedPurchases) {
         final cid = cached['id'] as String?;
         if (cid == null) continue;
         // Skip if already in Supabase or already found in pending writes
         if (supabaseIds.contains(cid) || offlineIds.contains(cid)) continue;
+        final cachedAt = DateTime.tryParse(cached['created_at']?.toString() ?? '')?.toLocal();
+        if (oldestOnServer != null && (cachedAt == null || !cachedAt.isAfter(oldestOnServer))) {
+          continue;
+        }
         try {
           pendingPurchases.add(Purchase.fromJson(cached));
           Logger.info('Found orphaned cached purchase: $cid');
@@ -343,6 +365,8 @@ class PurchaseService {
     required String paymentMethod,
     required String reason,
     double? roundOff,
+    double cashAmount = 0,
+    double digitalAmount = 0,
   }) async {
     if (!isUuid(purchaseId)) {
       throw Exception('This purchase has not been synced yet. Wait for sync, then edit it.');
@@ -361,6 +385,11 @@ class PurchaseService {
         'p_payment_method': paymentMethod,
         'p_reason': reason,
         'p_round_off': roundOff,
+        // only for a split (needs 2026_10_purchase_split.sql)
+        if (cashAmount + digitalAmount > 0.004) ...{
+          'p_cash_amount': cashAmount,
+          'p_digital_amount': digitalAmount,
+        },
       },
     );
     ProductService.invalidateCache();

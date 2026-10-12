@@ -14,6 +14,7 @@ class InvoiceOptionsDialog extends StatefulWidget {
 
 class _InvoiceOptionsDialogState extends State<InvoiceOptionsDialog> {
   final _focusNode = FocusNode();
+  final _pressed = <LogicalKeyboardKey>{};
 
   @override
   void initState() {
@@ -34,8 +35,16 @@ class _InvoiceOptionsDialogState extends State<InvoiceOptionsDialog> {
     return KeyboardListener(
       focusNode: _focusNode,
       onKeyEvent: (event) {
-        if (event is! KeyDownEvent) return;
+        // Act when the key is released: closing on key-down handed the
+        // typed "1" to the search box that took focus next ("1dettol").
+        // Only keys pressed while this pop-up was open count (not the
+        // release of the Enter that saved the bill).
         final key = event.logicalKey;
+        if (event is KeyDownEvent) {
+          _pressed.add(key);
+          return;
+        }
+        if (event is! KeyUpEvent || !_pressed.remove(key)) return;
         if (key == LogicalKeyboardKey.digit1 || key == LogicalKeyboardKey.numpad1) {
           Navigator.pop(context, 'skip');
         } else if (key == LogicalKeyboardKey.digit2 || key == LogicalKeyboardKey.numpad2) {
@@ -55,7 +64,7 @@ class _InvoiceOptionsDialogState extends State<InvoiceOptionsDialog> {
         }
       },
       child: AlertDialog(
-        title: Text('Sale Completed! Rs ${widget.sale.finalAmount.toStringAsFixed(2)}'),
+        title: Text('Bill #${widget.sale.invoiceLabel} saved · ₹${widget.sale.finalAmount.toStringAsFixed(2)}'),
         content: SizedBox(
           width: 360,
           child: Column(
