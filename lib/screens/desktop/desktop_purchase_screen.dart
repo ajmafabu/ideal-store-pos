@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/sale.dart' show newDocumentId;
 import '../../utils/payment_methods.dart';
 import '../../utils/validators.dart';
+import '../../utils/product_search.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/logger.dart';
@@ -175,16 +176,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
   }
 
   void _search(String value) {
-    final query = value.trim().toLowerCase();
-    final matches = query.isEmpty
-        ? <Product>[]
-        : _products
-              .where(
-                (p) =>
-                    p.name.toLowerCase().contains(query) ||
-                    (p.barcode?.toLowerCase().contains(query) ?? false),
-              )
-              .toList();
+    final matches = searchProducts(_products, value);
     setState(() {
       _results = matches;
       _resultIndex = 0;
@@ -1610,6 +1602,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     // keyboard in the edit window (Enter did nothing: items could only be
     // added with the mouse — owner, 14 Oct 2026)
     final editSearchFocus = FocusNode();
+    final editResultsScroll = ScrollController();
     final editQtyFocus = FocusNode();
     final editPriceFocus = FocusNode();
 
@@ -1637,17 +1630,12 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 });
                 return;
               }
-              final matches = _products
-                  .where(
-                    (p) =>
-                        p.name.toLowerCase().contains(q) ||
-                        (p.barcode?.toLowerCase().contains(q) ?? false),
-                  )
-                  .toList();
+              final matches = searchProducts(_products, q);
               setLocal(() {
                 editResults = matches;
                 editResultIndex = 0;
               });
+              if (editResultsScroll.hasClients) editResultsScroll.jumpTo(0);
             }
 
             void pickProduct(Product product) {
@@ -1743,13 +1731,26 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               }
                               final k = event.logicalKey;
                               if (editResults.isEmpty) return KeyEventResult.ignored;
+                              void keepInView() {
+                                if (!editResultsScroll.hasClients) return;
+                                const row = 56.0;
+                                final top = editResultIndex * row;
+                                final view = editResultsScroll.position.viewportDimension;
+                                if (top < editResultsScroll.offset) {
+                                  editResultsScroll.jumpTo(top);
+                                } else if (top + row > editResultsScroll.offset + view) {
+                                  editResultsScroll.jumpTo(top + row - view);
+                                }
+                              }
                               if (k == LogicalKeyboardKey.arrowDown) {
                                 setLocal(() => editResultIndex = (editResultIndex + 1) % editResults.length);
+                                keepInView();
                                 return KeyEventResult.handled;
                               }
                               if (k == LogicalKeyboardKey.arrowUp) {
                                 setLocal(() => editResultIndex =
                                     (editResultIndex - 1 + editResults.length) % editResults.length);
+                                keepInView();
                                 return KeyEventResult.handled;
                               }
                               if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
@@ -1775,14 +1776,24 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                       ],
                     ),
                     if (editResults.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 4),
+                        child: Text(
+                          '${editResults.length} product${editResults.length == 1 ? '' : 's'} found — ↑ ↓ to choose, Enter to pick',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                        ),
+                      ),
+                    if (editResults.isNotEmpty)
                       Container(
-                        height: 160,
-                        margin: const EdgeInsets.only(top: 4),
+                        height: 224,
+                        margin: const EdgeInsets.only(top: 2),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: ListView.builder(
+                          controller: editResultsScroll,
+                          itemExtent: 56,
                           itemCount: editResults.length,
                           itemBuilder: (_, index) {
                             final product = editResults[index];
@@ -2478,6 +2489,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     splitCashController.dispose();
     splitUpiController.dispose();
     editSearchFocus.dispose();
+    editResultsScroll.dispose();
     editQtyFocus.dispose();
     editPriceFocus.dispose();
     qtyController.dispose();

@@ -61,6 +61,8 @@ dependencies:
   connectivity_plus: ^6.1.3
   speech_to_text: ^7.0.0
   archive: ^4.0.9
+  video_player: ^2.11.1
+  video_player_win: ^3.3.1
 
 dev_dependencies:
   flutter_test:
@@ -88,8 +90,10 @@ flutter:
   assets:
     - assets/app_icon.png
     - assets/app_logo.png
+    - assets/app_logo_clear.png
+    - assets/splash_bg.jpg
+    - assets/splash_video.mp4
     - assets/fonts/
-    - assets/products/
     - assets/certs/cacert.pem
 
   fonts:
