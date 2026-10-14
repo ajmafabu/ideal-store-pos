@@ -423,4 +423,80 @@ RESET ROLE;
 SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 300, 'edit to plain cash gives the UPI part back to the bank');
 SELECT t.eq(t.bal('cash'), (SELECT c FROM sp0) - 250, '… and takes it from cash');
 
+-- edit a purchase after part of its stock was sold (2026_10_purchase_edit_after_sale.sql)
+SET ROLE authenticated;
+INSERT INTO products (id, name, purchase_price, selling_price, stock, unit, unit_type, gst_rate) VALUES
+  ('10000000-0000-0000-0000-0000000000a1', 'Edit Oil', 0, 30, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000000a2', 'Edit Soap', 0, 12, 0, 'pcs', 'pieces', 0);
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method)
+VALUES ('40000000-0000-0000-0000-0000000000a1', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":10,"price":20}]', 200, 'cash');
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method)
+VALUES ('50000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":4,"price":30,"total":120}]', 120, 120, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Edit Oil'), 6, 'purchase 10, sold 4');
+
+-- add a forgotten item and raise the qty: allowed although 4 were sold
+SET ROLE authenticated;
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":12,"price":20},
+    {"product_id":"10000000-0000-0000-0000-0000000000a2","name":"Edit Soap","qty":5,"price":8}]'::jsonb,
+  280, '20000000-0000-0000-0000-000000000001', 'Agency', false, 280, 0, 'cash', 'forgot the soap, oil was 12');
+RESET ROLE;
+SELECT t.eq(t.stock('Edit Oil'), 8, 'edit after a sale: 12 bought - 4 sold = 8 (was refused before)');
+SELECT t.eq(t.batches('Edit Oil'), 8, 'oil batch follows: 8 unsold');
+SELECT t.eq(t.stock('Edit Soap'), 5, 'the added item comes into stock');
+SELECT t.eq(t.batches('Edit Soap'), 5, 'the added item gets its batch');
+SELECT t.eq((SELECT count(*) FROM inventory_batches WHERE purchase_id = '40000000-0000-0000-0000-0000000000a1'), 2,
+  'one batch per product, no duplicates');
+
+-- cannot go below what was sold; can go down to it, with a new price
+SET ROLE authenticated;
+SELECT t.fails($$SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":3,"price":20}]'::jsonb,
+  60, '20000000-0000-0000-0000-000000000001', 'Agency', false, 60, 0, 'cash', 'typo')$$,
+  'already sold', 'a purchase cannot go below what is already sold');
+SELECT t.fails($$SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a2","name":"Edit Soap","qty":5,"price":8}]'::jsonb,
+  40, '20000000-0000-0000-0000-000000000001', 'Agency', false, 40, 0, 'cash', 'drop the oil')$$,
+  'already sold', 'a sold item cannot be removed from the purchase');
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":4,"price":25},
+    {"product_id":"10000000-0000-0000-0000-0000000000a2","name":"Edit Soap","qty":5,"price":8}]'::jsonb,
+  140, '20000000-0000-0000-0000-000000000001', 'Agency', false, 140, 0, 'cash', 'only 4 oil, at 25');
+RESET ROLE;
+SELECT t.eq(t.stock('Edit Oil'), 0, 'down to exactly what was sold');
+SELECT t.eq((SELECT purchase_price FROM products WHERE name = 'Edit Oil'), 25, 'new price becomes the cost price');
+
+-- remove an unsold item: allowed
+SET ROLE authenticated;
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a1","name":"Edit Oil","qty":4,"price":25}]'::jsonb,
+  100, '20000000-0000-0000-0000-000000000001', 'Agency', false, 100, 0, 'cash', 'soap was not delivered');
+-- the whole purchase still cannot be deleted once sold
+SELECT t.fails($$SELECT delete_purchase_atomic('40000000-0000-0000-0000-0000000000a1')$$,
+  'already been sold', 'a purchase whose stock was sold cannot be deleted');
+RESET ROLE;
+SELECT t.eq(t.stock('Edit Soap'), 0, 'removed unsold item leaves stock');
+SELECT t.eq(t.batches('Edit Soap'), 0, '… and its batch is gone');
+
+-- a split purchase paid more later, then edited: the later payment stays paid
+CREATE TEMP TABLE sp1 AS SELECT t.bal('cash') AS c, t.bal('bank') AS b;
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, is_credit, amount_paid, payment_method, cash_amount, digital_amount)
+VALUES ('40000000-0000-0000-0000-0000000000a3', '20000000-0000-0000-0000-000000000001', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a2","name":"Edit Soap","qty":10,"price":10}]', 100, true, 30, 'split', 10, 20);
+INSERT INTO supplier_payments (supplier_id, purchase_id, amount, payment_method)
+VALUES ('20000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-0000000000a3', 25, 'cash');
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000000a3',
+  '[{"product_id":"10000000-0000-0000-0000-0000000000a2","name":"Edit Soap","qty":10,"price":10}]'::jsonb,
+  100, '20000000-0000-0000-0000-000000000001', 'Agency', true, 30, 70, 'split', 'note only', NULL, 10, 20);
+RESET ROLE;
+SELECT t.eq((SELECT amount_paid FROM purchases WHERE id = '40000000-0000-0000-0000-0000000000a3'), 55,
+  'split 30 at purchase + 25 paid later stays 55 after an edit');
+SELECT t.eq((SELECT due_amount FROM purchases WHERE id = '40000000-0000-0000-0000-0000000000a3'), 45, 'still 45 due');
+SELECT t.eq(t.bal('cash'), (SELECT c FROM sp1) - 10 - 25, 'cash: 10 at purchase + 25 later, unchanged by the edit');
+SELECT t.eq(t.bal('bank'), (SELECT b FROM sp1) - 20, 'bank: 20 at purchase, unchanged by the edit');
+
 \echo ALL SCENARIO TESTS PASSED

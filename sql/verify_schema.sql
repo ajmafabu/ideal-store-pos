@@ -162,5 +162,15 @@ checks AS (
                            WHERE table_schema = 'public' AND table_name = 'purchases' AND column_name = 'digital_amount')
               THEN 'a supplier bill can be paid part cash, part UPI'
               ELSE 'split purchases are refused — run sql/2026_10_purchase_split.sql' END
+  UNION ALL
+  SELECT 20, 'edit a purchase after a sale',
+         CASE WHEN to_regprocedure('public.purchase_rebalance_items(public.purchases, public.purchases)') IS NULL THEN 'MISSING'
+              WHEN pg_get_functiondef(to_regprocedure('public.edit_purchase_atomic(uuid, jsonb, numeric, uuid, text, boolean, numeric, numeric, text, text, numeric, numeric, numeric)'))
+                   ILIKE '%purchase_rebalance_items%'
+                   AND NOT has_function_privilege('anon', 'public.purchase_rebalance_items(public.purchases, public.purchases)', 'EXECUTE')
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.purchase_rebalance_items(public.purchases, public.purchases)') IS NULL
+              THEN 'a purchase cannot be edited once any of it is sold — run sql/2026_10_purchase_edit_after_sale.sql'
+              ELSE 'items can be added / changed after some stock was sold' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

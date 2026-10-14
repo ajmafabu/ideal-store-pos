@@ -794,8 +794,10 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         digitalAmount: paidBy == 'split' ? upiPart : 0,
       );
       final created = await ref.read(purchaseServiceProvider).createPurchase(purchase);
-      // selling prices typed in "Edit Prices" are saved only now
-      for (final e in _pendingSellPrices.entries) {
+      // selling prices typed in "Edit Prices" are saved only now, and only
+      // for products still on this purchase (a removed line kept its price)
+      final onBill = session.items.map((i) => i.productId).toSet();
+      for (final e in _pendingSellPrices.entries.where((e) => onBill.contains(e.key))) {
         try {
           await ref.read(productServiceProvider).updatePrices(e.key, sellingPrice: e.value);
         } catch (err) {
@@ -1427,7 +1429,12 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                         'This cannot be undone.',
                                       ),
                                       actions: [
-                                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                        // Enter on its own cancels; deleting needs a click or Tab
+                                        TextButton(
+                                          autofocus: true,
+                                          onPressed: () => Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
                                         TextButton(
                                           onPressed: () => Navigator.pop(ctx, true),
                                           child: const Text('Delete', style: TextStyle(color: Color(0xFFC62828))),
@@ -1581,6 +1588,11 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
         text: purchase.isSplit ? purchase.cashAmount.toStringAsFixed(0) : '');
     final splitUpiController = TextEditingController(
         text: purchase.isSplit ? purchase.digitalAmount.toStringAsFixed(0) : '');
+    // money paid to the supplier after the purchase (Pay button): for a
+    // split it is what is paid beyond the cash + UPI paid at purchase time
+    final double paidLater = purchase.isSplit
+        ? (purchase.amountPaid - purchase.cashAmount - purchase.digitalAmount).clamp(0.0, double.infinity).toDouble()
+        : 0.0;
     final reasonController = TextEditingController();
     final searchController = TextEditingController();
     // The bill's discount was not filled in, so saving an edit quietly put
@@ -1595,6 +1607,11 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final qtyController = TextEditingController(text: '1');
     final priceController = TextEditingController();
     final batchController = TextEditingController();
+    // keyboard in the edit window (Enter did nothing: items could only be
+    // added with the mouse — owner, 14 Oct 2026)
+    final editSearchFocus = FocusNode();
+    final editQtyFocus = FocusNode();
+    final editPriceFocus = FocusNode();
 
     setState(() => _isProcessing = false); // Show dialog now
 
@@ -1631,6 +1648,54 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                 editResults = matches;
                 editResultIndex = 0;
               });
+            }
+
+            void pickProduct(Product product) {
+              setLocal(() {
+                editSelectedProduct = product;
+                priceController.text = product.purchasePrice.toStringAsFixed(2);
+                qtyController.text = '1';
+                editResults = [];
+                searchController.clear();
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                editQtyFocus.requestFocus();
+                qtyController.selection =
+                    TextSelection(baseOffset: 0, extentOffset: qtyController.text.length);
+              });
+            }
+
+            void addEditItem() {
+              final product = editSelectedProduct;
+              final qty = double.tryParse(qtyController.text) ?? 0;
+              final price = double.tryParse(priceController.text) ?? 0;
+              if (product == null || qty <= 0 || price <= 0) return;
+              final batch = batchController.text.trim().isEmpty ? null : batchController.text.trim();
+              setLocal(() {
+                // the same product, batch and price joins its line
+                final same = items.indexWhere((i) =>
+                    i.productId == product.id && i.batchNumber == batch && (i.price - price).abs() < 0.001);
+                if (same >= 0) {
+                  items[same].qty += qty;
+                } else {
+                  items.add(PurchaseItem(
+                    productId: product.id,
+                    name: product.name,
+                    price: price,
+                    qty: qty,
+                    unit: product.unit,
+                    gstRate: product.gstRate,
+                    hsnCode: product.hsnCode,
+                    tamilName: product.tamilName,
+                    batchNumber: batch,
+                  ));
+                }
+                editSelectedProduct = null;
+                qtyController.text = '1';
+                priceController.clear();
+                batchController.clear();
+              });
+              WidgetsBinding.instance.addPostFrameCallback((_) => editSearchFocus.requestFocus());
             }
 
             return AlertDialog(
@@ -1671,16 +1736,40 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
+                          child: Focus(
+                            onKeyEvent: (node, event) {
+                              if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+                                return KeyEventResult.ignored;
+                              }
+                              final k = event.logicalKey;
+                              if (editResults.isEmpty) return KeyEventResult.ignored;
+                              if (k == LogicalKeyboardKey.arrowDown) {
+                                setLocal(() => editResultIndex = (editResultIndex + 1) % editResults.length);
+                                return KeyEventResult.handled;
+                              }
+                              if (k == LogicalKeyboardKey.arrowUp) {
+                                setLocal(() => editResultIndex =
+                                    (editResultIndex - 1 + editResults.length) % editResults.length);
+                                return KeyEventResult.handled;
+                              }
+                              if (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.numpadEnter) {
+                                pickProduct(editResults[editResultIndex.clamp(0, editResults.length - 1)]);
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: TextField(
                             controller: searchController,
+                            focusNode: editSearchFocus,
                             autofocus: true,
                             decoration: const InputDecoration(
-                              labelText: 'Search product to add...',
+                              labelText: 'Search product to add (↑ ↓ Enter)...',
                               prefixIcon: Icon(Icons.search),
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
                             onChanged: doSearch,
+                          ),
                           ),
                         ),
                       ],
@@ -1719,16 +1808,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                         : null,
                                   ),
                                 ),
-                                onTap: () {
-                                  setLocal(() {
-                                    editSelectedProduct = product;
-                                    priceController.text = product.purchasePrice
-                                        .toStringAsFixed(2);
-                                    qtyController.text = '1';
-                                    editResults = [];
-                                    searchController.clear();
-                                  });
-                                },
+                                onTap: () => pickProduct(product),
                               ),
                             );
                           },
@@ -1758,6 +1838,12 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               width: 70,
                               child: TextField(
                                 controller: qtyController,
+                                focusNode: editQtyFocus,
+                                onSubmitted: (_) {
+                                  editPriceFocus.requestFocus();
+                                  priceController.selection = TextSelection(
+                                      baseOffset: 0, extentOffset: priceController.text.length);
+                                },
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
                                   labelText: 'Qty',
@@ -1771,6 +1857,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               width: 90,
                               child: TextField(
                                 controller: priceController,
+                                focusNode: editPriceFocus,
+                                onSubmitted: (_) => addEditItem(),
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
                                   labelText: 'Price',
@@ -1784,6 +1872,7 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                               width: 100,
                               child: TextField(
                                 controller: batchController,
+                                onSubmitted: (_) => addEditItem(),
                                 decoration: const InputDecoration(
                                   labelText: 'Batch',
                                   border: OutlineInputBorder(),
@@ -1798,35 +1887,8 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                                 color: Color(0xFF11998e),
                                 size: 28,
                               ),
-                              onPressed: () {
-                                final qty =
-                                    double.tryParse(qtyController.text) ?? 0;
-                                final price =
-                                    double.tryParse(priceController.text) ?? 0;
-                                if (qty <= 0 || price <= 0) return;
-                                setLocal(() {
-                                  items.add(
-                                    PurchaseItem(
-                                      productId: editSelectedProduct!.id,
-                                      name: editSelectedProduct!.name,
-                                      price: price,
-                                      qty: qty,
-                                      unit: editSelectedProduct!.unit,
-                                      gstRate: editSelectedProduct!.gstRate,
-                                      hsnCode: editSelectedProduct!.hsnCode,
-                                      tamilName: editSelectedProduct!.tamilName,
-                                      batchNumber:
-                                          batchController.text.trim().isEmpty
-                                          ? null
-                                          : batchController.text.trim(),
-                                    ),
-                                  );
-                                  editSelectedProduct = null;
-                                  qtyController.text = '1';
-                                  priceController.clear();
-                                  batchController.clear();
-                                });
-                              },
+                              tooltip: 'Add (Enter)',
+                              onPressed: addEditItem,
                             ),
                           ],
                         ),
@@ -2322,7 +2384,9 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
                           ),
                           const SizedBox(width: 8),
                           Builder(builder: (_) {
+                            // payments made later (Pay button) also count
                             final left = finalTotal -
+                                paidLater -
                                 (double.tryParse(splitCashController.text) ?? 0) -
                                 (double.tryParse(splitUpiController.text) ?? 0);
                             return Text(
@@ -2413,6 +2477,9 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     discountController.dispose();
     splitCashController.dispose();
     splitUpiController.dispose();
+    editSearchFocus.dispose();
+    editQtyFocus.dispose();
+    editPriceFocus.dispose();
     qtyController.dispose();
     priceController.dispose();
     batchController.dispose();
@@ -2429,10 +2496,10 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
     final splitUpi = result['splitUpi'] as double;
     final isSplit = chosen == 'split';
     // a split that does not cover the bill leaves the rest owed
-    final isCredit = isSplit ? (newTotal - splitCash - splitUpi) > 0.5 : result['isCredit'] as bool;
+    final isCredit = isSplit ? (newTotal - splitCash - splitUpi - paidLater) > 0.5 : result['isCredit'] as bool;
 
     final double amountPaid = isSplit
-        ? (splitCash + splitUpi).clamp(0.0, newTotal).toDouble()
+        ? (splitCash + splitUpi + paidLater).clamp(0.0, newTotal).toDouble()
         : isCredit
             ? (purchase.isCredit ? purchase.amountPaid.clamp(0.0, newTotal).toDouble() : 0.0)
             : newTotal;
