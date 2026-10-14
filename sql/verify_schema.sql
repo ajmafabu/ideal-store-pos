@@ -170,7 +170,7 @@ checks AS (
                    AND NOT has_function_privilege('anon', 'public.purchase_rebalance_items(public.purchases, public.purchases)', 'EXECUTE')
               THEN 'OK' ELSE 'PROBLEM' END,
          CASE WHEN to_regprocedure('public.purchase_rebalance_items(public.purchases, public.purchases)') IS NULL
-              THEN 'a purchase cannot be edited once any of it is sold — run sql/2026_10_purchase_edit_after_sale.sql'
+              THEN 'a purchase cannot be edited once any of it is sold — run sql/2026_10_purchase_split.sql again'
               ELSE 'items can be added / changed after some stock was sold' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

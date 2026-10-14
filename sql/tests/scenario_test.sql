@@ -423,7 +423,7 @@ RESET ROLE;
 SELECT t.eq(t.bal('bank'), (SELECT b FROM sp0) - 300, 'edit to plain cash gives the UPI part back to the bank');
 SELECT t.eq(t.bal('cash'), (SELECT c FROM sp0) - 250, '… and takes it from cash');
 
--- edit a purchase after part of its stock was sold (2026_10_purchase_edit_after_sale.sql)
+-- edit a purchase after part of its stock was sold (2026_10_purchase_split.sql, 14 Oct update)
 SET ROLE authenticated;
 INSERT INTO products (id, name, purchase_price, selling_price, stock, unit, unit_type, gst_rate) VALUES
   ('10000000-0000-0000-0000-0000000000a1', 'Edit Oil', 0, 30, 0, 'pcs', 'pieces', 0),
