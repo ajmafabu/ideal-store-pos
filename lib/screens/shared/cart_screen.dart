@@ -19,16 +19,39 @@ import '../../utils/thermal_invoice.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/logger.dart';
 import '../../utils/voice_billing.dart';
+import '../../utils/voice_parser.dart';
+import '../../widgets/voice_confirm_sheet.dart';
 import '../../services/thermal_printer_service.dart';
 import '../../widgets/cart/cart_item_tile.dart';
-import '../../widgets/cart/customer_picker.dart';
-import '../../widgets/cart/payment_section.dart';
+import '../../widgets/cart/checkout_sheet.dart';
+import '../../widgets/cart/customer_sheet.dart';
+import '../../widgets/cart/line_edit_sheet.dart';
+import '../../utils/product_search.dart';
 import '../../widgets/rate_picker_dialog.dart';
 import '../../utils/qty_format.dart';
 import '../../utils/readable_color.dart';
 
+/// What the Sale toolbar shows about the cart: held bills, the voice
+/// language, and whether the mic is on.
+class CartStatus {
+  const CartStatus({this.held = 0, this.tamil = false, this.listening = false});
+  final int held;
+  final bool tamil;
+  final bool listening;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CartStatus && other.held == held && other.tamil == tamil && other.listening == listening;
+
+  @override
+  int get hashCode => Object.hash(held, tamil, listening);
+}
+
 class CartScreen extends ConsumerStatefulWidget {
-  const CartScreen({super.key});
+  const CartScreen({super.key, this.status});
+
+  /// Kept up to date for the toolbar above the cart.
+  final ValueNotifier<CartStatus>? status;
 
   @override
   ConsumerState<CartScreen> createState() => CartScreenState();
@@ -38,7 +61,6 @@ class CartScreenState extends ConsumerState<CartScreen>
     with AutomaticKeepAliveClientMixin {
   final _discountController = TextEditingController();
   final _amountPaidController = TextEditingController();
-  final _searchController = TextEditingController();
   final _cashAmountController = TextEditingController();
   final _upiAmountController = TextEditingController();
   final _productSearchController = TextEditingController();
@@ -49,8 +71,13 @@ class CartScreenState extends ConsumerState<CartScreen>
   bool _isSplitPayment = false;
   bool _isProcessing = false;
   List<Customer> _customers = [];
-  List<Customer> _filteredCustomers = [];
-  bool _showCustomerSearch = false;
+  // the cart's own message area: messages sit above the totals and do not
+  // push the app's round middle button onto Charge (it covered it)
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  ScaffoldMessengerState get _messenger => _messengerKey.currentState ?? ScaffoldMessenger.of(context);
+
+  // the payment chosen on the bar; Charge opens the checkout on it
+  PayMode _payMode = PayMode.cash;
   List<Product> _allProducts = [];
   List<Product> _filteredProducts = [];
   List<Map<String, dynamic>> _topSoldProducts = [];
@@ -83,16 +110,18 @@ class CartScreenState extends ConsumerState<CartScreen>
     _loadProducts();
     _loadTopSoldProducts();
     _loadHeldBills();
+    // the voice language the shop chose last time
+    SharedPreferences.getInstance().then((p) {
+      final tamil = p.getBool('voice_tamil');
+      if (tamil != null && mounted) setState(() => _useTamilVoice = tamil);
+    }).catchError((_) {});
   }
 
   Future<void> _loadCustomers() async {
     try {
       final customers = await ref.read(customerServiceProvider).getCustomers();
       if (mounted) {
-        setState(() {
-          _customers = customers;
-          _filteredCustomers = customers;
-        });
+        setState(() => _customers = customers);
       }
     } catch (e) {
       Logger.error('loadCustomers', e);
@@ -117,7 +146,7 @@ class CartScreenState extends ConsumerState<CartScreen>
     try {
       final topSold = await ref
           .read(saleServiceProvider)
-          .getTopSoldProducts(limit: 6, days: 7);
+          .getTopSoldProducts(limit: 12, days: 30);
       if (mounted && topSold.isNotEmpty) {
         setState(() => _topSoldProducts = topSold);
       }
@@ -149,25 +178,8 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   void _filterProducts(String query) {
     _productSearchQuery = query;
-    if (query.isEmpty) {
-      _filteredProducts = List.from(_allProducts);
-    } else {
-      final q = query.toLowerCase();
-      _filteredProducts = _allProducts.where((p) {
-        return p.name.toLowerCase().contains(q) ||
-            (p.tamilName?.toLowerCase().contains(q) ?? false) ||
-            (p.category?.toLowerCase().contains(q) ?? false);
-      }).toList();
-      _filteredProducts.sort((a, b) {
-        final aName = a.name.toLowerCase();
-        final bName = b.name.toLowerCase();
-        final aStarts = aName.startsWith(q);
-        final bStarts = bName.startsWith(q);
-        if (aStarts && !bStarts) return -1;
-        if (!aStarts && bStarts) return 1;
-        return aName.compareTo(bName);
-      });
-    }
+    // best matches first: barcode, name start, word start (product_search)
+    _filteredProducts = query.trim().isEmpty ? List.from(_allProducts) : searchProducts(_allProducts, query);
   }
 
   void _showQtyPopup(Product product) {
@@ -198,8 +210,8 @@ class CartScreenState extends ConsumerState<CartScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '₹${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              '${rupees(product.sellingPrice)} / ${product.unit}  ·  stock ${formatQty(product.stock)}',
+              style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
             StatefulBuilder(
@@ -277,515 +289,176 @@ class CartScreenState extends ConsumerState<CartScreen>
     return 0;
   }
 
-  void _filterCustomers(String query) {
-    setState(() {
-      _filteredCustomers = _customers
-          .where(
-            (c) =>
-                c.name.toLowerCase().contains(query.toLowerCase()) ||
-                (c.phone?.contains(query) ?? false),
-          )
-          .toList();
-    });
+  /// Takes a line off the bill, with Undo for a slip of the finger
+  /// (the old ✕ deleted at once).
+  void _removeFromCart(int index) {
+    final item = _cart[index];
+    ref.read(cartProvider.notifier).removeItem(index);
+    setState(() {});
+    final messenger = _messenger..hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('${item.name} removed'),
+        duration: const Duration(seconds: 4),
+        // a message with a button stays until tapped unless told otherwise
+        persist: false,
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            if (!mounted) return;
+            ref.read(cartProvider.notifier).insertItem(index, item);
+            setState(() {});
+          },
+        ),
+      ),
+    );
   }
 
-  Future<void> _addToCart(Product product) async {
-    final picked = await RatePickerDialog.show(context, product);
-    final price = picked?.price ?? product.sellingPrice;
-    final rateLabel = picked?.label;
+  Product? _productOf(CartItem item) => _allProducts.where((p) => p.id == item.productId).firstOrNull;
 
-    ref
-        .read(cartProvider.notifier)
-        .addItem(
+  /// More of this product on the bill than in stock (all its lines).
+  bool _overStock(CartItem item) {
+    final p = _productOf(item);
+    if (p == null) return false;
+    final onBill = _cart.where((c) => c.productId == item.productId).fold<double>(0, (t, c) => t + c.totalPieces);
+    return onBill > p.stock + 0.0001;
+  }
+
+  /// Tap a line: quantity, price, rate and discount in one sheet.
+  Future<void> _editLine(int index) async {
+    final item = _cart[index];
+    final edit = await LineEditSheet.show(context, item, product: _productOf(item));
+    if (edit == null || !mounted || index >= _cart.length || !identical(_cart[index], item)) return;
+    if (edit.remove) {
+      _removeFromCart(index);
+      return;
+    }
+    final changed = item.copyWith(
+      qty: edit.qty,
+      price: edit.price,
+      discount: edit.discount,
+      rateLabel: edit.rateLabel,
+      clearRateLabel: edit.rateLabel == null,
+    );
+    ref.read(cartProvider.notifier).replaceItem(index, changed);
+    setState(() {});
+  }
+
+  /// − on a line: one less; at 1 it takes the line off (with Undo).
+  void _decrement(int index) {
+    final item = _cart[index];
+    final step = _isLoose(item.unit) && item.qty < 1 ? item.qty : 1.0;
+    if (item.qty - step <= 0.0001) {
+      _removeFromCart(index);
+    } else {
+      ref.read(cartProvider.notifier).setQty(index, item.qty - step);
+      setState(() {});
+    }
+  }
+
+  static bool _isLoose(String unit) =>
+      const {'kg', 'g', 'gm', 'gram', 'ltr', 'litre', 'l', 'ml'}.contains(unit.toLowerCase().trim());
+
+  /// A quick product tapped: one more of it.
+  Future<void> _addOne(Product product) async {
+    final picked = await RatePickerDialog.show(context, product);
+    if (picked == null || !mounted) return;
+    ref.read(cartProvider.notifier).addItem(
           CartItem(
             productId: product.id,
             name: product.name,
-            price: price,
+            price: picked.price,
             qty: 1,
             unit: product.unit,
             purchasePrice: _effectivePurchasePrice(product),
             gstRate: product.gstRate,
             hsnCode: product.hsnCode,
             tamilName: product.tamilName,
-            rateLabel: rateLabel,
+            rateLabel: picked.label,
             unitType: product.unitType,
             piecesPerUnit: product.piecesPerUnit,
-            stockFactor: 1, // sold in the product's own stock unit
+            stockFactor: 1,
           ),
         );
+    HapticFeedback.selectionClick();
     setState(() {});
   }
 
-  void _removeFromCart(int index) {
-    ref.read(cartProvider.notifier).removeItem(index);
-    setState(() {});
-  }
-
-  void _editItemPrice(int index) {
-    final item = _cart[index];
-    final priceController = TextEditingController(
-      text: item.price.toStringAsFixed(2),
+  /// Customer bar / credit: choose the bill's customer.
+  Future<Customer?> _pickCustomer() async {
+    final choice = await CustomerSheet.show(
+      context,
+      customers: _customers,
+      selected: _selectedCustomer,
+      onAddNew: _showAddCustomerDialog,
     );
+    if (choice == null || !mounted) return null;
+    setState(() {
+      _selectedCustomer = choice.customer;
+      if (choice.customer == null && _payMode == PayMode.credit) _payMode = PayMode.cash;
+    });
+    return choice.customer;
+  }
 
-    showDialog(
+  /// Discount on the whole bill, in rupees.
+  Future<void> _editBillDiscount() async {
+    final c = TextEditingController(text: _discountController.text);
+    final value = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Edit Price - ${item.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Current: ₹${item.price.toStringAsFixed(2)}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: priceController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-              ],
-              decoration: const InputDecoration(
-                labelText: 'New Price',
-                border: OutlineInputBorder(),
-                prefixText: '₹ ',
-              ),
-              autofocus: true,
-            ),
-          ],
+        title: const Text('Bill discount'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+          decoration: InputDecoration(
+            prefixText: '₹ ',
+            border: const OutlineInputBorder(),
+            helperText: 'Bill ${rupees2(_subtotal)}',
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newPrice = double.tryParse(priceController.text);
-              if (newPrice != null && newPrice > 0) {
-                ref
-                    .read(cartProvider.notifier)
-                    .updateItemPrice(index, newPrice);
-                setState(() {});
-                Navigator.pop(ctx);
-                // allowed (clearance, a deal), but never by accident (QA #77)
-                if (item.purchasePrice > 0 && newPrice < item.purchasePrice) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Below cost: ₹${newPrice.toStringAsFixed(2)} vs cost ₹${item.purchasePrice.toStringAsFixed(2)} '
-                        '— loses ₹${(item.purchasePrice - newPrice).toStringAsFixed(2)} each',
-                      ),
-                      backgroundColor: Colors.orange.shade800,
-                    ),
-                  );
-                }
-              } else {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Enter valid price')),
-                );
-              }
-            },
-            child: const Text('Update'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('No discount')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text('Apply')),
         ],
       ),
     );
-  }
-
-  void _editItemQty(int index) {
-    final item = _cart[index];
-    String qtyText = formatQty(item.qty);
-    // first key replaces the shown qty: pressing 3 on "1" gave 13 (QA #76)
-    var fresh = true;
-    // half a soap is not a sale: pieces are whole numbers
-    final wholeOnly = item.unit.toLowerCase() == 'pcs';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(item.name, style: const TextStyle(fontSize: 14)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Current qty display
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Rs${item.price.toStringAsFixed(item.price == item.price.roundToDouble() ? 0 : 2)} × $qtyText',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      '= Rs${(item.price * (double.tryParse(qtyText) ?? 0)).toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF1565C0),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Number pad
-              _buildNumberPad(
-                qtyText,
-                (val) {
-                  setDialogState(() {
-                    qtyText = val;
-                    fresh = false;
-                  });
-                },
-                replaceNext: fresh,
-                allowDecimal: !wholeOnly,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final newQty = double.tryParse(qtyText);
-                if (newQty != null && newQty > 0) {
-                  final delta = newQty - item.qty;
-                  ref.read(cartProvider.notifier).updateQty(index, delta);
-                  setState(() {});
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNumberPad(
-    String currentVal,
-    ValueChanged<String> onChanged, {
-    bool replaceNext = false,
-    bool allowDecimal = true,
-  }) {
-    // a digit or '.' as the first press starts a new number
-    if (replaceNext) {
-      final shown = currentVal;
-      final orig = onChanged;
-      onChanged = (v) => orig(
-        v.length > shown.length && v.startsWith(shown) && shown != '0'
-            ? (v.substring(shown.length) == '.'
-                  ? '0.'
-                  : v.substring(shown.length))
-            : v,
+    c.dispose();
+    if (value == null || !mounted) return;
+    final d = double.tryParse(value) ?? 0;
+    if (d > _subtotal) {
+      _messenger.showSnackBar(
+        const SnackBar(content: Text('Discount is more than the bill')),
       );
+      return;
     }
-    return Column(
-      children: [
-        Row(
-          children: [
-            _numPadBtn('1', currentVal, onChanged),
-            _numPadBtn('2', currentVal, onChanged),
-            _numPadBtn('3', currentVal, onChanged),
-          ],
-        ),
-        Row(
-          children: [
-            _numPadBtn('4', currentVal, onChanged),
-            _numPadBtn('5', currentVal, onChanged),
-            _numPadBtn('6', currentVal, onChanged),
-          ],
-        ),
-        Row(
-          children: [
-            _numPadBtn('7', currentVal, onChanged),
-            _numPadBtn('8', currentVal, onChanged),
-            _numPadBtn('9', currentVal, onChanged),
-          ],
-        ),
-        Row(
-          children: [
-            _numPadBtn('C', currentVal, onChanged, isAction: true),
-            // decimal point for loose goods (1.5 kg)
-            allowDecimal
-                ? _numPadBtn('.', currentVal, onChanged)
-                : const Expanded(child: SizedBox()),
-            _numPadBtn('0', currentVal, onChanged),
-            _numPadBtn('⌫', currentVal, onChanged, isAction: true),
-          ],
-        ),
-      ],
+    setState(() => _discountController.text = d > 0 ? value : '');
+  }
+
+  /// Charge: the checkout sheet, then the sale is saved as before.
+  Future<void> _charge() async {
+    if (_cart.isEmpty || _isProcessing) return;
+    final result = await CheckoutSheet.show(
+      context,
+      total: _total,
+      itemCount: _cart.length,
+      mode: _payMode,
+      customer: _selectedCustomer,
+      pickCustomer: _pickCustomer,
     );
-  }
-
-  Widget _numPadBtn(
-    String label,
-    String currentVal,
-    ValueChanged<String> onChanged, {
-    bool isAction = false,
-  }) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(2),
-        child: Material(
-          color: isAction
-              ? (Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade800
-                    : Colors.grey.shade200)
-              : (Theme.of(context).brightness == Brightness.dark
-                    ? Colors.grey.shade900
-                    : Colors.white),
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            onTap: () {
-              if (label == 'C') {
-                onChanged('0');
-              } else if (label == '⌫') {
-                if (currentVal.length > 1) {
-                  onChanged(currentVal.substring(0, currentVal.length - 1));
-                } else {
-                  onChanged('0');
-                }
-              } else if (label == '.') {
-                if (!currentVal.contains('.')) onChanged('$currentVal.');
-              } else {
-                if (currentVal == '0') {
-                  onChanged(label);
-                } else {
-                  onChanged(currentVal + label);
-                }
-              }
-            },
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              height: 48,
-              alignment: Alignment.center,
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isAction
-                      ? (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white70
-                            : Colors.grey.shade700)
-                      : (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.black87),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _updateQty(int index, double delta) {
-    ref.read(cartProvider.notifier).updateQty(index, delta);
-    setState(() {});
-  }
-
-  void _updateItemDiscount(int index, double discount) {
-    ref.read(cartProvider.notifier).updateDiscount(index, discount);
-    setState(() {});
-  }
-
-  Widget _buildProductChipHorizontal(Product product) {
-    final inCart = _cart.where((c) => c.productId == product.id).length;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: InkWell(
-        onTap: () => _showQtyPopup(product),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 100,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            color: inCart > 0
-                ? Colors.green.withValues(alpha: 0.1)
-                : Colors.grey.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: inCart > 0
-                  ? Colors.green.shade300
-                  : (Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey.shade700
-                        : Colors.grey.shade200),
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      product.name,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: inCart > 0 ? Color(0xFF2E7D32) : null,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (inCart > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$inCart',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              Text(
-                '₹${product.sellingPrice.toStringAsFixed(0)}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Color(0xFF757575)
-                      : Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showPaymentOptionsSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            MediaQuery.of(ctx).viewInsets.bottom + 16,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Payment Options',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                CustomerPicker(
-                  selectedCustomer: _selectedCustomer,
-                  filteredCustomers: _filteredCustomers,
-                  searchController: _searchController,
-                  showSearch: _showCustomerSearch,
-                  onToggleSearch: () => setSheetState(() {
-                    setState(() => _showCustomerSearch = !_showCustomerSearch);
-                  }),
-                  onClearCustomer: () => setSheetState(() {
-                    setState(() => _selectedCustomer = null);
-                  }),
-                  onAddCustomer: _showAddCustomerDialog,
-                  onSearchChanged: _filterCustomers,
-                  onSelectCustomer: (customer) {
-                    setSheetState(() {
-                      setState(() {
-                        _selectedCustomer = customer;
-                        _showCustomerSearch = false;
-                        _searchController.clear();
-                      });
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                PaymentSection(
-                  discountController: _discountController,
-                  amountPaidController: _amountPaidController,
-                  paymentMethod: _paymentMethod,
-                  isCredit: _isCredit,
-                  dueAmount: _dueAmount,
-                  total: _total,
-                  isSplitPayment: _isSplitPayment,
-                  cashAmountController: _cashAmountController,
-                  upiAmountController: _upiAmountController,
-                  onPaymentMethodChanged: (method) => setSheetState(() {
-                    setState(() {
-                      _paymentMethod = method;
-                      _isCredit = false;
-                      _isSplitPayment = false;
-                    });
-                  }),
-                  onCreditToggled: () => setSheetState(() {
-                    setState(() {
-                      _isCredit = !_isCredit;
-                      if (_isCredit) _amountPaidController.clear();
-                    });
-                  }),
-                  onSplitPaymentToggled: (val) => setSheetState(() {
-                    setState(() {
-                      _isSplitPayment = val;
-                      if (val) {
-                        _cashAmountController.text = _total.toStringAsFixed(2);
-                        _upiAmountController.text = '0.00';
-                      } else {
-                        _cashAmountController.clear();
-                        _upiAmountController.clear();
-                      }
-                    });
-                  }),
-                  // refresh the bill behind the sheet too: the total
-                  // stayed stale after a discount change (QA #26)
-                  onChanged: () => setSheetState(() => setState(() {})),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _payMode = result.mode;
+      _selectedCustomer = result.customer;
+      _isCredit = result.mode == PayMode.credit;
+      _isSplitPayment = result.mode == PayMode.split;
+      _paymentMethod = result.mode == PayMode.upi ? 'upi' : 'cash';
+      _amountPaidController.text = _isCredit && result.creditPaid > 0 ? result.creditPaid.toStringAsFixed(2) : '';
+      _cashAmountController.text = _isSplitPayment ? result.splitCash.toStringAsFixed(2) : '';
+      _upiAmountController.text = _isSplitPayment ? result.splitUpi.toStringAsFixed(2) : '';
+    });
+    await _completeSale(confirmed: true);
   }
 
   Future<void> scanAndAdd() async {
@@ -799,32 +472,39 @@ class CartScreenState extends ConsumerState<CartScreen>
           .read(productServiceProvider)
           .getProductByBarcode(result);
       if (product != null && mounted) {
-        _addToCart(product);
+        _addOne(product);
       } else if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('No product found: $result')));
+        _messenger.showSnackBar(SnackBar(content: Text('No product found: $result')));
       }
     }
   }
 
+  /// Mic: listen, then show what was heard with choices (VoiceConfirmSheet).
+  /// Nothing is added until the shop taps "Add".
   Future<void> toggleMic() async {
     if (_isListening) {
-      await _voiceBilling.stopListening();
-      setState(() => _isListening = false);
+      await _voiceBilling.stop(); // ends the order: the sheet opens
       return;
     }
 
     if (_allProducts.isEmpty) {
       await _loadProducts();
     }
+    if (!mounted) return;
     if (_allProducts.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No products loaded. Wait a moment.')),
-        );
-      }
+      _messenger.showSnackBar(
+        const SnackBar(content: Text('No products loaded. Wait a moment.')),
+      );
       return;
+    }
+
+    final tamil = _useTamilVoice;
+    if (tamil && !_tamilChecked) {
+      _tamilChecked = true;
+      if (!await _voiceBilling.hasTamil() && mounted) {
+        await _showTamilVoiceHelp();
+        if (!mounted) return;
+      }
     }
 
     setState(() {
@@ -832,39 +512,20 @@ class CartScreenState extends ConsumerState<CartScreen>
       _partialText = '';
     });
 
-    final ok = await _voiceBilling.startListening(
-      useTamil: _useTamilVoice,
-      onPartialResult: (text) {
+    final ok = await _voiceBilling.startOrder(
+      useTamil: tamil,
+      onText: (text) {
         if (mounted) setState(() => _partialText = text);
       },
-      onResults: (results) async {
-        if (!mounted) return;
-
-        if (results.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                _useTamilVoice
-                    ? 'பொருள் கண்டறிய முடியவில்லை'
-                    : 'Could not recognize any product',
-              ),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 1),
-            ),
-          );
-          return;
-        }
-
-        for (final result in results) {
-          _addVoiceItem(result.product, result.qty);
-        }
+      onEnd: (text, guesses) {
+        if (mounted) setState(() => _isListening = false);
+        _onVoiceHeard(text, guesses, tamil);
       },
-      products: _allProducts,
     );
 
     if (!ok && mounted) {
       setState(() => _isListening = false);
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messenger.showSnackBar(
         const SnackBar(
           content: Text('Speech recognition not available on this device'),
           backgroundColor: Colors.red,
@@ -873,9 +534,107 @@ class CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  void _addVoiceItem(Product product, double qty) {
-    // voice can say "one and a half kilo": keep the decimal (it was rounded)
-    final lineQty = qty <= 0 ? 1.0 : qty;
+  bool _tamilChecked = false;
+  bool _voiceSheetOpen = false;
+  Future<void> _showTamilVoiceHelp() {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('தமிழ் குரல் இல்லை'),
+        content: const Text(
+          'This phone has no Tamil voice typing yet, so Tamil may be heard '
+          'as English.\n\n'
+          'To add it: Settings → System → Languages → On-screen keyboard → '
+          'Gboard → Voice typing → Languages → add தமிழ் (Tamil, India). '
+          'Turn on "Offline speech recognition" to download it.\n\n'
+          'You can still try now.',
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onVoiceHeard(String spoken, List<List<String>> guesses, bool tamil) async {
+    if (!mounted || _voiceSheetOpen) return;
+    setState(() => _isListening = false);
+    if (spoken.trim().isEmpty) return;
+
+    final learned = await VoiceMemory.load();
+    final words = await VoiceWords.load();
+    final products = _allProducts;
+    // finding where items start and end, over all the phone's guesses,
+    // takes a moment: do it off the screen's thread so nothing freezes
+    if (mounted) setState(() => _partialText = tamil ? 'சரிபார்க்கிறது…' : 'Checking…');
+    final parser = VoiceParser(products, learned: learned, words: words);
+    VoiceOrder order;
+    try {
+      order = await parseVoiceOrderInBackground(products, learned, words, guesses);
+    } catch (e) {
+      // never lose the order: read it here instead (slower, but it works)
+      Logger.error('Voice background parse', e);
+      order = parser.parseBest(guesses);
+    }
+    final text = order.heard.isEmpty ? spoken : order.heard;
+    final lines = order.lines;
+    if (mounted) setState(() => _partialText = '');
+    if (!mounted) return;
+    if (lines.isEmpty) {
+      _messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            tamil
+                ? 'பொருள் புரியவில்லை: “$text”'
+                : 'No product heard in “$text”',
+          ),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    _voiceSheetOpen = true;
+    final picks = await VoiceConfirmSheet.show(
+      context,
+      heard: text,
+      lines: lines,
+      tamil: tamil,
+      products: _allProducts,
+      reparse: parser.parse,
+      rememberWords: VoiceWords.add,
+    );
+    _voiceSheetOpen = false;
+    if (picks == null || picks.isEmpty || !mounted) return;
+
+    await VoiceMemory.remember({
+      for (final p in picks)
+        if (p.worthRemembering) p.line.phrase: p.product.id,
+    });
+    for (final p in picks) {
+      if (!mounted) return;
+      await _addVoiceItem(p.product, p.qty);
+    }
+    if (!mounted) return;
+    _messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          tamil
+              ? '${picks.length} பொருள் சேர்க்கப்பட்டது'
+              : '${picks.length} item${picks.length == 1 ? '' : 's'} added',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Adds a confirmed voice line like a tapped product: the two-rate picker
+  /// for products with a second rate, then the cart.
+  Future<void> _addVoiceItem(Product product, double qty) async {
+    final picked = await RatePickerDialog.show(context, product);
+    if (picked == null) return; // rate picker cancelled
     ref
         .read(cartProvider.notifier)
         .addItem(
@@ -883,8 +642,9 @@ class CartScreenState extends ConsumerState<CartScreen>
             productId: product.id,
             name: product.name,
             tamilName: product.tamilName,
-            price: product.sellingPrice,
-            qty: lineQty,
+            price: picked.price,
+            rateLabel: picked.label,
+            qty: qty <= 0 ? 1.0 : qty,
             unit: product.unit,
             purchasePrice: _effectivePurchasePrice(product),
             gstRate: product.gstRate,
@@ -894,20 +654,10 @@ class CartScreenState extends ConsumerState<CartScreen>
             stockFactor: 1,
           ),
         );
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _useTamilVoice
-              ? '${product.tamilName ?? product.name} × ${formatQty(lineQty)} சேர்க்கப்பட்டது'
-              : '${product.name} × ${formatQty(lineQty)} added',
-        ),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    setState(() {});
   }
 
-  Future<void> _showAddCustomerDialog() async {
+  Future<Customer?> _showAddCustomerDialog() async {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
 
@@ -973,16 +723,16 @@ class CartScreenState extends ConsumerState<CartScreen>
       setState(() {
         _selectedCustomer = result;
         _customers.add(result);
-        _filteredCustomers.add(result);
       });
     }
+    return result;
   }
 
-  Future<void> _completeSale() async {
+  Future<void> _completeSale({bool confirmed = false}) async {
     if (_cart.isEmpty || _isProcessing) return;
     setState(() => _isProcessing = true);
     try {
-      await _completeSaleInner();
+      await _completeSaleInner(confirmed: confirmed);
     } finally {
       // every early return (validation message, cancelled dialog) lands
       // here, so the checkout button can never stay disabled (#4)
@@ -990,44 +740,18 @@ class CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  Future<void> _completeSaleInner() async {
-    // Check connectivity before attempting sale
-    final offlineService = ref.read(offlineServiceProvider);
-    final isOnline = await offlineService.isOnline();
-    if (!isOnline) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('No Internet Connection'),
-          content: const Text(
-            'You are offline. The sale will be saved locally and synced when you reconnect.\n\n'
-            'Do you want to proceed?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Color(0xFFC2410C)),
-              child: const Text('Save Offline'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
-
+  Future<void> _completeSaleInner({bool confirmed = false}) async {
+    // No separate "are we online?" check first (a server round trip before
+    // every bill): the save goes offline by itself on a network error.
     if (_total < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messenger.showSnackBar(
         const SnackBar(content: Text('Discount is more than the bill total')),
       );
       return;
     }
 
     if (_isCredit && _selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messenger.showSnackBar(
         const SnackBar(
           content: Text('Please select a customer for credit sale'),
         ),
@@ -1036,7 +760,7 @@ class CartScreenState extends ConsumerState<CartScreen>
     }
 
     if (_isCredit && _amountPaid >= _total) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _messenger.showSnackBar(
         const SnackBar(content: Text('Amount paid is full! Uncheck Credit.')),
       );
       return;
@@ -1057,7 +781,7 @@ class CartScreenState extends ConsumerState<CartScreen>
           final newTotal = current + _dueAmount;
           if (limit > 0 && newTotal > limit) {
             if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
+            _messenger.showSnackBar(
               SnackBar(
                 backgroundColor: Colors.red,
                 duration: const Duration(seconds: 8),
@@ -1082,14 +806,16 @@ class CartScreenState extends ConsumerState<CartScreen>
       final cashAmount = double.tryParse(_cashAmountController.text) ?? 0;
       final upiAmount = double.tryParse(_upiAmountController.text) ?? 0;
       if ((cashAmount + upiAmount - _total).abs() > 0.01) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _messenger.showSnackBar(
           const SnackBar(content: Text('Cash + UPI must equal total')),
         );
         return;
       }
     }
 
-    final confirm = await showDialog<bool>(
+    final confirm = confirmed
+        ? true
+        : await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Complete Sale'),
@@ -1210,7 +936,7 @@ class CartScreenState extends ConsumerState<CartScreen>
       if (mounted) {
         HapticFeedback.heavyImpact();
         if (savedOffline) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          _messenger.showSnackBar(
             const SnackBar(
               content: Text('Sale saved offline, will sync when online'),
               backgroundColor: Colors.orange,
@@ -1345,7 +1071,7 @@ class CartScreenState extends ConsumerState<CartScreen>
               hasTamil: useTamilBT,
             );
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              _messenger.showSnackBar(
                 SnackBar(
                   content: Text(
                     success
@@ -1358,7 +1084,7 @@ class CartScreenState extends ConsumerState<CartScreen>
             }
           } else {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
+              _messenger.showSnackBar(
                 const SnackBar(
                   content: Text(
                     'No printer configured. Go to More → Printer Setup',
@@ -1412,6 +1138,7 @@ class CartScreenState extends ConsumerState<CartScreen>
           _showEmailDialog(context, sale);
         }
 
+        _messenger.hideCurrentSnackBar();
         setState(() {
           ref.read(cartProvider.notifier).clear();
           _discountController.clear();
@@ -1419,10 +1146,12 @@ class CartScreenState extends ConsumerState<CartScreen>
           _cashAmountController.clear();
           _upiAmountController.clear();
           _paymentMethod = 'cash';
+          _payMode = PayMode.cash;
           _selectedCustomer = null;
           _isCredit = false;
           _isSplitPayment = false;
         });
+        _loadTopSoldProducts();
         ref.invalidate(salesHistoryProvider);
         ref.invalidate(todaySalesProvider);
         ref.invalidate(accountsProvider);
@@ -1430,9 +1159,7 @@ class CartScreenState extends ConsumerState<CartScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(ErrorMessages.parse(e))));
+        _messenger.showSnackBar(SnackBar(content: Text(ErrorMessages.parse(e))));
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -1555,7 +1282,7 @@ class CartScreenState extends ConsumerState<CartScreen>
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        _messenger.showSnackBar(
           SnackBar(
             content: Text(
               'Failed to generate/send email: ${ErrorMessages.parse(e)}',
@@ -1569,7 +1296,18 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   void toggleLang() {
     setState(() => _useTamilVoice = !_useTamilVoice);
+    SharedPreferences.getInstance().then((p) => p.setBool('voice_tamil', _useTamilVoice)).catchError((_) => true);
+    _messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(_useTamilVoice ? 'Voice: தமிழ் (Tamil)' : 'Voice: English'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
+
+  bool get hasItems => _cart.isNotEmpty;
 
   /// Opens the list of held bills: resume one into the cart, or delete it.
   void showHeldBills() {
@@ -1614,7 +1352,7 @@ class CartScreenState extends ConsumerState<CartScreen>
     return Card(
       child: ListTile(
         title: Text(
-          '₹${total.toStringAsFixed(0)} · ${lines.length} item${lines.length == 1 ? '' : 's'}',
+          '${rupees2(total)} · ${lines.length} item${lines.length == 1 ? '' : 's'}',
         ),
         subtitle: info.isEmpty ? null : Text(info),
         trailing: Row(
@@ -1629,7 +1367,7 @@ class CartScreenState extends ConsumerState<CartScreen>
                   builder: (d) => AlertDialog(
                     title: const Text('Delete held bill?'),
                     content: Text(
-                      '₹${total.toStringAsFixed(0)} · ${lines.length} items. This cannot be undone.',
+                      '${rupees2(total)} · ${lines.length} items. This cannot be undone.',
                     ),
                     actions: [
                       TextButton(
@@ -1671,6 +1409,7 @@ class CartScreenState extends ConsumerState<CartScreen>
 
   Future<void> _resumeHeldBill(int index) async {
     if (index < 0 || index >= _heldBills.length) return;
+    _messenger.hideCurrentSnackBar();
     var bill = _heldBills[index];
     if (_cart.isNotEmpty) {
       final hold = await showDialog<bool>(
@@ -1716,16 +1455,18 @@ class CartScreenState extends ConsumerState<CartScreen>
       _discountController.text = bill['discount']?.toString() ?? '';
       _paymentMethod = bill['paymentMethod']?.toString() ?? 'cash';
       _isCredit = bill['isCredit'] == true;
+      _payMode = _isCredit
+          ? PayMode.credit
+          : (PaymentMethods.normalize(_paymentMethod) == PaymentMethods.upi ? PayMode.upi : PayMode.cash);
       _amountPaidController.text = bill['amountPaid']?.toString() ?? '';
     });
     _persistHeldBills();
   }
 
   void holdBill() {
+    _messenger.hideCurrentSnackBar(); // an Undo for this bill must not reach the next
     if (_cart.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cart is empty')));
+      _messenger.showSnackBar(const SnackBar(content: Text('Cart is empty')));
       return;
     }
 
@@ -1753,10 +1494,11 @@ class CartScreenState extends ConsumerState<CartScreen>
       _isCredit = false;
       _isSplitPayment = false;
       _paymentMethod = 'cash';
+      _payMode = PayMode.cash;
     });
     _persistHeldBills();
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    _messenger.showSnackBar(
       SnackBar(
         content: Text('Bill held (${_heldBills.length} held)'),
         backgroundColor: Colors.orange,
@@ -1768,7 +1510,6 @@ class CartScreenState extends ConsumerState<CartScreen>
   void dispose() {
     _discountController.dispose();
     _amountPaidController.dispose();
-    _searchController.dispose();
     _cashAmountController.dispose();
     _upiAmountController.dispose();
     _productSearchController.dispose();
@@ -1777,489 +1518,452 @@ class CartScreenState extends ConsumerState<CartScreen>
     super.dispose();
   }
 
+  // ── layout (rebuilt 17 Oct 2026) ─────────────────────────────────────────
+  // customer bar · search · quick products / results · bill lines · totals
+  // and payment · Charge. Big text, exact paise, nothing hidden behind ⚙.
+
+  void _publishStatus() {
+    final status = CartStatus(held: _heldBills.length, tamil: _useTamilVoice, listening: _isListening);
+    final notifier = widget.status;
+    if (notifier == null || notifier.value == status) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => notifier.value = status);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    return Scaffold(
-      body: Column(
-        children: [
-          if (_isListening)
+    _publishStatus();
+    final searching = _productSearchQuery.isNotEmpty;
+    return ScaffoldMessenger(
+      key: _messengerKey,
+      child: Scaffold(
+        bottomNavigationBar: _cart.isEmpty ? null : (searching ? _slimTotals() : _totalsPanel()),
+        body: Column(
+          children: [
+            if (_isListening) _voiceBanner(),
+            _customerBar(),
+            _searchField(),
+            if (searching)
+              Expanded(child: _searchResults())
+            else ...[
+              if (_topSoldProducts.isNotEmpty) _quickProducts(),
+              if (_heldBills.isNotEmpty && _cart.isEmpty) _heldBanner(),
+              Expanded(child: _cart.isEmpty ? _emptyCart() : _cartLines()),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _voiceBanner() {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 6, 8),
+        child: Row(
+          children: [
+            Icon(Icons.mic, color: scheme.onErrorContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _partialText.isEmpty
+                    ? (_useTamilVoice ? 'சொல்லுங்கள்… முடிந்ததும் ■ அழுத்தவும்' : 'Speak… tap ■ when done')
+                    : _partialText,
+                style: TextStyle(fontSize: 15, color: scheme.onErrorContainer),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: Colors.red.withValues(alpha: 0.1),
-              child: Row(
-                children: [
-                  const Icon(Icons.mic, size: 14, color: Colors.red),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _partialText.isEmpty
-                          ? (_useTamilVoice ? 'கேட்கிறது...' : 'Listening...')
-                          : _partialText,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.onErrorContainer.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _useTamilVoice ? 'தமிழ்' : 'EN',
+                style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.bold),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Stop',
+              onPressed: toggleMic,
+              icon: Icon(Icons.stop_circle, color: scheme.onErrorContainer, size: 30),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Always on screen: who the bill is for and what they owe.
+  Widget _customerBar() {
+    final scheme = Theme.of(context).colorScheme;
+    final c = _selectedCustomer;
+    final owes = (c?.totalCredit ?? 0) > 0.004;
+    return Material(
+      color: scheme.surfaceContainerLow,
+      child: InkWell(
+        onTap: _pickCustomer,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          child: Row(
+            children: [
+              Icon(c == null ? Icons.storefront_outlined : Icons.person, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: c?.name ?? 'Walk-in customer',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      if (owes)
+                        TextSpan(
+                          text: '  ·  due ${rupees(c!.totalCredit)}',
+                          style: TextStyle(fontSize: 14, color: scheme.error, fontWeight: FontWeight.w600),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(c == null ? 'Choose' : 'Change', style: TextStyle(color: scheme.primary)),
+              Icon(Icons.chevron_right, color: scheme.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _searchField() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: TextField(
+        controller: _productSearchController,
+        focusNode: _productSearchFocusNode,
+        style: const TextStyle(fontSize: 16),
+        decoration: InputDecoration(
+          hintText: 'Search name, Tamil name or barcode',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _productSearchQuery.isNotEmpty
+              ? IconButton(
+                  tooltip: 'Clear',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _productSearchController.clear();
+                    setState(() => _filterProducts(''));
+                  },
+                )
+              : IconButton(tooltip: 'Scan barcode', icon: const Icon(Icons.qr_code_scanner), onPressed: scanAndAdd),
+          border: const OutlineInputBorder(),
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+        onChanged: (v) => setState(() => _filterProducts(v)),
+      ),
+    );
+  }
+
+  /// Best sellers of the last 30 days: one tap adds one.
+  Widget _quickProducts() {
+    final scheme = Theme.of(context).colorScheme;
+    final products = _topSoldProducts
+        .map((e) => _allProducts.where((p) => p.id == e['product_id']).firstOrNull)
+        .whereType<Product>()
+        .toList();
+    if (products.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 124,
+      child: GridView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          childAspectRatio: 0.40,
+        ),
+        itemCount: products.length,
+        itemBuilder: (_, i) {
+          final p = products[i];
+          final onBill = _cart.where((c) => c.productId == p.id).fold<double>(0, (t, c) => t + c.qty);
+          final active = onBill > 0;
+          return Material(
+            color: active ? scheme.primaryContainer : scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _addOne(p),
+              onLongPress: () => _showQtyPopup(p),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      p.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: active ? scheme.onPrimaryContainer : null,
+                      ),
+                    ),
+                    Text(
+                      active ? '${rupees(p.sellingPrice)}  ·  ${formatQty(onBill)} on bill' : rupees(p.sellingPrice),
+                      maxLines: 1,
                       style: TextStyle(
                         fontSize: 12,
-                        color: _partialText.isEmpty
-                            ? Colors.red.shade300
-                            : Colors.red.shade700,
-                        fontStyle: _partialText.isEmpty
-                            ? FontStyle.italic
-                            : FontStyle.normal,
+                        color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _useTamilVoice ? Colors.orange : Colors.blue,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _useTamilVoice ? 'தமி' : 'EN',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: toggleMic,
-                    child: const Icon(
-                      Icons.stop_circle,
-                      color: Colors.red,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          // Search bar
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
-            child: TextField(
-              controller: _productSearchController,
-              decoration: InputDecoration(
-                hintText: 'Search product...',
-                prefixIcon: const Icon(Icons.search, size: 18),
-                suffixIcon: _productSearchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        onPressed: () {
-                          _productSearchController.clear();
-                          setState(() {
-                            _productSearchQuery = '';
-                            _filterProducts('');
-                          });
-                          _productSearchFocusNode.requestFocus();
-                        },
-                      )
-                    : IconButton(
-                        icon: const Icon(Icons.qr_code_scanner, size: 16),
-                        onPressed: scanAndAdd,
-                      ),
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+                  ],
                 ),
-                isDense: true,
               ),
-              onChanged: (v) => setState(() => _filterProducts(v)),
-              focusNode: _productSearchFocusNode,
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _searchResults() {
+    final scheme = Theme.of(context).colorScheme;
+    if (_filteredProducts.isEmpty) {
+      return Center(
+        child: Text(
+          'No product "${_productSearchQuery.trim()}"',
+          style: TextStyle(fontSize: 15, color: scheme.onSurfaceVariant),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount: _filteredProducts.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (_, i) {
+        final p = _filteredProducts[i];
+        final onBill = _cart.where((c) => c.productId == p.id).fold<double>(0, (t, c) => t + c.qty);
+        final out = p.stock <= 0;
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+          title: Text(p.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          subtitle: Text(
+            [
+              if ((p.tamilName ?? '').isNotEmpty) p.tamilName!,
+              out ? 'out of stock' : 'stock ${formatQty(p.stock)}',
+            ].join('  ·  '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: out ? scheme.error : scheme.onSurfaceVariant),
           ),
-          // Product strip - horizontal single row (only when NOT searching)
-          if (_productSearchQuery.isEmpty)
-            SizedBox(
-              height: 56,
-              child: _topSoldProducts.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Start selling to see top products',
-                        style: TextStyle(
-                          color: Color(0xFF757575),
-                          fontSize: 12,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      itemCount: _topSoldProducts.length,
-                      itemBuilder: (context, index) {
-                        final entry = _topSoldProducts[index];
-                        final pid = entry['product_id'] as String;
-                        final product = _allProducts
-                            .where((p) => p.id == pid)
-                            .firstOrNull;
-                        if (product == null) return const SizedBox();
-                        return _buildProductChipHorizontal(product);
-                      },
-                    ),
-            ),
-          // Product list (when searching)
-          if (_productSearchQuery.isNotEmpty)
-            Expanded(
-              child: _filteredProducts.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No products found',
-                        style: TextStyle(
-                          color: Color(0xFF757575),
-                          fontSize: 12,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      itemCount: _filteredProducts.length,
-                      itemBuilder: (context, index) {
-                        final product = _filteredProducts[index];
-                        final inCart = _cart
-                            .where((c) => c.productId == product.id)
-                            .fold<double>(0, (sum, c) => sum + c.qty);
-                        return ListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          leading: Container(
-                            width: 4,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: inCart > 0
-                                  ? Colors.green
-                                  : Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          title: Text(
-                            product.name,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '₹${product.sellingPrice.toStringAsFixed(0)} / ${product.unit}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          trailing: inCart > 0
-                              ? Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '×$inCart',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.add_circle_outline,
-                                  size: 20,
-                                  color: Colors.green,
-                                ),
-                          onTap: () => _showQtyPopup(product),
-                        );
-                      },
-                    ),
-            ),
-          // held bills were impossible to reopen on the phone (QA #23)
-          if (_productSearchQuery.isEmpty && _heldBills.isNotEmpty)
-            Material(
-              color: Colors.orange.shade50,
-              child: InkWell(
-                onTap: showHeldBills,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.pause_circle_filled,
-                        color: Colors.orange.shade800,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${_heldBills.length} bill${_heldBills.length == 1 ? '' : 's'} on hold — tap to open',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFC2410C),
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: Colors.orange.shade800),
-                    ],
-                  ),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(rupees(p.sellingPrice), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (onBill > 0)
+                Text('${formatQty(onBill)} on bill', style: TextStyle(fontSize: 12, color: scheme.primary)),
+            ],
+          ),
+          onTap: () => _showQtyPopup(p),
+        );
+      },
+    );
+  }
+
+  Widget _heldBanner() {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.tertiaryContainer,
+      child: InkWell(
+        onTap: showHeldBills,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.pause_circle_filled, color: scheme.onTertiaryContainer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${_heldBills.length} bill${_heldBills.length == 1 ? '' : 's'} on hold',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: scheme.onTertiaryContainer),
                 ),
               ),
-            ),
-          // Cart items (only when NOT searching)
-          if (_productSearchQuery.isEmpty)
-            Expanded(
-              child: _cart.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.shopping_cart,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                          SizedBox(height: 6),
-                          Text(
-                            'Tap a product above to add',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFF757575),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      itemCount: _cart.length,
-                      itemBuilder: (context, index) {
-                        final item = _cart[index];
-                        return CartItemTile(
-                          item: item,
-                          onIncrement: () => _updateQty(index, 1),
-                          onDecrement: () => _updateQty(index, -1),
-                          onRemove: () => _removeFromCart(index),
-                          onEditPrice: () => _editItemPrice(index),
-                          onEditQty: () => _editItemQty(index),
-                          onDiscountChanged: (discount) =>
-                              _updateItemDiscount(index, discount),
-                        );
-                      },
-                    ),
-            ),
-          // Compact bottom bar
-          if (_cart.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 4,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Row 1: Customer + Summary + Payment chips
-                  Row(
-                    children: [
-                      // Customer chip
-                      if (_selectedCustomer != null)
-                        Flexible(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _selectedCustomer!.totalCredit > 0
-                                  ? Colors.orange.withValues(alpha: 0.1)
-                                  : Colors.blue.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.person,
-                                  size: 12,
-                                  color: _selectedCustomer!.totalCredit > 0
-                                      ? Colors.orange
-                                      : Colors.blue,
-                                ),
-                                const SizedBox(width: 2),
-                                Flexible(
-                                  child: Text(
-                                    _selectedCustomer!.name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: _selectedCustomer!.totalCredit > 0
-                                          ? Color(0xFFC2410C)
-                                          : Color(0xFF1565C0),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                if (_selectedCustomer!.totalCredit > 0)
-                                  Text(
-                                    ' Due:₹${_selectedCustomer!.totalCredit.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xFFC62828),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (_selectedCustomer != null) const SizedBox(width: 6),
-                      // Summary text
-                      Expanded(
-                        child: Text(
-                          '${_cart.length} item${_cart.length == 1 ? '' : 's'}',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                      // Payment chips in words, full-size tap areas: "₹ 📱 ⏱"
-                      // were unclear and small (QA #79); split showed nothing (QA #33)
-                      if (_isSplitPayment && !_isCredit) ...[
-                        ChoiceChip(
-                          label: const Text(
-                            'Split',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          selected: true,
-                          onSelected: (_) => _showPaymentOptionsSheet(context),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      ChoiceChip(
-                        label: const Text(
-                          'Cash',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        selected:
-                            !_isCredit &&
-                            !_isSplitPayment &&
-                            _paymentMethod == 'cash',
-                        onSelected: (_) => setState(() {
-                          _paymentMethod = 'cash';
-                          _isCredit = false;
-                          _isSplitPayment = false;
-                        }),
-                      ),
-                      const SizedBox(width: 4),
-                      ChoiceChip(
-                        label: const Text(
-                          'UPI',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        selected:
-                            !_isCredit &&
-                            !_isSplitPayment &&
-                            _paymentMethod == 'digital',
-                        onSelected: (_) => setState(() {
-                          _paymentMethod = 'digital';
-                          _isCredit = false;
-                          _isSplitPayment = false;
-                        }),
-                      ),
-                      const SizedBox(width: 4),
-                      ChoiceChip(
-                        label: const Text(
-                          'Credit',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        selected: _isCredit,
-                        onSelected: (_) => setState(() {
-                          _isCredit = !_isCredit;
-                          if (_isCredit) _amountPaidController.clear();
-                          _isSplitPayment = false;
-                        }),
-                        backgroundColor: Colors.orange.shade50,
-                        selectedColor: Colors.orange.shade200,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  // Row 2: Complete button + More options
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 52,
-                          child: ElevatedButton(
-                            onPressed: _completeSale,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isCredit
-                                  ? Colors.orange
-                                  : Colors.green,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              '${_isCredit ? 'Complete Credit' : 'Complete Sale'} ₹${_total.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      SizedBox(
-                        height: 52,
-                        width: 52,
-                        child: OutlinedButton(
-                          onPressed: () => _showPaymentOptionsSheet(context),
-                          style: OutlinedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: EdgeInsets.zero,
-                          ),
-                          child: const Tooltip(
-                            message: 'Discount, split payment, amount given',
-                            child: Icon(Icons.tune, size: 24),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+              Text('Open', style: TextStyle(color: scheme.onTertiaryContainer)),
+              Icon(Icons.chevron_right, color: scheme.onTertiaryContainer),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyCart() {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.shopping_cart_outlined, size: 56, color: scheme.outline),
+          const SizedBox(height: 8),
+          Text('Empty bill', style: TextStyle(fontSize: 17, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Text(
+            'Search, scan, tap a quick product, or use the mic',
+            style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _cartLines() {
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount: _cart.length,
+      itemBuilder: (_, index) {
+        final item = _cart[index];
+        return CartItemTile(
+          item: item,
+          lowStock: _overStock(item),
+          onIncrement: () {
+            ref.read(cartProvider.notifier).setQty(index, item.qty + 1);
+            setState(() {});
+          },
+          onDecrement: () => _decrement(index),
+          onEdit: () => _editLine(index),
+          onRemove: () => _removeFromCart(index),
+        );
+      },
+    );
+  }
+
+  /// While searching (keyboard up): one line, so the results have room.
+  Widget _slimTotals() {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            Icon(Icons.receipt_long, size: 20, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Text(
+              '${_cart.length} item${_cart.length == 1 ? '' : 's'} on the bill',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            const Spacer(),
+            Text(rupees2(_total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Items, discount, total, how they pay, and Charge.
+  Widget _totalsPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final pieces = _cart.fold<double>(0, (t, c) => t + c.qty);
+    final lineDiscounts = _cart.fold<double>(0, (t, c) => t + c.discountAmount);
+    final allDiscount = lineDiscounts + _discount;
+    return Material(
+      elevation: 8,
+      color: scheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '${_cart.length} item${_cart.length == 1 ? '' : 's'}  ·  ${formatQty(pieces)} pcs',
+                    style: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
+                  ),
+                  const Spacer(),
+                  InkWell(
+                    onTap: _editBillDiscount,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      child: Text(
+                        allDiscount > 0.004 ? 'Discount −${rupees2(allDiscount)}' : '+ Discount',
+                        style: TextStyle(fontSize: 14, color: scheme.primary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text('Total', style: TextStyle(fontSize: 16, color: scheme.onSurfaceVariant)),
+                  const Spacer(),
+                  Text(rupees2(_total), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<PayMode>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.standard),
+                  segments: const [
+                    ButtonSegment(value: PayMode.cash, label: Text('Cash')),
+                    ButtonSegment(value: PayMode.upi, label: Text('UPI')),
+                    ButtonSegment(value: PayMode.split, label: Text('Split')),
+                    ButtonSegment(value: PayMode.credit, label: Text('Credit')),
+                  ],
+                  selected: {_payMode},
+                  onSelectionChanged: (v) async {
+                    setState(() => _payMode = v.first);
+                    // credit needs a customer: ask now, not at the end
+                    if (v.first == PayMode.credit && _selectedCustomer == null) {
+                      final c = await _pickCustomer();
+                      if (c == null && mounted) setState(() => _payMode = PayMode.cash);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: FilledButton(
+                  onPressed: _isProcessing ? null : _charge,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _payMode == PayMode.credit ? Colors.orange.shade800 : Colors.green.shade700,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: _isProcessing
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                        )
+                      : Text(
+                          _payMode == PayMode.credit ? 'Credit bill ${rupees2(_total)}' : 'Charge ${rupees2(_total)}',
+                          style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

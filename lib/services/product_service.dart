@@ -12,105 +12,44 @@ class ProductService {
   ProductService({OfflineService? offlineService})
     : _offlineService = offlineService ?? OfflineService();
 
+  // The product list is kept in memory. After a sale or a purchase only
+  // the products changed since the last download are fetched (the database
+  // stamps updated_at on every change, stock included); the whole list is
+  // fetched once every 10 minutes, so deleted or merged products drop out.
+  // Before (18 Oct 2026) every sale re-downloaded all 1,151 products, about
+  // 0.7 MB, and the till waited behind it on slow shop internet.
   static List<Product>? _productsCache;
-  static DateTime? _cacheTime;
-  static const Duration _cacheDuration = Duration(minutes: 5);
+  static DateTime? _fullTime;
+  static String? _watermark; // newest updated_at seen (database clock)
+  static bool _stale = true;
+  static const Duration _fullEvery = Duration(minutes: 10);
 
-  static void invalidateCache() {
-    _productsCache = null;
-    _cacheTime = null;
+  /// Something changed: the next read fetches what changed. [full] forces
+  /// the whole list (after a delete).
+  static void invalidateCache({bool full = false}) {
+    _stale = true;
+    if (full) _fullTime = null;
   }
 
   Future<List<Product>> getAllProducts() async {
-    if (_productsCache != null &&
-        _cacheTime != null &&
-        DateTime.now().difference(_cacheTime!) < _cacheDuration) {
-      return _productsCache!;
-    }
+    final cache = _productsCache;
+    if (cache != null && !_stale) return cache;
+    final fullDue = cache == null ||
+        _watermark == null ||
+        _fullTime == null ||
+        DateTime.now().difference(_fullTime!) >= _fullEvery;
     try {
-      // Fetch ALL products (may need multiple requests for >1000 products)
-      List<Product> allProducts = [];
-      int offset = 0;
-      const batchSize = 1000;
-
-      while (true) {
-        final response = await _client
-            .from('products')
-            .select('*, variants:product_variants(*)')
-            .order('name', ascending: true)
-            .range(offset, offset + batchSize - 1);
-
-        final batch = (response as List)
-            .map((e) {
-              try {
-                return Product.fromJson(e);
-              } catch (e) {
-                Logger.warning(
-                  'Failed to parse product ${e is Map ? e['id'] : 'unknown'}: $e',
-                );
-                return null;
-              }
-            })
-            .whereType<Product>()
-            .toList();
-
-        allProducts.addAll(batch);
-
-        if (batch.length < batchSize) break; // No more products
-        offset += batchSize;
+      final List<Product> allProducts;
+      if (fullDue) {
+        allProducts = await _downloadAll();
+        _fullTime = DateTime.now();
+        Logger.info('Loaded ${allProducts.length} products from database');
+      } else {
+        allProducts = await _downloadChanges(cache);
       }
-
-      Logger.info('Loaded ${allProducts.length} products from database');
       _productsCache = allProducts;
-      _cacheTime = DateTime.now();
-
-      // Cache products for offline use
-      try {
-        await _offlineService.cacheProducts(
-          allProducts
-              .map(
-                (p) => {
-                  'id': p.id,
-                  'name': p.name,
-                  'tamil_name': p.tamilName,
-                  'selling_price': p.sellingPrice,
-                  'purchase_price': p.purchasePrice,
-                  'stock': p.stock,
-                  'barcode': p.barcode,
-                  'category': p.category,
-                  'unit': p.unit,
-                  'sfw': p.sfw,
-                  'gst_rate': p.gstRate,
-                  'hsn_code': p.hsnCode,
-                  'low_stock_alert': p.lowStockAlert,
-                  'expiry_date': p.expiryDate?.toIso8601String(),
-                  'unit_type': p.unitType,
-                  'pieces_per_unit': p.piecesPerUnit,
-                  'variants': p.variants
-                      .map(
-                        (v) => {
-                          'id': v.id,
-                          'product_id': v.productId,
-                          'name': v.name,
-                          'price': v.price,
-                          'purchase_price': v.purchasePrice,
-                          'stock': v.stock,
-                          'barcode': v.barcode,
-                          'sku': v.sku,
-                          'min_stock': v.minStock,
-                          'is_active': v.isActive,
-                          'attributes': v.attributes,
-                        },
-                      )
-                      .toList(),
-                },
-              )
-              .toList(),
-        );
-      } catch (e) {
-        Logger.warning('Failed to cache products: $e');
-      }
-
+      _stale = false;
+      await _cacheOffline(allProducts);
       return allProducts;
     } catch (e, stackTrace) {
       Logger.error('Failed to get products', e, stackTrace);
@@ -127,6 +66,120 @@ class ProductService {
         }
       }
       return _productsCache ?? [];
+    }
+  }
+
+  /// Every product (1000 a request).
+  Future<List<Product>> _downloadAll() async {
+    final all = <Product>[];
+    String? newest;
+    var offset = 0;
+    const batchSize = 1000;
+    while (true) {
+      final response = await _client
+          .from('products')
+          .select('*, variants:product_variants(*)')
+          .order('name', ascending: true)
+          .range(offset, offset + batchSize - 1)
+          .timeout(const Duration(seconds: 30));
+      final rows = response as List;
+      newest = _newest(rows, newest);
+      all.addAll(_parse(rows));
+      if (rows.length < batchSize) break;
+      offset += batchSize;
+    }
+    _watermark = newest;
+    return all;
+  }
+
+  /// Only the products changed since the last download, merged in.
+  Future<List<Product>> _downloadChanges(List<Product> current) async {
+    final response = await _client
+        .from('products')
+        .select('*, variants:product_variants(*)')
+        .gte('updated_at', _watermark!)
+        .order('updated_at', ascending: true)
+        .limit(1000)
+        .timeout(const Duration(seconds: 15));
+    final rows = response as List;
+    if (rows.length >= 1000) return _downloadAll(); // a big change: take everything
+    _watermark = _newest(rows, _watermark);
+    final changed = {for (final p in _parse(rows)) p.id: p};
+    if (changed.isEmpty) return current;
+    final merged = [
+      for (final p in current) changed.remove(p.id) ?? p,
+      ...changed.values, // new products
+    ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    Logger.info('Updated ${rows.length} changed products');
+    return merged;
+  }
+
+  static String? _newest(List rows, String? start) {
+    var newest = start;
+    for (final r in rows) {
+      final t = (r as Map)['updated_at']?.toString();
+      if (t != null && (newest == null || t.compareTo(newest) > 0)) newest = t;
+    }
+    return newest;
+  }
+
+  static List<Product> _parse(List rows) => rows
+      .map((e) {
+        try {
+          return Product.fromJson(e);
+        } catch (err) {
+          Logger.warning('Failed to parse product ${e is Map ? e['id'] : 'unknown'}: $err');
+          return null;
+        }
+      })
+      .whereType<Product>()
+      .toList();
+
+  Future<void> _cacheOffline(List<Product> allProducts) async {
+    try {
+      await _offlineService.cacheProducts(
+        allProducts
+            .map(
+              (p) => {
+                'id': p.id,
+                'name': p.name,
+                'tamil_name': p.tamilName,
+                'selling_price': p.sellingPrice,
+                'purchase_price': p.purchasePrice,
+                'stock': p.stock,
+                'barcode': p.barcode,
+                'category': p.category,
+                'unit': p.unit,
+                'sfw': p.sfw,
+                'gst_rate': p.gstRate,
+                'hsn_code': p.hsnCode,
+                'low_stock_alert': p.lowStockAlert,
+                'expiry_date': p.expiryDate?.toIso8601String(),
+                'unit_type': p.unitType,
+                'pieces_per_unit': p.piecesPerUnit,
+                'variants': p.variants
+                    .map(
+                      (v) => {
+                        'id': v.id,
+                        'product_id': v.productId,
+                        'name': v.name,
+                        'price': v.price,
+                        'purchase_price': v.purchasePrice,
+                        'stock': v.stock,
+                        'barcode': v.barcode,
+                        'sku': v.sku,
+                        'min_stock': v.minStock,
+                        'is_active': v.isActive,
+                        'attributes': v.attributes,
+                      },
+                    )
+                    .toList(),
+              },
+            )
+            .toList(),
+      );
+    } catch (e) {
+      Logger.warning('Failed to cache products: $e');
     }
   }
 
@@ -348,7 +401,7 @@ class ProductService {
     try {
       await _client.from('product_variants').delete().eq('product_id', id);
       await _client.from('products').delete().eq('id', id);
-      ProductService.invalidateCache();
+      ProductService.invalidateCache(full: true); // a delete leaves no updated_at
 
       AuditService().log(
         action: 'delete',

@@ -82,8 +82,9 @@ class SaleService {
 
   /// Get sales history - from cache when offline, from Supabase when online
   Future<List<Sale>> getSalesHistory({int limit = 50, int days = 90}) async {
-    final online = await _offlineService.isOnline();
-    if (online) {
+    // straight to the server (no "are we online?" round trip first); a
+    // failure falls back to the copy on this device
+    {
       try {
         final since = AppTimezone.nowUtc().subtract(Duration(days: days));
         final response = await _client

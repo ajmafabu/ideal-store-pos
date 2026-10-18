@@ -27,7 +27,10 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
 
   static const _categories = [
     'Rent', 'Salary', 'Electricity', 'Water', 'Internet',
-    'Transport', 'Packaging', 'Maintenance', 'Other',
+    'Transport', 'Packaging', 'Maintenance',
+    // owner, 18 Oct 2026
+    'Food Expense', 'Personal Expense',
+    'Other',
   ];
 
   Future<void> _addExpense() async {

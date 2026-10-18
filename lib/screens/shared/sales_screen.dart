@@ -36,6 +36,14 @@ class SalesScreen extends ConsumerStatefulWidget {
 class _SalesScreenState extends ConsumerState<SalesScreen> {
   int _currentTab = 0;
   final _cartKey = GlobalKey<CartScreenState>();
+  // held bills, voice language and mic, for the toolbar
+  final _cartStatus = ValueNotifier(const CartStatus());
+
+  @override
+  void dispose() {
+    _cartStatus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,32 +71,47 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
                     const SizedBox(width: 2),
                     _buildTabBtn('History', 1),
                     const Spacer(),
-                    if (_currentTab == 0) ...[
-                      _buildToolbarAction(
-                        icon: Icons.pause_circle_outline,
-                        onTap: () => _cartKey.currentState?.holdBill(),
-                        tooltip: 'Hold',
-                        label: 'Hold',
+                    if (_currentTab == 0)
+                      ValueListenableBuilder<CartStatus>(
+                        valueListenable: _cartStatus,
+                        builder: (context, st, _) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // tap: hold this bill (or open the held ones
+                            // when the bill is empty); long-press: the list
+                            _buildToolbarAction(
+                              icon: Icons.pause_circle_outline,
+                              onTap: () {
+                                final cart = _cartKey.currentState;
+                                if (cart == null) return;
+                                if (cart.hasItems) {
+                                  cart.holdBill();
+                                } else {
+                                  cart.showHeldBills();
+                                }
+                              },
+                              onLongPress: () => _cartKey.currentState?.showHeldBills(),
+                              tooltip: 'Hold this bill · long-press for held bills',
+                              label: 'Hold',
+                              badge: st.held,
+                            ),
+                            _buildToolbarAction(
+                              icon: Icons.qr_code_scanner,
+                              onTap: () => _cartKey.currentState?.scanAndAdd(),
+                              tooltip: 'Scan barcode',
+                              label: 'Scan',
+                            ),
+                            // one mic button; long-press switches Tamil / English
+                            _buildToolbarAction(
+                              icon: st.listening ? Icons.stop_circle : Icons.mic,
+                              onTap: () => _cartKey.currentState?.toggleMic(),
+                              onLongPress: () => _cartKey.currentState?.toggleLang(),
+                              tooltip: 'Voice billing · long-press to switch language',
+                              label: st.tamil ? 'தமிழ்' : 'EN',
+                            ),
+                          ],
+                        ),
                       ),
-                      _buildToolbarAction(
-                        icon: Icons.qr_code_scanner,
-                        onTap: () => _cartKey.currentState?.scanAndAdd(),
-                        tooltip: 'Scan',
-                        label: 'Scan',
-                      ),
-                      _buildToolbarAction(
-                        icon: Icons.translate,
-                        onTap: () => _cartKey.currentState?.toggleLang(),
-                        tooltip: 'Voice language (English / Tamil)',
-                        label: 'Voice lang',
-                      ),
-                      _buildToolbarAction(
-                        icon: Icons.mic,
-                        onTap: () => _cartKey.currentState?.toggleMic(),
-                        tooltip: 'Voice billing',
-                        label: 'Mic',
-                      ),
-                    ],
                     const SizedBox(width: 4),
                   ],
                 ),
@@ -100,7 +123,7 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             child: IndexedStack(
               index: _currentTab,
               children: [
-                CartScreen(key: _cartKey),
+                CartScreen(key: _cartKey, status: _cartStatus),
                 _SalesHistory(salesAsync: salesAsync),
               ],
             ),
@@ -141,11 +164,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
     required VoidCallback? onTap,
     required String tooltip,
     required String label,
+    VoidCallback? onLongPress,
+    int badge = 0,
   }) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(8),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 52, minHeight: 52),
@@ -154,10 +180,14 @@ class _SalesScreenState extends ConsumerState<SalesScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 22, color: Colors.white),
+                Badge(
+                  isLabelVisible: badge > 0,
+                  label: Text('$badge'),
+                  child: Icon(icon, size: 24, color: Colors.white),
+                ),
                 Text(
                   label,
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ],
             ),

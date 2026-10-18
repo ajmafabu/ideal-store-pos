@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -799,7 +800,9 @@ class _DesktopPurchaseScreenState extends ConsumerState<DesktopPurchaseScreen> {
       _pendingSellPrices.clear();
       ref.invalidate(productsProvider);
       ref.invalidate(purchasesProvider);
-      await _loadProducts();
+      // new stock and prices load in the background: the screen waited for
+      // the whole product list before saying "saved" (slow shop internet)
+      unawaited(_loadProducts());
       if (mounted) {
         ref.read(desktopPurchaseProvider.notifier).resetAfterPurchase();
         setState(() {

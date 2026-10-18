@@ -44,8 +44,6 @@ class TamilBitmapRenderer {
   static const double _amtW = 100;
 
   static const double _tableRight = 542;
-  static const double _borderH = 1.0;
-  static const double _cellPadY = 2.0;
   static const double _lineGap = 1.5;
   static const double _topPad = 2.0;
 
@@ -116,6 +114,12 @@ class TamilBitmapRenderer {
     return bitmap;
   }
 
+  /// The Windows thermal bill as one picture (redesigned 18 Oct 2026, owner:
+  /// "more professional"):
+  ///   shop name · QUOTATION on a black band · bill no | date and time ·
+  ///   customer · item table with rules only (no box round every cell) ·
+  ///   totals in a money column · NET TOTAL on a black band · amount in
+  ///   words · how it was paid · thank you.
   static Future<Uint8List> renderReceiptAsImage({
     required List<String> headerLines,
     required List<ThermalRow> rows,
@@ -123,240 +127,198 @@ class TamilBitmapRenderer {
     required List<String> footerLines,
     double fontSize = 24,
   }) async {
-    final List<_LineInfo> lineInfos = [];
-    double totalH = _topPad;
+    const left = _snoX;
+    const right = _tableRight;
+    const width = right - left;
+    final blocks = <_Block>[];
 
-    for (final line in headerLines) {
-      if (line.isEmpty) {
-        lineInfos.add(_LineInfo(type: _LineType.empty, height: 4));
-        totalH += 4;
-        continue;
-      }
-      final isFirst = line == headerLines.first;
-      final isBold =
-          isFirst ||
-          line == 'QUOTATION' ||
-          line.startsWith('Date:') ||
-          line.startsWith('Customer:');
-      final sz = isFirst
-          ? 32.0
-          : (line == 'QUOTATION'
-              ? 30.0
-              : (line.startsWith('Customer:') ? 26.0 : 20.0));
-      final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: _canvasW - 20);
-      lineInfos.add(
-        _LineInfo(
-          type: _LineType.centered,
-          height: tp.height + _lineGap,
-          painter: tp,
-        ),
-      );
-      totalH += tp.height + _lineGap;
-    }
+    void gap(double h) => blocks.add(_Block(h, (_, __) {}));
 
-    lineInfos.add(_LineInfo(type: _LineType.borderTop, height: _borderH));
-    totalH += _borderH;
-
-    final hdrSno = _makeTp('#', 20, true);
-    final hdrPart = _makeTp('Item', 20, true);
-    final hdrQty = _makeTp('Qty', 20, true);
-    final hdrRate = _makeTp('Rate', 20, true);
-    final hdrAmt = _makeTp('Amt', 20, true);
-    hdrSno.layout(maxWidth: _snoW);
-    hdrPart.layout(maxWidth: _partW - 6);
-    hdrQty.layout(maxWidth: _qtyW);
-    hdrRate.layout(maxWidth: _rateW);
-    hdrAmt.layout(maxWidth: _amtW - 4);
-    final hdrH = hdrSno.height + _cellPadY * 2;
-    lineInfos.add(
-      _LineInfo(
-        type: _LineType.tableRow,
-        height: hdrH,
-        painters: [hdrSno, hdrPart, hdrQty, hdrRate, hdrAmt],
-      ),
-    );
-    totalH += hdrH;
-
-    lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
-    totalH += _borderH;
-
-    for (final row in rows) {
-      final sno = _makeTp('${row.sNo}', 26, true);
-      final qty = _makeTp(formatQty(row.qty), 26, true);
-      final rate = _makeTp(row.rate.toStringAsFixed(2), 26, true);
-      final amt = _makeTp(row.amount.toStringAsFixed(2), 26, true);
-
-      sno.layout(maxWidth: _snoW);
-      qty.layout(maxWidth: _qtyW);
-      rate.layout(maxWidth: _rateW);
-      amt.layout(maxWidth: _amtW);
-
-      var productName = row.productName;
-      final partTp = _makeTp(productName, 26, true);
-      partTp.layout(maxWidth: _partW - 6);
-      if (partTp.width > _partW - 6) {
-        int maxChars = productName.length;
-        while (maxChars > 3) {
-          final test = '${productName.substring(0, maxChars)}…';
-          final testTp = _makeTp(test, 20, true);
-          testTp.layout(maxWidth: _partW - 6);
-          if (testTp.width <= _partW - 6) {
-            productName = test;
-            break;
-          }
-          maxChars--;
-        }
-        if (maxChars <= 3) productName = '${productName.substring(0, 3)}…';
-      }
-
-      final part = _makeTp(productName, 26, true);
-      part.layout(maxWidth: _partW - 6);
-
-      final maxH = [sno, part, qty, rate, amt]
-          .fold<double>(0, (prev, tp) => tp.height > prev ? tp.height : prev);
-
-      lineInfos.add(
-        _LineInfo(
-          type: _LineType.tableRow,
-          height: maxH + _cellPadY * 2,
-          painters: [sno, part, qty, rate, amt],
-        ),
-      );
-      totalH += maxH + _cellPadY * 2;
-
-      lineInfos.add(_LineInfo(type: _LineType.borderRow, height: _borderH));
-      totalH += _borderH;
-    }
-
-    for (final line in totalLines) {
-      final isNetTotal = line.startsWith('NET TOTAL');
-      final isTotalItems = line.startsWith('Total Items');
-      final isBold = isNetTotal || line.startsWith('Total');
-      final sz = isNetTotal ? 32.0 : 24.0;
-      final tp = _makeTp(line, sz, isBold);
-      tp.layout(maxWidth: _canvasW - 20);
-      lineInfos.add(
-        _LineInfo(
-          type: isNetTotal
-              ? _LineType.centered
-              : (isTotalItems ? _LineType.leftAligned : _LineType.centered),
-          height: tp.height + _lineGap,
-          painter: tp,
-        ),
-      );
-      totalH += tp.height + _lineGap;
-    }
-
-    final footerTp = _makeTp('─────── ⋆⋅☆⋅⋆ ───────', 18, false);
-    footerTp.layout(maxWidth: _canvasW - 20);
-    lineInfos.add(
-      _LineInfo(
-        type: _LineType.centered,
-        height: footerTp.height + _lineGap,
-        painter: footerTp,
-      ),
-    );
-    totalH += footerTp.height + _lineGap;
-
-    totalH += _topPad;
-
-    final width = _canvasW.toInt();
-    final height = totalH.ceil();
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(
-      recorder,
-      Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-    );
-    canvas.drawColor(Colors.white, BlendMode.src);
-
-    final borderPaint = Paint()
-      ..color = Colors.black
-      ..strokeWidth = _borderH;
-
-    double y = _topPad;
-    for (final li in lineInfos) {
-      switch (li.type) {
-        case _LineType.empty:
-          y += li.height;
-        case _LineType.borderTop:
-          canvas.drawLine(
-            Offset(_snoX, y),
-            Offset(_tableRight, y),
-            borderPaint,
-          );
-          y += li.height;
-        case _LineType.borderRow:
-          canvas.drawLine(
-            Offset(_snoX, y),
-            Offset(_tableRight, y),
-            borderPaint,
-          );
-          y += li.height;
-        case _LineType.sep:
-          y += li.height;
-        case _LineType.centered:
-          if (li.painter != null) {
-            final cx = (_canvasW - li.painter!.width) / 2;
-            li.painter!.paint(canvas, Offset(cx > 0 ? cx : 0, y));
-          }
-          y += li.height;
-        case _LineType.leftAligned:
-          if (li.painter != null) {
-            li.painter!.paint(canvas, Offset(_snoX, y));
-          }
-          y += li.height;
-        case _LineType.rightAligned:
-          if (li.painter != null) {
-            final rx = _tableRight - li.painter!.width;
-            li.painter!.paint(canvas, Offset(rx > 0 ? rx : 0, y));
-          }
-          y += li.height;
-        case _LineType.tableRow:
-          final vLineTop = y;
-          final vLineBot = y + li.height;
-          canvas.drawLine(Offset(_snoX, vLineTop), Offset(_snoX, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_snoX + _snoW, vLineTop), Offset(_snoX + _snoW, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_partX, vLineTop), Offset(_partX, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_partX + _partW, vLineTop), Offset(_partX + _partW, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_qtyX, vLineTop), Offset(_qtyX, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_qtyX + _qtyW, vLineTop), Offset(_qtyX + _qtyW, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_rateX, vLineTop), Offset(_rateX, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_rateX + _rateW, vLineTop), Offset(_rateX + _rateW, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_amtX, vLineTop), Offset(_amtX, vLineBot), borderPaint);
-          canvas.drawLine(Offset(_amtX + _amtW, vLineTop), Offset(_amtX + _amtW, vLineBot), borderPaint);
-
-          if (li.painters != null && li.painters!.length >= 5) {
-            for (int i = 0; i < 5; i++) {
-              final tp = li.painters![i];
-              final cellY = y + (li.height - tp.height) / 2;
-              double cellX;
-              if (i == 0) {
-                cellX = _snoX + ((_snoW - tp.width) / 2);
-              } else if (i == 1) {
-                cellX = _partX + 4;
-              } else {
-                final colX = i == 2 ? _qtyX : (i == 3 ? _rateX : _amtX);
-                final colW = i == 2 ? _qtyW : (i == 3 ? _rateW : _amtW);
-                cellX = colX + colW - tp.width - 4;
+    void rule({double thick = 1, bool dashed = false}) => blocks.add(
+          _Block(thick + 4, (c, y) {
+            final paint = Paint()
+              ..color = Colors.black
+              ..strokeWidth = thick;
+            final ly = y + 2 + thick / 2;
+            if (!dashed) {
+              c.drawLine(const Offset(left, 0) + Offset(0, ly), Offset(right, ly), paint);
+            } else {
+              for (var x = left; x < right; x += 10) {
+                c.drawLine(Offset(x, ly), Offset(x + 5 > right ? right : x + 5, ly), paint);
               }
-              tp.paint(canvas, Offset(cellX, cellY));
             }
-          }
-          y += li.height;
+          }),
+        );
+
+    void centered(String text, double size, {bool bold = false}) {
+      final tp = _makeTp(text, size, bold)..layout(maxWidth: width);
+      blocks.add(_Block(tp.height + _lineGap, (c, y) => tp.paint(c, Offset(left + (width - tp.width) / 2, y))));
+    }
+
+    void leftText(String text, double size, {bool bold = false}) {
+      final tp = _makeTp(text, size, bold)..layout(maxWidth: width);
+      blocks.add(_Block(tp.height + _lineGap, (c, y) => tp.paint(c, Offset(left + 2, y))));
+    }
+
+    void twoSides(String l, String r, double size, {bool bold = false}) {
+      final a = _makeTp(l, size, bold)..layout(maxWidth: width / 2);
+      final b = _makeTp(r, size, bold)..layout(maxWidth: width);
+      final h = (a.height > b.height ? a.height : b.height) + _lineGap;
+      blocks.add(_Block(h, (c, y) {
+        a.paint(c, Offset(left + 2, y));
+        b.paint(c, Offset(right - b.width - 2, y));
+      }));
+    }
+
+    /// Bold text in a thin box across the bill (owner, 18 Oct 2026: no
+    /// solid black band; an outline prints faster and uses less paper).
+    void band(String l, String? r, double size) {
+      final a = _makeTp(l, size, true)..layout(maxWidth: width);
+      final b = r == null ? null : (_makeTp(r, size, true)..layout(maxWidth: width));
+      final h = a.height + 10;
+      blocks.add(_Block(h, (c, y) {
+        c.drawRect(
+          Rect.fromLTWH(left + 1, y + 1, width - 2, h - 2),
+          Paint()
+            ..color = Colors.black
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2,
+        );
+        if (b == null) {
+          a.paint(c, Offset(left + (width - a.width) / 2, y + 5));
+        } else {
+          a.paint(c, Offset(left + 10, y + 5));
+          b.paint(c, Offset(right - b.width - 10, y + 5));
+        }
+      }));
+    }
+
+    /// "Label:  amount", the amount right-aligned in the money column.
+    void money(String label, String value, double size, {bool bold = false}) {
+      final a = _makeTp(label, size, bold)..layout(maxWidth: width);
+      final b = _makeTp(value, size, bold)..layout(maxWidth: width);
+      final h = (a.height > b.height ? a.height : b.height) + _lineGap;
+      blocks.add(_Block(h, (c, y) {
+        final vx = right - b.width - 4;
+        var lx = _amtX - a.width - 10;
+        if (lx + a.width + 10 > vx) lx = vx - a.width - 10;
+        a.paint(c, Offset(lx < left ? left : lx, y));
+        b.paint(c, Offset(vx, y));
+      }));
+    }
+
+    // ── header ──
+    String? billNo, dateTime;
+    for (final line in headerLines) {
+      if (line.isEmpty) continue;
+      if (line == headerLines.first) {
+        centered(line, 36, bold: true);
+      } else if (line == 'QUOTATION') {
+        rule();
+        final tp = _makeTp('QUOTATION', 26, true, letterSpacing: 6)..layout(maxWidth: width);
+        blocks.add(_Block(tp.height + 2, (c, y) => tp.paint(c, Offset(left + (width - tp.width) / 2, y + 1))));
+        rule();
+        gap(4);
+      } else if (line.startsWith('Bill No:')) {
+        billNo = line;
+      } else if (line.startsWith('Date:')) {
+        dateTime = line.replaceFirst('Date: ', '').replaceFirst('  Time: ', '  ');
+      } else if (line.startsWith('Customer:')) {
+        if (billNo != null || dateTime != null) {
+          twoSides(billNo ?? '', dateTime ?? '', 20);
+          billNo = dateTime = null;
+        }
+        leftText(line, 24, bold: true);
+      } else {
+        centered(line, 20);
+      }
+    }
+    if (billNo != null || dateTime != null) twoSides(billNo ?? '', dateTime ?? '', 20);
+    gap(4);
+
+    // ── table: rules only ──
+    rule(thick: 2);
+    final heads = [
+      _makeTp('#', 20, true)..layout(maxWidth: _snoW),
+      _makeTp('Item', 20, true)..layout(maxWidth: _partW),
+      _makeTp('Qty', 20, true)..layout(maxWidth: _qtyW + 10),
+      _makeTp('Rate', 20, true)..layout(maxWidth: _rateW),
+      _makeTp('Amount', 20, true)..layout(maxWidth: _amtW),
+    ];
+    blocks.add(_Block(heads[0].height + 4, (c, y) => _paintRow(c, y + 2, heads)));
+    rule();
+    for (final row in rows) {
+      final cells = [
+        _makeTp('${row.sNo}', 24, false)..layout(maxWidth: _snoW),
+        _makeTp(row.productName, 24, true)..layout(maxWidth: _partW - 6),
+        _makeTp(formatQty(row.qty), 24, true)..layout(maxWidth: _qtyW + 10),
+        _makeTp(row.rate.toStringAsFixed(2), 24, false)..layout(maxWidth: _rateW),
+        _makeTp(row.amount.toStringAsFixed(2), 24, true)..layout(maxWidth: _amtW),
+      ];
+      final h = cells.fold<double>(0, (m, t) => t.height > m ? t.height : m) + 6;
+      blocks.add(_Block(h, (c, y) => _paintRow(c, y + 3, cells)));
+    }
+    rule();
+
+    // ── totals ──
+    for (final line in totalLines) {
+      final colon = line.indexOf(':');
+      if (line.startsWith('Total Items')) {
+        leftText(line, 20, bold: true);
+      } else if (line.startsWith('NET TOTAL')) {
+        gap(4);
+        band('NET TOTAL', '₹${line.substring(colon + 1).trim()}', 30);
+        gap(4);
+      } else if (line.startsWith('Rupees') || line.endsWith('Only')) {
+        centered(line, 19);
+        gap(4);
+      } else if (colon > 0) {
+        final due = line.startsWith('Balance Due');
+        money(line.substring(0, colon + 1), line.substring(colon + 1).trim(), due ? 26 : 22, bold: due);
+      } else {
+        leftText(line, 20);
       }
     }
 
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(width, height);
+    // ── footer ──
+    gap(6);
+    rule(dashed: true);
+    for (final line in footerLines) {
+      centered(line, 24, bold: true);
+    }
+    gap(10);
+
+    final totalH = blocks.fold<double>(_topPad, (t, b) => t + b.height);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, _canvasW, totalH));
+    canvas.drawColor(Colors.white, BlendMode.src);
+    var y = _topPad;
+    for (final b in blocks) {
+      b.paint(canvas, y);
+      y += b.height;
+    }
+    final image = await recorder.endRecording().toImage(_canvasW.toInt(), totalH.ceil());
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     image.dispose();
-
     return byteData?.buffer.asUint8List() ?? Uint8List(0);
   }
 
-  static TextPainter _makeTp(String text, double fontSize, bool bold) {
+  /// One table row: # centred, item from the left, numbers right-aligned.
+  static void _paintRow(Canvas c, double y, List<TextPainter> cells) {
+    cells[0].paint(c, Offset(_snoX + (_snoW - cells[0].width) / 2, y));
+    cells[1].paint(c, Offset(_partX + 4, y));
+    cells[2].paint(c, Offset(_qtyX + _qtyW - cells[2].width - 2, y));
+    cells[3].paint(c, Offset(_rateX + _rateW - cells[3].width - 4, y));
+    cells[4].paint(c, Offset(_amtX + _amtW - cells[4].width - 4, y));
+  }
+
+  static TextPainter _makeTp(
+    String text,
+    double fontSize,
+    bool bold, {
+    Color color = Colors.black,
+    double? letterSpacing,
+  }) {
     final hasTamil = RegExp(r'[\u0B80-\u0BFF]').hasMatch(text);
     final fontFamily = hasTamil ? 'Nirmala UI' : 'NotoSans';
 
@@ -365,10 +327,11 @@ class TamilBitmapRenderer {
         text: text,
         style: TextStyle(
           fontSize: fontSize,
-          color: Colors.black,
+          color: color,
           fontFamily: fontFamily,
           fontWeight: bold ? FontWeight.bold : FontWeight.normal,
           height: hasTamil ? 1.2 : null,
+          letterSpacing: letterSpacing,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -395,27 +358,9 @@ class TamilBitmapRenderer {
   }
 }
 
-enum _LineType {
-  empty,
-  sep,
-  centered,
-  leftAligned,
-  rightAligned,
-  tableRow,
-  borderTop,
-  borderRow,
-}
-
-class _LineInfo {
-  final _LineType type;
+/// One horizontal slice of the bill: its height and how to draw it.
+class _Block {
+  _Block(this.height, this.paint);
   final double height;
-  final TextPainter? painter;
-  final List<TextPainter>? painters;
-
-  _LineInfo({
-    required this.type,
-    required this.height,
-    this.painter,
-    this.painters,
-  });
+  final void Function(Canvas canvas, double y) paint;
 }

@@ -138,7 +138,16 @@ class CartItem {
     );
   }
 
-  CartItem copyWith({double? price, double? qty, double? discount, double? purchasePrice}) => CartItem(
+  /// [rateLabel] changes the line's rate name; [clearRateLabel] sets it
+  /// back to the normal price.
+  CartItem copyWith({
+    double? price,
+    double? qty,
+    double? discount,
+    double? purchasePrice,
+    String? rateLabel,
+    bool clearRateLabel = false,
+  }) => CartItem(
     productId: productId,
     name: name,
     price: price ?? this.price,
@@ -152,7 +161,7 @@ class CartItem {
     unitType: unitType,
     piecesPerUnit: piecesPerUnit,
     tier: tier,
-    rateLabel: rateLabel,
+    rateLabel: clearRateLabel ? null : (rateLabel ?? this.rateLabel),
     stockFactor: stockFactor,
   );
 }

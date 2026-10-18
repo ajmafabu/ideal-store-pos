@@ -21,6 +21,9 @@ class ThermalPrinterService {
   static const String _savedWindowsPrinterKey = 'saved_windows_printer_name';
   static const String _autoPrintKey = 'auto_print_enabled';
 
+  /// The saved Windows printer, once found.
+  static Printer? _printerCache;
+
   static final Uint8List _init = Uint8List.fromList([0x1B, 0x40]);
   static final Uint8List _leftAlign = Uint8List.fromList([0x1B, 0x61, 0x00]);
   static final Uint8List _feedAndCut = Uint8List.fromList([0x1D, 0x56, 0x00]);
@@ -370,11 +373,17 @@ class ThermalPrinterService {
         if (autoPrint &&
             savedPrinterName != null &&
             savedPrinterName.isNotEmpty) {
-          final printers = await Printing.listPrinters();
-          final savedPrinter = printers.cast<Printer?>().firstWhere(
-            (p) => p?.name == savedPrinterName,
-            orElse: () => null,
-          );
+          // the printer is looked up once: asking Windows for every printer
+          // on each bill can take seconds (18 Oct 2026)
+          var savedPrinter = _printerCache?.name == savedPrinterName ? _printerCache : null;
+          if (savedPrinter == null) {
+            final printers = await Printing.listPrinters();
+            savedPrinter = printers.cast<Printer?>().firstWhere(
+              (p) => p?.name == savedPrinterName,
+              orElse: () => null,
+            );
+            _printerCache = savedPrinter;
+          }
 
           if (savedPrinter != null) {
             try {
@@ -385,6 +394,7 @@ class ThermalPrinterService {
               );
               return true;
             } catch (e) {
+              _printerCache = null; // look it up again next time
               Logger.error('directPrint failed, falling back to dialog', e);
               // Fall through to dialog
             }
@@ -505,6 +515,7 @@ class ThermalPrinterService {
       if (selected != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_savedWindowsPrinterKey, selected.name);
+        _printerCache = selected;
       }
       return selected;
     } catch (e) {

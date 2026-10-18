@@ -1277,31 +1277,9 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
   }
 
   Future<void> _validateAndSave(SaleSession session) async {
-    // Offline: confirm before saving locally
-    final offlineService = ref.read(offlineServiceProvider);
-    if (!await offlineService.isOnline()) {
-      if (!mounted) return;
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('No Internet Connection'),
-          content: const Text(
-            'You are offline. The sale will be saved on this computer and synced when you reconnect.\n\n'
-            'Do you want to proceed?',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              style: TextButton.styleFrom(foregroundColor: Color(0xFFC2410C)),
-              child: const Text('Save Offline'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
-
+    // No separate "are we online?" check first: it was a server round trip
+    // (up to 5 s) before every bill. The save itself goes offline on a
+    // network error and says so (18 Oct 2026).
     final hasCustomer = session.customerId != null && session.customerId!.isNotEmpty;
     if (_selectedPayment == 'credit' && !hasCustomer) {
       _warn('Select a customer for credit sale');
@@ -1667,6 +1645,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           shopName: shopName,
           shopTagline: 'Smart Store - Smart Business',
           shopAddress: shopAddress,
+          // the bill's customer (it was left out, so till bills had no name)
+          customerName: sale.customerName,
           gstin: gstin,
           useTamil: useTamil,
           tamilNames: tamilNames,
@@ -1706,6 +1686,7 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
           shopName: shopName,
           shopTagline: 'Smart Store - Smart Business',
           shopAddress: shopAddress,
+          customerName: sale.customerName,
           useTamil: useTamil,
           tamilNames: tamilNames,
         );
