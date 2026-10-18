@@ -499,4 +499,172 @@ SELECT t.eq((SELECT due_amount FROM purchases WHERE id = '40000000-0000-0000-000
 SELECT t.eq(t.bal('cash'), (SELECT c FROM sp1) - 10 - 25, 'cash: 10 at purchase + 25 later, unchanged by the edit');
 SELECT t.eq(t.bal('bank'), (SELECT b FROM sp1) - 20, 'bank: 20 at purchase, unchanged by the edit');
 
+-- ===================================================== negative stock (2026_10_stock_negative.sql)
+-- goods sold before their purchase bill is entered: stock goes below zero,
+-- the purchase adds on top, nothing is counted twice
+SET ROLE authenticated;
+INSERT INTO products (id, name, purchase_price, selling_price, stock, unit, unit_type, gst_rate) VALUES
+  ('10000000-0000-0000-0000-0000000001f1', 'Neg Zero', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f2', 'Neg Five', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f3', 'Neg Many', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f4', 'Neg Plus', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f5', 'Neg Cancel', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f6', 'Neg Edit', 8, 10, 0, 'pcs', 'pieces', 0),
+  ('10000000-0000-0000-0000-0000000001f7', 'Neg Count', 8, 10, 0, 'pcs', 'pieces', 0);
+
+-- 1. stock 0, sell 12, then purchase 100 -> 88
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f1","name":"Neg Zero","qty":12,"price":10,"total":120}]', 120, 120, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Zero'), -12, 'sold 12 at 0 stock: -12 (was clamped to 0)');
+SELECT t.eq(t.batches('Neg Zero'), 0, '... no batch goes below zero');
+SELECT t.eq((SELECT public.jnum(items->0, 'oversold_qty', 0) FROM sales WHERE id='50000000-0000-0000-0000-0000000001f1'), 12,
+  '... the line notes the 12 not on hand');
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f1', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f1","name":"Neg Zero","qty":100,"price":8}]', 800, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Zero'), 88, 'then purchase 100: -12 + 100 = 88');
+SELECT t.eq(t.batches('Neg Zero'), 88, '... batches 88: the 12 sold are not deducted twice');
+SELECT t.eq((SELECT quantity FROM inventory_batches WHERE purchase_id='40000000-0000-0000-0000-0000000001f1'), 100,
+  '... the purchase keeps its real quantity (100)');
+
+-- 2. stock 5, sell 8, then purchase 100 -> 97
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f2', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f2","name":"Neg Five","qty":5,"price":8}]', 40, 'cash');
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f2',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f2","name":"Neg Five","qty":8,"price":10,"total":80}]', 80, 80, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Five'), -3, 'stock 5, sold 8: -3');
+SELECT t.eq((SELECT public.jnum(items->0, 'oversold_qty', 0) FROM sales WHERE id='50000000-0000-0000-0000-0000000001f2'), 3,
+  '... 3 were not on hand');
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f3', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f2","name":"Neg Five","qty":100,"price":9}]', 900, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Five'), 97, 'then purchase 100: 97');
+SELECT t.eq(t.batches('Neg Five'), 97, '... batches 97');
+
+-- 3. several sales below zero, then one purchase
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES
+  ('50000000-0000-0000-0000-0000000001f3', '[{"product_id":"10000000-0000-0000-0000-0000000001f3","name":"Neg Many","qty":5,"price":10,"total":50}]', 50, 50, 'cash'),
+  ('50000000-0000-0000-0000-0000000001f4', '[{"product_id":"10000000-0000-0000-0000-0000000001f3","name":"Neg Many","qty":4,"price":10,"total":40}]', 40, 40, 'cash'),
+  ('50000000-0000-0000-0000-0000000001f5', '[{"product_id":"10000000-0000-0000-0000-0000000001f3","name":"Neg Many","qty":3,"price":10,"total":30}]', 30, 30, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Many'), -12, 'sales of 5, 4 and 3 at 0 stock: -12');
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f4', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f3","name":"Neg Many","qty":100,"price":8}]', 800, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Many'), 88, 'then purchase 100: 88, every sale counted once');
+SELECT t.eq(t.batches('Neg Many'), 88, '... batches 88');
+
+-- 4. purchase when the stock is already positive
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES
+  ('40000000-0000-0000-0000-0000000001f5', 'Agency', '[{"product_id":"10000000-0000-0000-0000-0000000001f4","name":"Neg Plus","qty":10,"price":8}]', 80, 'cash'),
+  ('40000000-0000-0000-0000-0000000001f6', 'Agency', '[{"product_id":"10000000-0000-0000-0000-0000000001f4","name":"Neg Plus","qty":20,"price":8}]', 160, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Plus'), 30, 'positive stock: 10 + 20 = 30');
+SELECT t.eq(t.batches('Neg Plus'), 30, '... batches 30');
+
+-- 5. cancel (delete) a bill: while below zero, and after the purchase came
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f6',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f5","name":"Neg Cancel","qty":6,"price":10,"total":60}]', 60, 60, 'cash');
+SELECT delete_sale_atomic('50000000-0000-0000-0000-0000000001f6');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Cancel'), 0, 'sold 6 at 0 (-6), bill deleted: back to 0');
+SELECT t.eq(t.batches('Neg Cancel'), 0, '... no phantom batch left');
+SET ROLE authenticated;
+SELECT delete_sale_atomic('50000000-0000-0000-0000-0000000001f1');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Zero'), 100, 'the 12 sold before the purchase, deleted later: 88 + 12 = 100');
+SELECT t.eq(t.batches('Neg Zero'), 100, '... batches 100');
+
+-- 6. sales return: after the purchase, and while still below zero
+SET ROLE authenticated;
+SELECT (create_return_atomic('60000000-0000-0000-0000-0000000001f1','10000000-0000-0000-0000-0000000001f3',
+   '50000000-0000-0000-0000-0000000001f5','Neg Many',3)).quantity AS nr1 \gset
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f7',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f5","name":"Neg Cancel","qty":10,"price":10,"total":100}]', 100, 100, 'cash');
+SELECT (create_return_atomic('60000000-0000-0000-0000-0000000001f2','10000000-0000-0000-0000-0000000001f5',
+   '50000000-0000-0000-0000-0000000001f7','Neg Cancel',4)).quantity AS nr2 \gset
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Many'), 91, 'return 3 after the purchase: 88 + 3 = 91');
+SELECT t.eq(t.batches('Neg Many'), 91, '... batches 91');
+SELECT t.eq(t.stock('Neg Cancel'), -6, 'sold 10 at 0, 4 returned: -6');
+SELECT t.eq(t.batches('Neg Cancel'), 0, '... still no batch');
+
+-- 7. purchase edited / taken back: bought 3 while at -5, edited to 10
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f8',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f6","name":"Neg Edit","qty":5,"price":10,"total":50}]', 50, 50, 'cash');
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f7',
+  '20000000-0000-0000-0000-000000000001', 'Agency', '[{"product_id":"10000000-0000-0000-0000-0000000001f6","name":"Neg Edit","qty":3,"price":8}]', 24, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Edit'), -2, 'sold 5 at 0, bought 3: -2');
+SELECT t.eq(t.batches('Neg Edit'), 0, '... all 3 went to what was sold');
+SET ROLE authenticated;
+SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000001f7',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f6","name":"Neg Edit","qty":10,"price":8}]'::jsonb,
+  80, '20000000-0000-0000-0000-000000000001', 'Agency', false, 80, 0, 'cash', 'bill said 10');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Edit'), 5, 'purchase edited 3 -> 10: -2 + 7 = 5');
+SELECT t.eq(t.batches('Neg Edit'), 5, '... batches 5');
+SET ROLE authenticated;
+SELECT t.fails($$SELECT edit_purchase_atomic('40000000-0000-0000-0000-0000000001f7',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f6","name":"Neg Edit","qty":2,"price":8}]'::jsonb,
+  16, '20000000-0000-0000-0000-000000000001', 'Agency', false, 16, 0, 'cash', 'typo')$$,
+  'already sold', 'a purchase cannot go below what was sold from it');
+SELECT delete_purchase_atomic('40000000-0000-0000-0000-0000000001f6');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Plus'), 10, 'unsold purchase deleted: 30 - 20 = 10');
+
+-- 8. retry: the same bill sent twice is applied once
+SET ROLE authenticated;
+SELECT t.fails($$INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f8',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f6","name":"Neg Edit","qty":5,"price":10,"total":50}]', 50, 50, 'cash')$$,
+  'duplicate', 'a retried bill is refused');
+SELECT t.fails($$INSERT INTO purchases (id, supplier_name, items, total_amount, payment_method) VALUES ('40000000-0000-0000-0000-0000000001f1', 'Agency',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f1","name":"Neg Zero","qty":100,"price":8}]', 800, 'cash')$$,
+  'duplicate', 'a retried purchase is refused');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Edit'), 5, '... stock unchanged by the retries');
+SELECT t.eq(t.stock('Neg Zero'), 100, '... purchase stock unchanged too');
+
+-- Stock In, physical count, Stock Out and damaged while below zero
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001f9',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f7","name":"Neg Count","qty":12,"price":10,"total":120}]', 120, 120, 'cash');
+SELECT adjust_stock('10000000-0000-0000-0000-0000000001f7', 5);
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Count'), -7, 'Stock In 5 at -12: -7');
+SELECT t.eq(t.batches('Neg Count'), 0, '... covers what was sold, no batch');
+SET ROLE authenticated;
+SELECT t.fails($$SELECT adjust_stock('10000000-0000-0000-0000-0000000001f7', -1)$$, 'cannot remove', 'Stock Out below zero is still refused');
+SELECT t.fails($$SELECT create_damaged_atomic(gen_random_uuid(), '10000000-0000-0000-0000-0000000001f7', 'Neg Count', 1)$$,
+  'Insufficient', 'damaged below zero is still refused');
+SELECT reconcile_stock_with_batches('10000000-0000-0000-0000-0000000001f7', 20);
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Count'), 20, 'physical count of 20 at -7: 20');
+SELECT t.eq(t.batches('Neg Count'), 20, '... batches 20');
+
+-- 10. reports: a negative stock adds nothing to stock value
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001fa',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001f5","name":"Neg Cancel","qty":1,"price":10,"total":10}]', 10, 10, 'cash');
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Cancel'), -7, 'Neg Cancel at -7');
+SELECT t.eq((SELECT sum(coalesce(b.val, 0) + greatest(p.stock - coalesce(b.qty, 0), 0) * p.purchase_price)
+             FROM products p LEFT JOIN (SELECT product_id, sum(remaining) qty, sum(remaining * purchase_price) val
+                                        FROM inventory_batches GROUP BY 1) b ON b.product_id = p.id
+             WHERE p.name = 'Neg Cancel'), 0, 'stock value of a negative stock is 0, not negative');
+SELECT t.ok(NOT EXISTS (SELECT 1 FROM products p
+                        WHERE p.stock >= 0 AND p.name LIKE 'Neg %'
+                          AND abs(p.stock - coalesce((SELECT sum(remaining) FROM inventory_batches b WHERE b.product_id = p.id), 0)) > 0.001),
+  'batches equal the stock for every product that is not below zero');
+
 \echo ALL SCENARIO TESTS PASSED

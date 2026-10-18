@@ -172,6 +172,10 @@ class Product {
   bool get isLowStock => stock > 0 && stock <= lowStockAlert;
   bool get hasDualRates => sellingPrice2 != null && sellingPrice2! > 0;
 
+  /// Stock that is actually there to value: a stock below zero (sold before
+  /// its purchase bill was entered) is worth nothing, not a minus amount.
+  double get stockOnHand => stock > 0 ? stock : 0;
+
   // Total stock across all variants (for display)
   double get totalStock {
     if (!hasVariants || variants.isEmpty) return stock;

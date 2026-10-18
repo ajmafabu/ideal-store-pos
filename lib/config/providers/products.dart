@@ -21,7 +21,7 @@ final stockSellingValueProvider = FutureProvider<double>((ref) async {
     double sellingValue = 0;
     for (final p in products) {
       if (!p.hasVariants) {
-        sellingValue += p.stock * p.sellingPrice;
+        sellingValue += p.stockOnHand * p.sellingPrice;
       } else {
         for (final v in p.variants) {
           if (v.isActive) {

@@ -738,8 +738,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
         case 'qty_desc': return b.stock.compareTo(a.stock);
         case 'price_asc': return a.sellingPrice.compareTo(b.sellingPrice);
         case 'price_desc': return b.sellingPrice.compareTo(a.sellingPrice);
-        case 'value_asc': return (a.stock * a.sellingPrice).compareTo(b.stock * b.sellingPrice);
-        case 'value_desc': return (b.stock * b.sellingPrice).compareTo(a.stock * a.sellingPrice);
+        case 'value_asc': return (a.stockOnHand * a.sellingPrice).compareTo(b.stockOnHand * b.sellingPrice);
+        case 'value_desc': return (b.stockOnHand * b.sellingPrice).compareTo(a.stockOnHand * a.sellingPrice);
         case 'name_desc': return b.name.compareTo(a.name);
         default:
           final aStart = a.name.codeUnitAt(0);
@@ -1171,7 +1171,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Rs.${product.sellingPrice} | Stock: ${formatQty(product.stock)} ${product.unit} | Worth: Rs.${(product.stock * product.purchasePrice).toStringAsFixed(0)}',
+                                'Rs.${product.sellingPrice} | Stock: ${formatQty(product.stock)} ${product.unit} | Worth: Rs.${(product.stockOnHand * product.purchasePrice).toStringAsFixed(0)}',
                               ),
                               if (product.expiryDate != null)
                                 Text(
@@ -1329,8 +1329,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       final now = AppTimezone.nowIst();
       final dateStr = _pdfDateFormat.format(now);
 
-      final totalStockValue = filtered.fold(0.0, (sum, p) => sum + (p.stock * p.purchasePrice));
-      final totalSellingValue = filtered.fold(0.0, (sum, p) => sum + (p.stock * p.sellingPrice));
+      final totalStockValue = filtered.fold(0.0, (sum, p) => sum + (p.stockOnHand * p.purchasePrice));
+      final totalSellingValue = filtered.fold(0.0, (sum, p) => sum + (p.stockOnHand * p.sellingPrice));
       final totalStockQty = formatQty(filtered.fold<double>(0, (sum, p) => sum + p.stock));
 
       final pdf = pw.Document();
@@ -1435,7 +1435,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                        child: pw.Text(_pdfCurrencyFormat.format(p.stock * p.purchasePrice), style: pw.TextStyle(font: f, fontSize: 7)),
+                        child: pw.Text(_pdfCurrencyFormat.format(p.stockOnHand * p.purchasePrice), style: pw.TextStyle(font: f, fontSize: 7)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -1573,7 +1573,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                 ],
               ),
               Text(
-                'Worth: Rs.${(product.stock * product.purchasePrice).toStringAsFixed(0)}',
+                'Worth: Rs.${(product.stockOnHand * product.purchasePrice).toStringAsFixed(0)}',
                 style: const TextStyle(fontSize: 10, color: Color(0xFF455A64)),
               ),
               if (product.expiryDate != null)

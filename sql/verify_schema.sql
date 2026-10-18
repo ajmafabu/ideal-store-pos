@@ -172,5 +172,16 @@ checks AS (
          CASE WHEN to_regprocedure('public.purchase_rebalance_items(public.purchases, public.purchases)') IS NULL
               THEN 'a purchase cannot be edited once any of it is sold — run sql/2026_10_purchase_split.sql again'
               ELSE 'items can be added / changed after some stock was sold' END
+  UNION ALL
+  SELECT 21, 'sell before the purchase is entered (negative stock)',
+         CASE WHEN to_regprocedure('public.settle_stock_deficit(uuid, numeric, numeric)') IS NULL THEN 'MISSING'
+              WHEN NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_stock_non_negative')
+                   AND pg_get_functiondef(to_regprocedure('public.purchase_apply_items(public.purchases)')) ILIKE '%settle_stock_deficit%'
+                   AND pg_get_functiondef(to_regprocedure('public.sale_apply_items(jsonb)')) NOT ILIKE '%v_new_stock := 0%'
+                   AND NOT has_function_privilege('authenticated', 'public.settle_stock_deficit(uuid, numeric, numeric)', 'EXECUTE')
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.settle_stock_deficit(uuid, numeric, numeric)') IS NULL
+              THEN 'stock stops at 0 and later purchases over-count — run sql/2026_10_stock_negative.sql'
+              ELSE 'sold 12 at 0 stock = -12; purchase 100 later = 88' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

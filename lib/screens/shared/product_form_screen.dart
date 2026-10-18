@@ -594,7 +594,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
   Future<void> _deleteProduct() async {
     final p = widget.product!;
     // say what disappears with it (QA #89)
-    final stockValue = p.stock * p.purchasePrice;
+    final stockValue = p.stockOnHand * p.purchasePrice;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
