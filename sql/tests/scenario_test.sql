@@ -667,4 +667,83 @@ SELECT t.ok(NOT EXISTS (SELECT 1 FROM products p
                           AND abs(p.stock - coalesce((SELECT sum(remaining) FROM inventory_batches b WHERE b.product_id = p.id), 0)) > 0.001),
   'batches equal the stock for every product that is not below zero');
 
+-- ---------------------------------------------------------------- owner summary (IdealCash viewer)
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','',false);
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
+  ('00000000-0000-0000-0000-00000000000d', 'owner+idealcash@shop.in', '{"name":"IdealCash","role":"admin"}');
+SELECT t.ok((SELECT role='staff' AND NOT active FROM profiles WHERE id='00000000-0000-0000-0000-00000000000d'),
+  'viewer login starts as inactive staff');
+INSERT INTO owner_viewers (user_id, note) VALUES ('00000000-0000-0000-0000-00000000000d', 'IdealCash');
+
+-- the admin's summary matches the shop's own reports
+SELECT set_config('t.month_start', date_trunc('month', ist_today())::date::text, false);
+SELECT set_config('t.today', ist_today()::text, false);
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+SET ROLE authenticated;
+SELECT set_config('t.os_admin', get_owner_summary()::text, false);
+SELECT set_config('t.bs_cash', (SELECT cash_in_hand FROM get_balance_sheet())::text, false);
+SELECT set_config('t.bs_stock', (SELECT inventory_value FROM get_balance_sheet())::text, false);
+SELECT set_config('t.bs_ok', (SELECT balance_check FROM get_balance_sheet())::text, false);
+SELECT set_config('t.pl_month', (SELECT net_profit FROM get_profit_loss(
+  current_setting('t.month_start')::date, current_setting('t.today')::date))::text, false);
+RESET ROLE;
+SELECT t.eq((current_setting('t.os_admin')::jsonb ->> 'version')::numeric, 1, 'owner summary: admin can read it');
+SELECT t.eq((current_setting('t.os_admin')::jsonb -> 'position' ->> 'cash')::numeric,
+            round(current_setting('t.bs_cash')::numeric, 2), 'owner summary cash = balance sheet cash');
+SELECT t.eq((current_setting('t.os_admin')::jsonb -> 'position' ->> 'stock_value')::numeric,
+            round(current_setting('t.bs_stock')::numeric, 2), 'owner summary stock value = balance sheet');
+SELECT t.ok((current_setting('t.os_admin')::jsonb -> 'checks' ->> 'balance_sheet_balanced') = current_setting('t.bs_ok'),
+  'owner summary balance check = balance sheet');
+SELECT t.eq((current_setting('t.os_admin')::jsonb -> 'this_month' ->> 'net_profit')::numeric,
+            round(current_setting('t.pl_month')::numeric, 2), 'owner summary month profit = Profit & Loss');
+SELECT t.ok((current_setting('t.os_admin')::jsonb -> 'financial_year' ->> 'from')::date
+            = make_date(CASE WHEN extract(month FROM ist_today()) >= 4 THEN extract(year FROM ist_today())::int
+                             ELSE extract(year FROM ist_today())::int - 1 END, 4, 1),
+  'owner summary financial year starts on 1 April');
+SELECT t.ok((SELECT bool_and(current_setting('t.os_admin')::jsonb ? k)
+             FROM unnest(ARRAY['today','this_month','last_month','financial_year','position','checks']) k),
+  'owner summary has every section');
+
+-- the viewer reads the summary and nothing else
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000d',false);
+SET ROLE authenticated;
+SELECT t.ok(get_owner_summary() -> 'position' = current_setting('t.os_admin')::jsonb -> 'position',
+  'viewer reads the same position as the admin');
+SELECT t.eq((SELECT count(*) FROM products), 0, 'viewer reads no products');
+SELECT t.eq((SELECT count(*) FROM sales), 0, 'viewer reads no sales');
+SELECT t.eq((SELECT count(*) FROM customers), 0, 'viewer reads no customers');
+SELECT t.eq((SELECT count(*) FROM owner_viewers), 0, 'viewer cannot list viewers');
+SELECT t.fails($$SELECT * FROM get_balance_sheet()$$, 'Admin permission', 'viewer cannot open the balance sheet');
+SELECT t.fails($$SELECT * FROM get_profit_loss(current_date, current_date)$$, 'Admin permission', 'viewer cannot run reports');
+SELECT t.fails($$INSERT INTO sales(items, final_amount) VALUES ('[]', 10)$$, 'not active', 'viewer cannot sell');
+SELECT t.fails($$INSERT INTO owner_viewers (user_id) VALUES ('00000000-0000-0000-0000-00000000000c')$$,
+  'row-level security', 'viewer cannot add another viewer');
+SELECT t.fails($$SELECT * FROM balance_sheet_figures()$$, 'permission denied', 'internal balance-sheet figures are not callable');
+SELECT t.fails($$SELECT owner_period_json(now(), now(), current_date, current_date)$$, 'permission denied',
+  'internal period figures are not callable');
+RESET ROLE;
+
+-- active staff: refused, even when listed as a viewer by mistake
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000b',false);
+SET ROLE authenticated;
+SELECT t.fails($$SELECT get_owner_summary()$$, 'Owner summary permission', 'staff cannot read the owner summary');
+RESET ROLE;
+INSERT INTO owner_viewers (user_id) VALUES ('00000000-0000-0000-0000-00000000000b');
+SET ROLE authenticated;
+SELECT t.fails($$SELECT get_owner_summary()$$, 'Owner summary permission', 'active staff listed as viewer is still refused');
+RESET ROLE;
+DELETE FROM owner_viewers WHERE user_id = '00000000-0000-0000-0000-00000000000b';
+
+-- an unlisted inactive login and anon are refused
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000c',false);
+SET ROLE authenticated;
+SELECT t.fails($$SELECT get_owner_summary()$$, 'Owner summary permission', 'unlisted login cannot read the owner summary');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','',false);
+SET ROLE anon;
+SELECT t.fails($$SELECT get_owner_summary()$$, 'permission denied', 'anon cannot read the owner summary');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+
 \echo ALL SCENARIO TESTS PASSED

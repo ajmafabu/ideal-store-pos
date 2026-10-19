@@ -183,5 +183,18 @@ checks AS (
          CASE WHEN to_regprocedure('public.settle_stock_deficit(uuid, numeric, numeric)') IS NULL
               THEN 'stock stops at 0 and later purchases over-count — run sql/2026_10_stock_negative.sql'
               ELSE 'sold 12 at 0 stock = -12; purchase 100 later = 88' END
+  UNION ALL
+  SELECT 22, 'owner summary for IdealCash',
+         CASE WHEN to_regprocedure('public.get_owner_summary()') IS NULL OR to_regclass('public.owner_viewers') IS NULL THEN 'MISSING'
+              WHEN has_function_privilege('authenticated', 'public.get_owner_summary()', 'EXECUTE')
+                   AND NOT has_function_privilege('anon', 'public.get_owner_summary()', 'EXECUTE')
+                   AND NOT has_function_privilege('authenticated', 'public.balance_sheet_figures()', 'EXECUTE')
+                   AND pg_get_functiondef(to_regprocedure('public.get_balance_sheet()')) ILIKE '%balance_sheet_figures%'
+                   AND (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.owner_viewers'))
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.get_owner_summary()') IS NULL OR to_regclass('public.owner_viewers') IS NULL
+              THEN 'IdealCash cannot show Ideal Store — run sql/2026_10_owner_summary.sql'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.owner_viewers', false, true, '')))[1]::text
+                   || ' viewer login(s). If 2026_10_audit_fixes.sql is run again, run 2026_10_owner_summary.sql again too' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;
