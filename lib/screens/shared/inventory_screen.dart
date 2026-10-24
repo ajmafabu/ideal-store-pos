@@ -17,6 +17,12 @@ import '../../widgets/barcode_scanner.dart';
 import '../../utils/error_messages.dart';
 import '../../widgets/empty_state.dart';
 import 'product_form_screen.dart';
+import 'product_detail_screen.dart';
+import '../admin/hidden_products_screen.dart';
+import '../admin/stock_check_screen.dart';
+import '../admin/stock_health_screen.dart';
+import '../admin/supplier_return_screen.dart';
+import '../../services/product_service.dart';
 import '../../utils/qty_format.dart';
 
 class InventoryScreen extends ConsumerStatefulWidget {
@@ -96,6 +102,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       ref.invalidate(productsProvider);
       _loadCategories();
     });
+  }
+
+  /// The product page: stock, prices, actions and its whole history.
+  void _openDetail(Product product) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: product)))
+        .then((_) => ref.invalidate(productsProvider));
+  }
+
+  /// Long press: Stock In / Out with a reason (admin).
+  Future<void> _quickStockInOut(Product product) async {
+    if (!_canEdit()) return;
+    final done = await showStockInOutSheet(context, ref, product);
+    if (done == true) ref.invalidate(productsProvider);
   }
 
   void _openEditProduct(Product product) {
@@ -690,6 +710,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           bool match = true;
           switch (filter) {
             case 'out_of_stock': match = stockVal == 0; break;
+            case 'in_stock': match = stockVal > 0; break;
             case 'low_stock': match = stockVal > 0 && p.lowStockAlert > 0 && stockVal <= p.lowStockAlert; break;
             case 'excess': match = p.lowStockAlert > 0 && stockVal > p.lowStockAlert * 3; break;
             case 'negative': match = stockVal < 0; break;
@@ -718,6 +739,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
             case 'below_cost': match = p.sellingPrice > 0 && p.sellingPrice <= p.purchasePrice; break;
             case 'zero_price': match = p.sellingPrice == 0; break;
             case 'has_variants': match = p.hasVariants; break;
+            case 'hidden': match = p.isHidden; break;
             case 'no_variants': match = !p.hasVariants; break;
             default:
               if (filter.startsWith('cat_')) {
@@ -729,7 +751,10 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           if (!match) { matchesFilters = false; break; }
         }
       }
-      return matchesSearch && matchesCategory && matchesStockRange && matchesPriceRange && matchesFilters;
+      // hidden products (empty for 30 days) only under their own filter, or
+      // when searched for by name
+      final matchesHidden = _activeFilters.contains('hidden') ? p.isHidden : (!p.isHidden || _searchQuery.isNotEmpty);
+      return matchesSearch && matchesCategory && matchesStockRange && matchesPriceRange && matchesFilters && matchesHidden;
     }).toList();
 
     filtered.sort((a, b) {
@@ -771,7 +796,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
   String _filterLabel(String value) {
     const labels = {
-      'out_of_stock': 'Out of Stock', 'low_stock': 'Low Stock', 'excess': 'Excess',
+      'out_of_stock': 'Out of Stock', 'in_stock': 'In Stock', 'low_stock': 'Low Stock', 'excess': 'Excess',
       'negative': 'Negative', 'fast_moving': 'Fast', 'slow_moving': 'Slow',
       'no_sales': 'Never Sold', 'sold_today': 'Today', 'sold_7d': '7 Days',
       'sold_30d': '30 Days', 'no_move_7d': 'No Sale 7d', 'no_move_15d': 'No Sale 15d',
@@ -784,6 +809,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
       'expiring': 'Expiring', 'expired': 'Expired',
       'below_cost': 'Below Cost', 'zero_price': 'Zero Price',
       'has_variants': 'Has Variants', 'no_variants': 'No Variants',
+      'hidden': 'Hidden',
     };
     if (value.startsWith('cat_')) return value.substring(4);
     return labels[value] ?? value;
@@ -815,59 +841,174 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     );
   }
 
+  /// Product counts across the top (owner, 23 Oct 2026). Tapping one shows
+  /// just those products; tapping it again shows all.
+  Widget _buildCounts(List<Product> products) {
+    final items = products;
+    final shown = items.where((p) => !p.isHidden).toList();
+    final counts = <(String, String?, int, Color, Color)>[
+      ('Total', null, shown.length, const Color(0xFFE4EEFD), const Color(0xFF0A3550)),
+      ('In stock', 'in_stock', shown.where((p) => p.totalStock > 0).length, const Color(0xFFE3F5EA), const Color(0xFF0F7A4E)),
+      ('Low', 'low_stock',
+          shown.where((p) => p.totalStock > 0 && p.lowStockAlert > 0 && p.totalStock <= p.lowStockAlert).length,
+          const Color(0xFFFFF4DE), const Color(0xFF6B3A00)),
+      ('Out of stock', 'out_of_stock', shown.where((p) => p.totalStock == 0).length, const Color(0xFFFDE8E6),
+          const Color(0xFF8F1D14)),
+      ('Below zero', 'negative', shown.where((p) => p.totalStock < 0).length, const Color(0xFFFDEFE0),
+          const Color(0xFF9A3412)),
+      ('Hidden', 'hidden', items.where((p) => p.isHidden).length, const Color(0xFFEFEAFB), const Color(0xFF4C3A8F)),
+    ];
+    return SizedBox(
+      height: 64,
+      child: ListView(
+        // its own scroll memory: it opened scrolled to another list's spot
+        key: const PageStorageKey('stock_counts'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+        children: [
+          for (final (label, filter, n, bg, fg) in counts)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Material(
+                color: bg,
+                borderRadius: BorderRadius.circular(12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: (filter == null ? _activeFilters.isEmpty : _activeFilters.contains(filter))
+                        ? fg
+                        : Colors.transparent,
+                    width: 1.5,
+                  ),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => setState(() {
+                    final on = filter != null && _activeFilters.contains(filter);
+                    _activeFilters.clear();
+                    if (filter != null && !on) _activeFilters.add(filter);
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(NumberFormat('#,##,##0', 'en_IN').format(n),
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: fg)),
+                        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// "Showing 120 of 1,180" above the list.
+  Widget _withShowing(int showing, int all, Widget list) {
+    final f = NumberFormat('#,##,##0', 'en_IN');
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              showing == all ? '${f.format(all)} products' : 'Showing ${f.format(showing)} of ${f.format(all)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        Expanded(child: list),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final productsAsync = ref.watch(productsProvider);
+    final isAdmin = ref.watch(profileProvider).value?.isAdmin ?? false;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF4F8FB),
       appBar: AppBar(
-        title: const Text('Inventory'),
+        backgroundColor: const Color(0xFFCFEAF7),
+        foregroundColor: const Color(0xFF0A3550),
+        titleTextStyle: const TextStyle(color: Color(0xFF0A3550), fontSize: 20, fontWeight: FontWeight.w800),
+        title: const Text('Stock'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.invalidate(productsProvider);
-              _loadSalesStats();
-              _loadCategories();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Inventory refreshed'),
-                  backgroundColor: Color(0xFF059669),
-                  duration: Duration(seconds: 1),
-                ),
-              );
-            },
-            tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
-            onPressed: () => setState(() => _isGridView = !_isGridView),
-            tooltip: _isGridView ? 'List View' : 'Grid View',
-          ),
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf),
-            onPressed: _exportPdf,
-            tooltip: 'Export PDF',
-          ),
-          IconButton(
-            icon: const Icon(Icons.table_view),
-            onPressed: _exportGstSheet,
-            tooltip: 'Export for GST (Excel)',
-          ),
-          IconButton(
-            icon: const Icon(Icons.fact_check),
-            onPressed: _showStockReconciliation,
-            tooltip: 'Stock Reconciliation',
-          ),
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             onPressed: _scanBarcode,
-            tooltip: 'Scan Barcode',
+            tooltip: 'Scan barcode',
+          ),
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.fact_check_outlined),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockCheckScreen()))
+                  .then((_) => ref.invalidate(productsProvider)),
+              tooltip: 'Count stock',
+            ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            onSelected: (v) {
+              switch (v) {
+                case 'refresh':
+                  ProductService.invalidateCache();
+                  ref.invalidate(productsProvider);
+                  _loadSalesStats();
+                  _loadCategories();
+                case 'view':
+                  setState(() => _isGridView = !_isGridView);
+                case 'pdf':
+                  _exportPdf();
+                case 'gst':
+                  _exportGstSheet();
+                case 'health':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const StockHealthScreen()));
+                case 'return':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnScreen()))
+                      .then((_) => ref.invalidate(productsProvider));
+                case 'hidden':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const HiddenProductsScreen()));
+                case 'quick':
+                  _showStockReconciliation();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.refresh), title: Text('Refresh'))),
+              PopupMenuItem(
+                value: 'view',
+                child: ListTile(
+                  leading: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
+                  title: Text(_isGridView ? 'List view' : 'Grid view'),
+                ),
+              ),
+              if (isAdmin) ...[
+                const PopupMenuItem(
+                    value: 'health', child: ListTile(leading: Icon(Icons.monitor_heart_outlined), title: Text('Stock health'))),
+                const PopupMenuItem(
+                    value: 'return',
+                    child: ListTile(leading: Icon(Icons.assignment_return_outlined), title: Text('Return to supplier'))),
+                const PopupMenuItem(
+                    value: 'hidden', child: ListTile(leading: Icon(Icons.visibility_off_outlined), title: Text('Hidden products'))),
+                const PopupMenuItem(
+                    value: 'quick', child: ListTile(leading: Icon(Icons.fact_check), title: Text('Quick reconciliation'))),
+              ],
+              const PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf), title: Text('Export PDF'))),
+              const PopupMenuItem(
+                  value: 'gst', child: ListTile(leading: Icon(Icons.table_view), title: Text('Export for GST (Excel)'))),
+            ],
           ),
         ],
       ),
       body: Column(
         children: [
+          _buildCounts(productsAsync.value ?? const <Product>[]),
           // Search + Sort row (shared)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -983,6 +1124,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       _buildFilterChip('Low Stock', 'low_stock'),
                       _buildFilterChip('Excess Stock', 'excess'),
                       _buildFilterChip('Negative Stock', 'negative'),
+                      _buildFilterChip('Hidden (empty 30 days)', 'hidden'),
                     ]),
                     _buildFilterSection('Sales Activity', [
                       _buildFilterChip('Never Sold', 'no_sales'),
@@ -1065,7 +1207,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                   }
 
                   if (_isGridView) {
-                    return GridView.builder(
+                    return _withShowing(filtered.length, products.where((p) => !p.isHidden).length, GridView.builder(
                       padding: const EdgeInsets.all(12),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1079,121 +1221,22 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                         final product = filtered[index];
                         return _buildGridItem(product);
                       },
-                    );
+                    ));
                   }
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  return _withShowing(filtered.length, products.where((p) => !p.isHidden).length, ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 160), // clear of the round buttons
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final product = filtered[index];
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: product.isExpired
-                                ? Colors.red.shade100
-                                : product.isExpiringSoon
-                                ? Colors.orange.shade100
-                                : product.isLowStock
-                                ? Colors.red.shade100
-                                : Colors.green.shade100,
-                            child: Icon(
-                              product.isExpired
-                                  ? Icons.event_busy
-                                  : product.isExpiringSoon
-                                  ? Icons.warning_amber_rounded
-                                  : product.isLowStock
-                                  ? Icons.warning
-                                  : Icons.check,
-                              color: product.isExpired
-                                  ? Colors.red
-                                  : product.isExpiringSoon
-                                  ? Colors.orange
-                                  : product.isLowStock
-                                  ? Colors.red
-                                  : Colors.green,
-                            ),
-                          ),
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  product.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (product.isExpired)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text(
-                                    'EXPIRED',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                )
-                              else if (product.isExpiringSoon)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '${product.daysUntilExpiry}d left',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Rs.${product.sellingPrice} | Stock: ${formatQty(product.stock)} ${product.unit} | Worth: Rs.${(product.stockOnHand * product.purchasePrice).toStringAsFixed(0)}',
-                              ),
-                              if (product.expiryDate != null)
-                                Text(
-                                  'Exp: ${product.expiryDate!.day}/${product.expiryDate!.month}/${product.expiryDate!.year}${product.batchNumber != null ? ' | Batch: ${product.batchNumber}' : ''}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: product.isExpired
-                                        ? Color(0xFFC62828)
-                                        : product.isExpiringSoon
-                                        ? Color(0xFFC2410C)
-                                        : Color(0xFF757575),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openEditProduct(product),
-                          onLongPress: () => _showStockDialog(product),
-                        ),
+                      return _StockRow(
+                        key: ValueKey(product.id),
+                        product: product,
+                        showCost: isAdmin,
+                        onTap: () => _openDetail(product),
+                        onLongPress: () => _quickStockInOut(product),
                       );
                     },
-                  );
+                  ));
                 },
               ),
             ),
@@ -1558,16 +1601,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
               Row(
                 children: [
                   Icon(
-                    product.isLowStock ? Icons.warning : Icons.check,
+                    stockStatus(product).icon,
                     size: 12,
-                    color: product.isLowStock ? Colors.red : Colors.green,
+                    color: stockStatus(product).fg,
                   ),
                   const SizedBox(width: 2),
                   Text(
                     '${formatQty(product.stock)} ${product.unit}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: product.isLowStock ? Color(0xFFC62828) : Color(0xFF757575),
+                      color: stockStatus(product).fg,
                     ),
                   ),
                 ],
@@ -1696,6 +1739,92 @@ class _ReconciliationRowState extends State<_ReconciliationRow> {
                     onPressed: _save,
                   ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One product in the Stock list (23 Oct 2026): name, Tamil name, price and
+/// a coloured stock pill; the value at cost only for the admin.
+class _StockRow extends StatelessWidget {
+  const _StockRow({
+    super.key,
+    required this.product,
+    required this.showCost,
+    required this.onTap,
+    required this.onLongPress,
+  });
+  final Product product;
+  final bool showCost;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    final st = stockStatus(p);
+    final money = NumberFormat('#,##,##0.##', 'en_IN');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: st.bg, borderRadius: BorderRadius.circular(12)),
+                  child: Icon(st.icon, color: st.fg, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF0A3550))),
+                      if ((p.tamilName ?? '').isNotEmpty)
+                        Text(p.tamilName!,
+                            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF5B626E))),
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          '₹${money.format(p.sellingPrice)}',
+                          if (showCost) 'worth ₹${money.format((p.stockOnHand * p.purchasePrice).round())}',
+                          if (p.expiryDate != null) 'exp ${DateFormat('d MMM yy').format(p.expiryDate!)}',
+                        ].join(' · '),
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF5B626E)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: st.bg, borderRadius: BorderRadius.circular(999)),
+                      child: Text('${formatQty(p.totalStock)} ${p.unit}',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: st.fg)),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(st.label, style: TextStyle(fontSize: 11, color: st.fg, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

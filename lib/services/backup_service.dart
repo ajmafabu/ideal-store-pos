@@ -32,7 +32,15 @@ class BackupService {
     'accounts', 'sales', 'purchase_orders', 'purchases', 'inventory_batches', 'payments',
     'supplier_payments', 'expenses', 'account_transactions', 'legacy_postings', 'product_returns',
     'damaged_products', 'stock_reconciliation', 'payment_reminders', 'transaction_edits',
+    'stock_adjustments', 'supplier_returns',
   ];
+
+  /// Added by sql/2026_10_inventory_tools.sql (23 Oct 2026). Until that file
+  /// is run they do not exist; the backup then saves them as empty.
+  static const newerTables = {'stock_adjustments', 'supplier_returns'};
+
+  static bool isMissingTable(Object e) =>
+      e is PostgrestException && (e.code == '42P01' || e.code == 'PGRST205' || e.message.contains('does not exist'));
 
   /// Primary key of each table: pages are read in key order, so a backup
   /// taken while the shop is billing cannot skip or repeat rows.
@@ -69,7 +77,12 @@ class BackupService {
     final steps = tables.length + 1; // + saving and upload
     for (final (i, t) in tables.indexed) {
       onProgress?.call(i + 1, steps, t.replaceAll('_', ' '));
-      data[t] = await _readAll(t);
+      try {
+        data[t] = await _readAll(t);
+      } catch (e) {
+        if (!newerTables.contains(t) || !isMissingTable(e)) rethrow;
+        data[t] = const <Map<String, dynamic>>[];
+      }
       Logger.info('Backup: $t ${(data[t] as List).length} rows');
     }
     return {

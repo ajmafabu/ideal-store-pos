@@ -196,5 +196,36 @@ checks AS (
               THEN 'IdealCash cannot show Ideal Store — run sql/2026_10_owner_summary.sql'
               ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.owner_viewers', false, true, '')))[1]::text
                    || ' viewer login(s). If 2026_10_audit_fixes.sql is run again, run 2026_10_owner_summary.sql again too' END
+  UNION ALL
+  SELECT 23, 'empty products hide after 30 days',
+         CASE WHEN to_regprocedure('public.hide_idle_products(integer)') IS NULL
+                   OR to_regprocedure('public.show_product(uuid)') IS NULL THEN 'MISSING'
+              WHEN EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'unhide_products_on_stock'
+                             AND tgrelid = 'public.products'::regclass AND NOT tgisinternal)
+                   AND has_function_privilege('authenticated', 'public.hide_idle_products(integer)', 'EXECUTE')
+                   AND NOT has_function_privilege('anon', 'public.hide_idle_products(integer)', 'EXECUTE')
+                   AND NOT has_function_privilege('anon', 'public.show_product(uuid)', 'EXECUTE')
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regprocedure('public.hide_idle_products(integer)') IS NULL
+              THEN 'empty products stay on every list — run sql/2026_10_hide_idle_products.sql'
+              ELSE (xpath('//v/text()', query_to_xml('SELECT count(*) AS v FROM public.products WHERE hidden_at IS NOT NULL', false, true, '')))[1]::text
+                   || ' product(s) hidden now' END
+  UNION ALL
+  SELECT 24, 'stock tools: count, Stock In log, supplier returns, history',
+         CASE WHEN to_regprocedure('public.get_stock_history(uuid, integer)') IS NULL
+                   OR to_regclass('public.supplier_returns') IS NULL THEN 'MISSING'
+              WHEN to_regprocedure('public.save_stock_count(uuid, numeric, numeric, text)') IS NOT NULL
+                   AND to_regprocedure('public.create_supplier_return(uuid, uuid, text, jsonb, text, text)') IS NOT NULL
+                   AND to_regprocedure('public.adjust_stock_logged(uuid, numeric, text)') IS NOT NULL
+                   AND 'supplier_returns' = ANY (public.backup_table_list())
+                   AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'z_clear_inventory_logs' AND NOT tgisinternal)
+                   AND NOT has_function_privilege('anon', 'public.get_stock_history(uuid, integer)', 'EXECUTE')
+                   AND (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.supplier_returns'))
+              THEN 'OK' ELSE 'PROBLEM' END,
+         CASE WHEN to_regclass('public.supplier_returns') IS NULL
+              THEN 'no stock history or supplier returns — run sql/2026_10_inventory_tools.sql'
+              WHEN NOT ('supplier_returns' = ANY (public.backup_table_list()))
+              THEN 'backups miss the new tables — run sql/2026_10_inventory_tools.sql again'
+              ELSE 'count while selling, Stock In/Out log, return to supplier, product history' END
 )
 SELECT check_name, status, detail FROM checks ORDER BY ord;

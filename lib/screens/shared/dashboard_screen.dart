@@ -1,21 +1,20 @@
 import 'dashboard_widgets/expiring_products_section.dart';
 import 'dashboard_widgets/low_stock_section.dart';
+import '../admin/stock_health_screen.dart';
+import 'dart:io';
 import 'dart:math';
+import 'phone_home.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../config/providers.dart';
-import '../../utils/app_timezone.dart';
-import '../../utils/product_profit.dart';
 import '../../utils/qty_format.dart';
 import '../admin/profit_details_screen.dart';
 import '../admin/all_profitable_products_screen.dart';
 import 'dashboard_widgets/greeting_header.dart';
 import '../../utils/error_messages.dart';
-import '../../utils/paged_query.dart';
 import '../../utils/readable_color.dart';
 
 String _inr(double v) {
@@ -55,6 +54,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ref.invalidate(weeklySalesSparkProvider);
     ref.invalidate(todayCategorySalesProvider);
     ref.invalidate(salesHistoryProvider);
+    ref.invalidate(monthTopProfitProvider);
   }
 
   Future<void> _syncOfflineSales() async {
@@ -83,11 +83,50 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      ref.invalidate(profileProvider);
+      await ref.read(authServiceProvider).signOut();
+      if (mounted) context.go('/login');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final offlineService = ref.watch(offlineServiceProvider);
     final pendingCount = offlineService.pendingCount;
     final theme = Theme.of(context);
+
+    // phones get the new Home (23 Oct 2026); Windows keeps this dashboard
+    if (!Platform.isWindows && MediaQuery.sizeOf(context).width < 1100) {
+      return PhoneHome(
+        onRefresh: () async {
+          await _refreshAll();
+          if (pendingCount > 0) await _syncOfflineSales();
+        },
+        onSync: () async {
+          await _refreshAll();
+          if (pendingCount > 0) await _syncOfflineSales();
+        },
+        onSignOut: _confirmSignOut,
+        syncing: _syncing,
+        pendingCount: pendingCount,
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
@@ -149,27 +188,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           IconButton(
                             icon: Icon(Icons.logout_rounded, size: 22, color: theme.colorScheme.error),
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Sign Out'),
-                                  content: const Text('Are you sure you want to sign out?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text('Sign Out', style: TextStyle(color: Color(0xFFC62828))),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              if (confirmed == true) {
-                                ref.invalidate(profileProvider);
-                                await ref.read(authServiceProvider).signOut();
-                                if (context.mounted) context.go('/login');
-                              }
-                            },
+                            onPressed: _confirmSignOut,
                           ),
                         ],
                       ),
@@ -191,6 +210,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               ),
             ),
+            // ── purchases waiting to be entered (stock below zero) ──
+            const SliverToBoxAdapter(child: _AdminOnly(child: _PurchasePendingCard())),
             // ── Stock and expiry alerts (#24) ──
             const SliverToBoxAdapter(child: LowStockSection()),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
@@ -767,33 +788,8 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
 
   Future<void> _loadData() async {
     try {
-      final client = Supabase.instance.client;
-      final now = AppTimezone.nowIst();
-      final start = DateTime.utc(now.year, now.month, 1).subtract(AppTimezone.localOffset);
-      final end = DateTime.utc(now.year, now.month, now.day + 1).subtract(AppTimezone.localOffset);
-
-      // Fetch all sales this month
-      final salesRes = await fetchAllRows(() => client
-          .from('sales')
-          .select('items')
-          .gte('created_at', start.toIso8601String())
-          .lt('created_at', end.toIso8601String()));
-
-      // Fetch products for cost lookup
-      final productsRes = await fetchAllRows(() => client
-          .from('products')
-          .select('id, purchase_price'));
-      final costMap = <String, double>{};
-      for (final p in productsRes as List) {
-        costMap[p['id'] as String] = (p['purchase_price'] as num?)?.toDouble() ?? 0;
-      }
-
       // profit per product, decimals and returns included (QA #46)
-      final returnsRes = await fetchReturnsBetween(start, end);
-      final results = ProductProfit.compute(sales: salesRes, returns: returnsRes, costMap: costMap)
-          .map((p) => p.toMap())
-          .toList()
-        ..sort((a, b) => (b['profit'] as double).compareTo(a['profit'] as double));
+      final results = await loadMonthTopProfit();
 
       if (mounted) {
         setState(() {
@@ -976,6 +972,47 @@ class _TopProfitableProductsState extends ConsumerState<_TopProfitableProducts> 
             ),
           );
         }),
+      ),
+    );
+  }
+}
+
+/// Products sold before their purchase bill was entered (stock below zero):
+/// a reminder to enter those purchases, opening Stock Health (18 Oct 2026).
+class _PurchasePendingCard extends ConsumerWidget {
+  const _PurchasePendingCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = ref.watch(productsProvider).value ?? const [];
+    final below = products.where((p) => !p.hasVariants && p.stock < -0.0005).length;
+    if (below == 0) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Material(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockHealthScreen())),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(Icons.local_shipping_outlined, color: scheme.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '$below product${below == 1 ? '' : 's'} sold before the purchase was entered — enter those purchases',
+                    style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: scheme.onErrorContainer),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

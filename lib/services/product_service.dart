@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
+import '../models/stock_move.dart';
 import '../utils/logger.dart';
 import '../utils/network_errors.dart';
 import 'audit_service.dart';
@@ -157,6 +158,7 @@ class ProductService {
                 'expiry_date': p.expiryDate?.toIso8601String(),
                 'unit_type': p.unitType,
                 'pieces_per_unit': p.piecesPerUnit,
+                'hidden_at': p.hiddenAt?.toIso8601String(),
                 'variants': p.variants
                     .map(
                       (v) => {
@@ -387,14 +389,88 @@ class ProductService {
     invalidateCache();
   }
 
+  /// Hides the products that sat at 0 stock with no sale or purchase for
+  /// 30 days (admin only). Returns how many were hidden.
+  Future<int> hideIdleProducts() async {
+    final n = await _client.rpc('hide_idle_products');
+    invalidateCache();
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  /// Shows a hidden product again (admin only); it stays shown for 30 days.
+  Future<void> showProduct(String productId) async {
+    await _client.rpc('show_product', params: {'p_product': productId});
+    invalidateCache();
+  }
+
+  /// The database function is not there yet (its SQL file not run).
+  static bool isMissingFunction(Object e) =>
+      e is PostgrestException && (e.code == 'PGRST202' || e.code == '42883');
+
+  /// A shelf count or a stock correction (admin only): the stock becomes
+  /// [counted], batches follow and the history keeps it. [appQty] is what
+  /// the app showed when counting began: sales made while counting are kept
+  /// (counted 40, 2 sold meanwhile → 38). Returns {stock, moved, difference}.
+  static Future<Map<String, dynamic>> saveCountWith(
+    SupabaseClient client,
+    String productId,
+    double counted, {
+    double? appQty,
+    String reason = 'Stock corrected',
+  }) async {
+    try {
+      final res = await client.rpc('save_stock_count', params: {
+        'p_product': productId,
+        'p_counted': counted,
+        'p_app_qty': appQty,
+        'p_reason': reason,
+      });
+      invalidateCache();
+      return Map<String, dynamic>.from(res as Map);
+    } catch (e) {
+      if (!isMissingFunction(e)) rethrow;
+      // before sql/2026_10_inventory_tools.sql is run: the old two steps
+      final row = await client.from('products').select('stock').eq('id', productId).single();
+      final system = appQty ?? (row['stock'] as num?)?.toDouble() ?? 0;
+      await client.rpc('reconcile_stock_with_batches', params: {
+        'p_product_id': productId,
+        'p_physical_qty': counted,
+      });
+      try {
+        await client.from('stock_reconciliation').insert({
+          'product_id': productId,
+          'system_qty': system,
+          'physical_qty': counted,
+          'notes': reason,
+        });
+      } catch (e) {
+        Logger.warning('Count saved, history not written: $e');
+      }
+      invalidateCache();
+      return {'stock': counted, 'moved': 0, 'difference': counted - system};
+    }
+  }
+
+  Future<Map<String, dynamic>> saveCount(String productId, double counted,
+          {double? appQty, String reason = 'Stock corrected'}) =>
+      saveCountWith(_client, productId, counted, appQty: appQty, reason: reason);
+
   /// Sets stock to a counted quantity (admin only). Batches are kept in step
   /// by the database; a plain product update can no longer change stock.
   Future<void> setPhysicalStock(String productId, num quantity) async {
-    await _client.rpc('reconcile_stock_with_batches', params: {
-      'p_product_id': productId,
-      'p_physical_qty': quantity,
-    });
-    invalidateCache();
+    await saveCount(productId, quantity.toDouble(), reason: 'Stock corrected');
+  }
+
+  /// The product's stock now, straight from the database.
+  Future<double> currentStock(String productId) async {
+    final row = await _client.from('products').select('stock').eq('id', productId).single();
+    return (row['stock'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Every movement of one product, newest first (sql/2026_10_inventory_tools.sql).
+  Future<List<StockMove>> getStockHistory(String productId, {int limit = 300}) async {
+    final rows = await _client.rpc('get_stock_history', params: {'p_product': productId, 'p_limit': limit});
+    return [for (final r in rows as List) StockMove.fromJson(Map<String, dynamic>.from(r as Map))];
   }
 
   Future<void> deleteProduct(String id) async {
@@ -421,16 +497,26 @@ class ProductService {
 
   /// Stock In: adds [quantity] in one locked database step (batches kept in
   /// step). Errors are thrown so the screen can show them (#27).
-  Future<double> addStock(String productId, num quantity) => _adjustStock(productId, quantity);
+  Future<double> addStock(String productId, num quantity, {String? reason}) =>
+      _adjustStock(productId, quantity, reason);
 
   /// Stock Out: removes [quantity]; the database refuses to go below zero.
-  Future<double> deductStock(String productId, num quantity) => _adjustStock(productId, -quantity);
+  Future<double> deductStock(String productId, num quantity, {String? reason}) =>
+      _adjustStock(productId, -quantity, reason);
 
-  Future<double> _adjustStock(String productId, num delta) async {
-    final res = await _client.rpc('adjust_stock', params: {
-      'p_product_id': productId,
-      'p_delta': delta,
-    });
+  /// Written down with its reason, so it shows in the product's history.
+  Future<double> _adjustStock(String productId, num delta, String? reason) async {
+    dynamic res;
+    try {
+      res = await _client.rpc('adjust_stock_logged', params: {
+        'p_product': productId,
+        'p_delta': delta,
+        'p_reason': reason,
+      });
+    } catch (e) {
+      if (!isMissingFunction(e)) rethrow;
+      res = await _client.rpc('adjust_stock', params: {'p_product_id': productId, 'p_delta': delta});
+    }
     invalidateCache();
     return (res as num?)?.toDouble() ?? 0;
   }
@@ -443,33 +529,8 @@ class ProductService {
     String? notes,
   }) async {
     try {
-      final product = await getProductById(productId);
-      if (product == null) return false;
-
-      final systemQty = product.stock;
-
-      await _client.from('stock_reconciliation').insert({
-        'product_id': productId,
-        'system_qty': systemQty,
-        'physical_qty': physicalQty,
-        'notes': notes,
-      });
-
-      if (systemQty != physicalQty) {
-        try {
-          // Atomic: updates both products.stock AND inventory_batches.remaining
-          await _client.rpc(
-            'reconcile_stock_with_batches',
-            params: {'p_product_id': productId, 'p_physical_qty': physicalQty},
-          );
-        } catch (e) {
-          Logger.error('reconcileStock: stock update failed', e);
-          ProductService.invalidateCache();
-          return false;
-        }
-      }
-
-      ProductService.invalidateCache();
+      // one database step: stock, batches and the history line together
+      await saveCount(productId, physicalQty, reason: notes ?? 'Counted');
       return true;
     } catch (e, stackTrace) {
       Logger.error('reconcileStock', e, stackTrace);

@@ -68,7 +68,7 @@ final stockValueProvider = FutureProvider<double>((ref) async {
 final lowStockListProvider = FutureProvider<List<Product>>((ref) async {
   final products = await ref.watch(productsProvider.future);
   return products
-      .where((p) => !p.hasVariants && p.stock <= p.lowStockAlert)
+      .where((p) => !p.hasVariants && !p.isHidden && p.stock <= p.lowStockAlert)
       .toList()
     ..sort((a, b) => a.stock.compareTo(b.stock));
 });

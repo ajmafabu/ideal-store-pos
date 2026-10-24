@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../utils/app_timezone.dart';
+import '../../utils/logger.dart';
 import '../../config/app_colors.dart';
 import '../../config/desktop_billing_provider.dart';
 import '../../services/update_service.dart';
@@ -38,6 +41,8 @@ import 'ai_insights_screen.dart';
 import 'backup_screen.dart';
 import 'gst_filing_screen.dart';
 import 'slow_moving_screen.dart';
+import 'stock_health_screen.dart';
+import 'supplier_return_screen.dart';
 
 class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key});
@@ -76,6 +81,27 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
       curve: Curves.elasticOut,
     );
     _fabAnimController.forward();
+    unawaited(_hideIdleProductsOncePerDay());
+  }
+
+  /// Products at 0 stock with no sale or purchase for 30 days drop off the
+  /// stock lists (owner, 23 Oct 2026). Once a day, quietly; before the
+  /// database change is applied the call fails and nothing happens.
+  Future<void> _hideIdleProductsOncePerDay() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = AppTimezone.nowIst();
+      final today = '${now.year}-${now.month}-${now.day}';
+      if (prefs.getString('idle_products_hidden_on') == today) return;
+      final hidden = await ref.read(productServiceProvider).hideIdleProducts();
+      await prefs.setString('idle_products_hidden_on', today);
+      if (hidden > 0) {
+        Logger.info('Hid $hidden products empty for 30 days');
+        ref.invalidate(productsProvider);
+      }
+    } catch (e) {
+      Logger.warning('Hiding empty products skipped: $e');
+    }
   }
 
   @override
@@ -175,6 +201,8 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         _SidebarItem(icon: Icons.broken_image_rounded, label: 'Damaged', index: -6, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const DamagedScreen()))),
                         _SidebarItem(icon: Icons.shopping_bag_rounded, label: 'Purchase Orders', index: -7, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const PurchaseOrderScreen()))),
                         _SidebarItem(icon: Icons.qr_code_2_rounded, label: 'Barcode Labels', index: -8, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const BarcodeLabelScreen()))),
+                        _SidebarItem(icon: Icons.fact_check_rounded, label: 'Stock Health & Count', index: -23, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockHealthScreen()))),
+                        _SidebarItem(icon: Icons.assignment_return_outlined, label: 'Return to Supplier', index: -24, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnScreen()))),
                         _SidebarItem(icon: Icons.trending_down_rounded, label: 'Slow Moving', index: -14, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const SlowMovingScreen()))),
                         _SidebarItem(icon: Icons.print_rounded, label: 'Printer Setup', index: -9, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSetupScreen()))),
                         _SidebarItem(icon: Icons.backup_rounded, label: 'Backup & Restore', index: -12, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()))),
@@ -776,6 +804,24 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         onTap: () {
                           Navigator.pop(ctx);
                           Navigator.push(context, MaterialPageRoute(builder: (_) => const BarcodeLabelScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.fact_check_rounded,
+                        title: 'Stock Health & Count',
+                        color: const Color(0xFF2E7D32),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const StockHealthScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.assignment_return_outlined,
+                        title: 'Return to Supplier',
+                        color: const Color(0xFF0E7FB4),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const SupplierReturnScreen()));
                         },
                       ),
                       _MoreMenuItem(

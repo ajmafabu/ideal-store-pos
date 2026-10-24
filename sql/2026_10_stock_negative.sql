@@ -323,26 +323,28 @@ BEGIN
 END $$;
 REVOKE EXECUTE ON FUNCTION public.sale_restore_product(jsonb, uuid, numeric) FROM PUBLIC, anon, authenticated;
 
--- 8. physical count: from a negative stock to the counted quantity
+-- 8. physical count: the counted quantity becomes the stock, and the
+--    batches are made to add up to it (also when the count equals the
+--    app's figure but old batches had drifted: a count is the fix)
 CREATE OR REPLACE FUNCTION public.reconcile_stock_with_batches(p_product_id uuid, p_physical_qty numeric)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_cur numeric; v_pp numeric; v_diff numeric; v_avg numeric;
+DECLARE v_cur numeric; v_pp numeric; v_batches numeric; v_avg numeric;
 BEGIN
   PERFORM public.assert_admin();
   IF p_physical_qty IS NULL OR p_physical_qty < 0 THEN RAISE EXCEPTION 'Stock cannot be negative'; END IF;
   SELECT stock, purchase_price INTO v_cur, v_pp FROM products WHERE id = p_product_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Product not found: %', p_product_id; END IF;
-  v_diff := p_physical_qty - v_cur;
-  IF v_diff = 0 THEN RETURN; END IF;
-  UPDATE products SET stock = p_physical_qty, updated_at = now() WHERE id = p_product_id;
-  IF v_diff > 0 THEN
+  IF v_cur IS DISTINCT FROM p_physical_qty THEN
+    UPDATE products SET stock = p_physical_qty, updated_at = now() WHERE id = p_product_id;
+  END IF;
+  SELECT coalesce(sum(remaining), 0) INTO v_batches FROM inventory_batches WHERE product_id = p_product_id;
+  IF v_batches > p_physical_qty THEN
+    PERFORM public.fifo_take(p_product_id, v_batches - p_physical_qty, 0);
+  ELSIF v_batches < p_physical_qty THEN
     -- quantity-weighted cost of what is on hand, else the product's cost
     SELECT sum(remaining * purchase_price) / nullif(sum(remaining), 0) INTO v_avg
     FROM inventory_batches WHERE product_id = p_product_id AND remaining > 0;
-    PERFORM public.restore_stock_fifo(p_product_id, v_diff, coalesce(v_avg, v_pp, 0));
-    PERFORM public.settle_stock_deficit(p_product_id, v_cur, v_diff);
-  ELSE
-    PERFORM public.fifo_take(p_product_id, -v_diff, 0);
+    PERFORM public.restore_stock_fifo(p_product_id, p_physical_qty - v_batches, coalesce(v_avg, v_pp, 0));
   END IF;
 END $$;
 REVOKE EXECUTE ON FUNCTION public.reconcile_stock_with_batches(uuid, numeric) FROM PUBLIC, anon;

@@ -143,6 +143,10 @@ class Product {
   final int piecesPerUnit;
   final double? sellingPrice2;
   final String? sellingPrice2Label;
+  /// Set when the product sat at 0 stock with no sale or purchase for 30
+  /// days (23 Oct 2026): it is left off the stock lists until its stock
+  /// changes or the owner shows it again. It still scans at billing.
+  final DateTime? hiddenAt;
 
   Product({
     required this.id,
@@ -167,7 +171,10 @@ class Product {
     this.piecesPerUnit = 1,
     this.sellingPrice2,
     this.sellingPrice2Label,
+    this.hiddenAt,
   });
+
+  bool get isHidden => hiddenAt != null;
 
   bool get isLowStock => stock > 0 && stock <= lowStockAlert;
   bool get hasDualRates => sellingPrice2 != null && sellingPrice2! > 0;
@@ -259,6 +266,7 @@ class Product {
       piecesPerUnit: (json['pieces_per_unit'] as num?)?.toInt() ?? 1,
       sellingPrice2: (json['selling_price_2'] as num?)?.toDouble(),
       sellingPrice2Label: json['selling_price_2_label'] as String?,
+      hiddenAt: DateTime.tryParse(json['hidden_at']?.toString() ?? ''),
     );
   }
 
@@ -336,6 +344,7 @@ class Product {
     int? piecesPerUnit,
     double? sellingPrice2,
     String? sellingPrice2Label,
+    DateTime? hiddenAt,
   }) {
     return Product(
       id: id ?? this.id,
@@ -360,6 +369,7 @@ class Product {
       piecesPerUnit: piecesPerUnit ?? this.piecesPerUnit,
       sellingPrice2: sellingPrice2 ?? this.sellingPrice2,
       sellingPrice2Label: sellingPrice2Label ?? this.sellingPrice2Label,
+      hiddenAt: hiddenAt ?? this.hiddenAt,
     );
   }
 }

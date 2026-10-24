@@ -652,6 +652,63 @@ RESET ROLE;
 SELECT t.eq(t.stock('Neg Count'), 20, 'physical count of 20 at -7: 20');
 SELECT t.eq(t.batches('Neg Count'), 20, '... batches 20');
 
+-- a count equal to the app's figure still repairs drifted batches
+INSERT INTO inventory_batches (product_id, quantity, remaining, purchase_price)
+VALUES ('10000000-0000-0000-0000-0000000001f4', 5, 5, 8);
+SELECT t.eq(t.batches('Neg Plus'), 15, 'old drift: batches 15, stock 10');
+SET ROLE authenticated;
+SELECT reconcile_stock_with_batches('10000000-0000-0000-0000-0000000001f4', 10);
+RESET ROLE;
+SELECT t.eq(t.stock('Neg Plus'), 10, 'counted 10: stock 10');
+SELECT t.eq(t.batches('Neg Plus'), 10, '... and the batches are repaired to 10');
+
+-- empty for 30 days: hidden; shown again by hand or by any stock change
+INSERT INTO products (id, name, purchase_price, selling_price, stock, unit_type, created_at) VALUES
+  ('10000000-0000-0000-0000-0000000001e1', 'Idle Old', 5, 10, 0, 'pieces', now() - interval '60 days'),
+  ('10000000-0000-0000-0000-0000000001e2', 'Idle Bought', 5, 10, 0, 'pieces', now() - interval '60 days'),
+  ('10000000-0000-0000-0000-0000000001e3', 'Idle New', 5, 10, 0, 'pieces', now()),
+  ('10000000-0000-0000-0000-0000000001e4', 'Idle Stocked', 5, 10, 3, 'pieces', now() - interval '60 days');
+INSERT INTO inventory_batches (product_id, quantity, remaining, purchase_price)
+VALUES ('10000000-0000-0000-0000-0000000001e2', 5, 0, 5);  -- bought last week, all sold
+SET ROLE authenticated;
+SELECT t.eq(hide_idle_products(), 1, 'hide: one product empty for 30 days');
+SELECT t.eq(hide_idle_products(), 0, '... running it again hides nothing more');
+SELECT t.fails($$SELECT hide_idle_products(3)$$, 'at least 7 days', '... never after less than a week');
+RESET ROLE;
+SELECT t.ok((SELECT hidden_at IS NOT NULL FROM products WHERE name = 'Idle Old'), '... the old empty one is hidden');
+SELECT t.ok((SELECT bool_and(hidden_at IS NULL) FROM products WHERE name IN ('Idle Bought', 'Idle New', 'Idle Stocked')),
+  '... bought recently, added recently or with stock: still shown');
+
+SET ROLE authenticated;
+SELECT show_product('10000000-0000-0000-0000-0000000001e1');
+SELECT t.eq(hide_idle_products(), 0, 'shown by hand: not hidden again straight away');
+RESET ROLE;
+SELECT t.ok((SELECT hidden_at IS NULL AND shown_at IS NOT NULL FROM products WHERE name = 'Idle Old'), '... and stays shown');
+
+UPDATE products SET shown_at = now() - interval '40 days' WHERE name = 'Idle Old';
+SET ROLE authenticated;
+SELECT t.eq(hide_idle_products(), 1, '... hidden again a month after it was shown');
+UPDATE products SET name = 'Idle Old', stock = 50 WHERE id = '10000000-0000-0000-0000-0000000001e1';
+SELECT adjust_stock('10000000-0000-0000-0000-0000000001e1', 4);
+RESET ROLE;
+SELECT t.ok((SELECT hidden_at IS NULL FROM products WHERE name = 'Idle Old'), 'Stock In shows a hidden product again');
+SELECT t.eq(t.stock('Idle Old'), 4, '... (a plain edit still cannot change the stock)');
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000b',false);
+SET ROLE authenticated;
+SELECT t.fails($$SELECT hide_idle_products()$$, 'Admin permission', 'staff cannot hide products');
+SELECT t.fails($$SELECT show_product('10000000-0000-0000-0000-0000000001e1')$$, 'Admin permission', 'staff cannot show products');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','',false);
+SET ROLE anon;
+SELECT t.fails($$SELECT hide_idle_products()$$, 'permission denied', 'anon cannot hide products');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+-- out again, so the report totals below are unchanged
+DELETE FROM inventory_batches WHERE product_id IN ('10000000-0000-0000-0000-0000000001e1', '10000000-0000-0000-0000-0000000001e2');
+DELETE FROM products WHERE id IN ('10000000-0000-0000-0000-0000000001e1', '10000000-0000-0000-0000-0000000001e2',
+  '10000000-0000-0000-0000-0000000001e3', '10000000-0000-0000-0000-0000000001e4');
+
 -- 10. reports: a negative stock adds nothing to stock value
 SET ROLE authenticated;
 INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001fa',
@@ -743,6 +800,101 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','',false);
 SET ROLE anon;
 SELECT t.fails($$SELECT get_owner_summary()$$, 'permission denied', 'anon cannot read the owner summary');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
+
+-- ---------------------------------------------------------------- inventory tools
+INSERT INTO suppliers (id, name) VALUES ('60000000-0000-0000-0000-0000000001d1', 'Agency D');
+INSERT INTO products (id, name, purchase_price, selling_price, stock, unit_type) VALUES
+  ('10000000-0000-0000-0000-0000000001d1', 'Tool Soap', 8, 10, 0, 'pieces');
+SET ROLE authenticated;
+INSERT INTO purchases (id, supplier_id, supplier_name, items, total_amount, payment_method, is_credit, amount_paid)
+VALUES ('40000000-0000-0000-0000-0000000001d1', '60000000-0000-0000-0000-0000000001d1', 'Agency D',
+        '[{"product_id":"10000000-0000-0000-0000-0000000001d1","name":"Tool Soap","qty":50,"price":8}]',
+        400, 'credit', true, 0);
+RESET ROLE;
+SELECT t.eq(t.stock('Tool Soap'), 50, 'tools: bought 50 on credit');
+SELECT t.eq((SELECT total_dues FROM suppliers WHERE id = '60000000-0000-0000-0000-0000000001d1'), 400, '... owing 400');
+
+-- a count while the till keeps selling
+SET ROLE authenticated;
+INSERT INTO sales (id, items, total_amount, final_amount, payment_method) VALUES ('50000000-0000-0000-0000-0000000001d1',
+  '[{"product_id":"10000000-0000-0000-0000-0000000001d1","name":"Tool Soap","qty":2,"price":10,"total":20}]', 20, 20, 'cash');
+SELECT t.eq((save_stock_count('10000000-0000-0000-0000-0000000001d1', 45, 50, 'Missing / theft')->>'stock')::numeric, 43,
+  'count: shelf 45 when the app said 50, 2 sold while counting: 43');
+RESET ROLE;
+SELECT t.eq(t.stock('Tool Soap'), 43, '... stock 43');
+SELECT t.eq(t.batches('Tool Soap'), 43, '... batches 43');
+SELECT t.eq((SELECT physical_qty - system_qty FROM stock_reconciliation
+             WHERE product_id = '10000000-0000-0000-0000-0000000001d1' ORDER BY created_at DESC LIMIT 1), -5,
+  '... the count is kept as 5 short');
+SET ROLE authenticated;
+SELECT t.fails($$SELECT save_stock_count('10000000-0000-0000-0000-0000000001d1', -1, 43, 'x')$$, '0 or more', '... never below 0');
+
+-- Stock In with a reason, written down
+SELECT t.eq(adjust_stock_logged('10000000-0000-0000-0000-0000000001d1', 7, 'Free goods'), 50, 'Stock In 7: 50');
+RESET ROLE;
+SELECT t.eq((SELECT count(*) FROM stock_adjustments WHERE product_id = '10000000-0000-0000-0000-0000000001d1'
+             AND reason = 'Free goods' AND stock_after = 50), 1, '... and written down');
+
+-- return to supplier: 10 at 8 comes off what the shop owes
+SET ROLE authenticated;
+SELECT create_supplier_return('70000000-0000-0000-0000-0000000001d1', '60000000-0000-0000-0000-0000000001d1', NULL,
+  '[{"product_id":"10000000-0000-0000-0000-0000000001d1","qty":10,"price":8}]', 'cash', 'Expired');
+SELECT create_supplier_return('70000000-0000-0000-0000-0000000001d1', '60000000-0000-0000-0000-0000000001d1', NULL,
+  '[{"product_id":"10000000-0000-0000-0000-0000000001d1","qty":10,"price":8}]', 'cash', 'Expired');
+RESET ROLE;
+SELECT t.eq(t.stock('Tool Soap'), 40, 'supplier return of 10: stock 40 (a retried save counts once)');
+SELECT t.eq(t.batches('Tool Soap'), 40, '... batches 40');
+SELECT t.eq((SELECT total_dues FROM suppliers WHERE id = '60000000-0000-0000-0000-0000000001d1'), 320, '... owing 320');
+SELECT t.eq((SELECT refund_amount FROM supplier_returns WHERE id = '70000000-0000-0000-0000-0000000001d1'), 0, '... no money back');
+SELECT t.eq((SELECT cost_amount FROM supplier_returns WHERE id = '70000000-0000-0000-0000-0000000001d1'), 80, '... cost 80 (FIFO)');
+
+-- more than is owed: the rest is money received back
+SET ROLE authenticated;
+SELECT t.fails($$SELECT create_supplier_return(gen_random_uuid(), '60000000-0000-0000-0000-0000000001d1', NULL,
+  '[{"product_id":"10000000-0000-0000-0000-0000000001d1","qty":41,"price":8}]', 'cash', NULL)$$,
+  'cannot return', 'cannot return more than is in stock');
+SELECT create_supplier_return('70000000-0000-0000-0000-0000000001d2', '60000000-0000-0000-0000-0000000001d1', NULL,
+  '[{"product_id":"10000000-0000-0000-0000-0000000001d1","qty":40,"price":9}]', 'upi', 'Closing the account');
+RESET ROLE;
+SELECT t.eq((SELECT total_dues FROM suppliers WHERE id = '60000000-0000-0000-0000-0000000001d1'), 0, 'return of 360: owing 0');
+SELECT t.ok((SELECT credit_amount = 320 AND refund_amount = 40 AND refund_method = 'upi' FROM supplier_returns
+             WHERE id = '70000000-0000-0000-0000-0000000001d2'), '... 320 off the dues, 40 back by UPI');
+SELECT t.eq((SELECT sum(CASE WHEN type = 'in' THEN amount ELSE -amount END) FROM account_transactions
+             WHERE ref_type = 'supplier_returns' AND ref_id = '70000000-0000-0000-0000-0000000001d2'), 40, '... 40 into the bank');
+SELECT t.eq(t.stock('Tool Soap'), 0, '... stock 0');
+
+-- deleted by mistake: stock, dues and money go back
+SET ROLE authenticated;
+SELECT delete_supplier_return('70000000-0000-0000-0000-0000000001d2');
+RESET ROLE;
+SELECT t.eq(t.stock('Tool Soap'), 40, 'return deleted: stock 40 again');
+SELECT t.eq(t.batches('Tool Soap'), 40, '... batches 40');
+SELECT t.eq((SELECT total_dues FROM suppliers WHERE id = '60000000-0000-0000-0000-0000000001d1'), 320, '... owing 320 again');
+SELECT t.eq((SELECT coalesce(sum(CASE WHEN type = 'in' THEN amount ELSE -amount END), 0) FROM account_transactions
+             WHERE ref_type = 'supplier_returns' AND ref_id = '70000000-0000-0000-0000-0000000001d2'), 0, '... money taken back out');
+
+-- the product's history, newest first, with the stock after each move
+SET ROLE authenticated;
+SELECT t.ok((SELECT string_agg(kind || ':' || stock_after::text, ',')
+             FROM get_stock_history('10000000-0000-0000-0000-0000000001d1'))
+  = 'Returned to supplier:40.000,Stock In:50.000,Count:43.000,Sale:48.000,Purchase:50.000',
+  'stock history: every move, newest first, the stock after each');
+RESET ROLE;
+
+-- staff read the history but cannot return goods; anon gets nothing
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000b',false);
+SET ROLE authenticated;
+SELECT t.ok((SELECT count(*) FROM get_stock_history('10000000-0000-0000-0000-0000000001d1')) = 5, 'staff can read the stock history');
+SELECT t.fails($$SELECT create_supplier_return(gen_random_uuid(), NULL, 'X', '[{"product_id":"10000000-0000-0000-0000-0000000001d1","qty":1,"price":8}]', 'cash', NULL)$$,
+  'Admin permission', 'staff cannot return goods to a supplier');
+SELECT t.fails($$SELECT save_stock_count('10000000-0000-0000-0000-0000000001d1', 1, 40, 'x')$$, 'Admin permission', 'staff cannot save a count');
+SELECT t.eq((SELECT count(*) FROM supplier_returns), 0, 'staff cannot read supplier returns');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','',false);
+SET ROLE anon;
+SELECT t.fails($$SELECT get_stock_history('10000000-0000-0000-0000-0000000001d1')$$, 'permission denied', 'anon cannot read stock history');
 RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-00000000000a',false);
 
