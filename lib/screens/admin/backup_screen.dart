@@ -25,11 +25,134 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   List<String> _cloud = [];
   List<Map<String, dynamic>> _history = [];
 
+  /// Automatic daily backup on the shop PC and its copy outside Supabase.
+  final _folder = TextEditingController();
+  DateTime? _lastAuto;
+  String? _googleDrive;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _loadAuto();
   }
+
+  @override
+  void dispose() {
+    _folder.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAuto() async {
+    final folder = await BackupService.copyFolder();
+    final last = await BackupService.lastAutoBackup();
+    final drive = BackupService.findGoogleDrive();
+    if (!mounted) return;
+    setState(() {
+      _folder.text = folder ?? '';
+      _lastAuto = last;
+      _googleDrive = drive;
+    });
+  }
+
+  Future<void> _saveFolder(String path) async {
+    final p = path.trim();
+    if (p.isNotEmpty) {
+      try {
+        await Directory(p).create(recursive: true);
+      } catch (e) {
+        _snack('Cannot use that folder: $e', error: true);
+        return;
+      }
+    }
+    await BackupService.setCopyFolder(p);
+    _folder.text = p;
+    _snack(p.isEmpty ? 'Backups are no longer copied to a folder' : 'Every backup will also be copied to $p');
+    setState(() {});
+  }
+
+  Widget _autoCard() {
+    final scheme = Theme.of(context).colorScheme;
+    if (!Platform.isWindows) {
+      return const Card(
+        child: ListTile(
+          leading: Icon(Icons.schedule_rounded, color: Colors.indigo),
+          title: Text('Automatic daily backup'),
+          subtitle: Text('Runs on the shop PC every day and copies it outside Supabase (e.g. Google Drive).'),
+        ),
+      );
+    }
+    final last = _lastAuto;
+    final stale = last == null || DateTime.now().difference(last) > const Duration(hours: 48);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: stale ? Colors.orange : Colors.green),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Automatic daily backup (this PC)',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              last == null
+                  ? 'Not done yet. It runs by itself a few minutes after the app opens, then once a day.'
+                  : 'Last: ${DateFormat('d MMM yyyy, h:mm a').format(last)}. Runs once a day while the app is open; the last $keepDays days are kept on this PC.',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 14),
+            const Text('Also copy every backup to (outside Supabase):', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _folder,
+              decoration: const InputDecoration(
+                hintText: r'e.g. G:\My Drive\IdealStore Backups',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onSubmitted: _saveFolder,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton(onPressed: () => _saveFolder(_folder.text), child: const Text('Save folder')),
+                if (_googleDrive != null)
+                  OutlinedButton.icon(
+                    onPressed: () => _saveFolder(_googleDrive!),
+                    icon: const Icon(Icons.add_to_drive),
+                    label: const Text('Use Google Drive'),
+                  ),
+                if (_folder.text.isNotEmpty)
+                  TextButton(onPressed: () => _saveFolder(''), child: const Text('Stop copying')),
+              ],
+            ),
+            if (_googleDrive == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Tip: install "Google Drive for desktop", sign in, and this button finds it. '
+                  'Then every backup reaches Google\'s cloud by itself.',
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static const keepDays = BackupService.keepLocal;
 
   Future<void> _refresh() async {
     try {
@@ -56,9 +179,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
   void _snack(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), backgroundColor: error ? Colors.red : Colors.green),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? Colors.red : Colors.green));
   }
 
   Future<void> _run(String text, Future<void> Function() job) async {
@@ -81,31 +204,36 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   Future<void> _backup() => _run('Making backup…', () async {
-        final r = await _service.performBackup(
-          onProgress: (step, of, what) {
-            if (mounted) setState(() => _busyText = 'Making backup… $step of $of: $what');
-          },
-        );
-        if (!r.success) throw Exception(r.error ?? 'Backup failed');
-        await _refresh();
-        if (!mounted) return;
-        // a clear "done", not a message that is easy to miss (QA #3)
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            icon: Icon(
-              r.cloudPath != null ? Icons.check_circle : Icons.warning_amber,
-              color: r.cloudPath != null ? Colors.green : Colors.orange,
-              size: 40,
-            ),
-            title: Text(r.cloudPath != null ? 'Backup done' : 'Backup saved on this phone only'),
-            content: Text(r.cloudPath != null
+    final r = await _service.performBackup(
+      onProgress: (step, of, what) {
+        if (mounted) setState(() => _busyText = 'Making backup… $step of $of: $what');
+      },
+    );
+    if (!r.success) throw Exception(r.error ?? 'Backup failed');
+    await _refresh();
+    if (!mounted) return;
+    // a clear "done", not a message that is easy to miss (QA #3)
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          r.cloudPath != null ? Icons.check_circle : Icons.warning_amber,
+          color: r.cloudPath != null ? Colors.green : Colors.orange,
+          size: 40,
+        ),
+        title: Text(r.cloudPath != null ? 'Backup done' : 'Backup saved on this device only'),
+        content: Text(
+          [
+            r.cloudPath != null
                 ? 'Saved on this device and in the cloud (${r.fileSizeMB}).'
-                : 'Saved on this device (${r.fileSizeMB}). The cloud upload failed — try again when the internet is better.'),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-          ),
-        );
-      });
+                : 'Saved on this device (${r.fileSizeMB}). The cloud upload failed — try again when the internet is better.',
+            if (r.copiedTo != null) 'A copy is also in ${File(r.copiedTo!).parent.path}.',
+          ].join('\n\n'),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
+  });
 
   /// Restore needs the word RESTORE typed in, because it replaces everything.
   Future<bool> _confirmRestore(String what) async {
@@ -194,6 +322,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                   trailing: FilledButton(onPressed: _busy ? null : _backup, child: const Text('Back up')),
                 ),
               ),
+              _autoCard(),
               Card(
                 child: ListTile(
                   leading: const Icon(Icons.share_rounded, color: Colors.green),
@@ -223,8 +352,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 ),
               const SizedBox(height: 16),
               const Text('Restore from cloud', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              if (_cloud.isEmpty)
-                const Padding(padding: EdgeInsets.all(8), child: Text('No cloud backups found.')),
+              if (_cloud.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('No cloud backups found.')),
               for (final n in _cloud.take(10))
                 ListTile(
                   leading: const Icon(Icons.cloud_outlined),
@@ -242,9 +370,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                       color: h['status'] == 'completed' ? Colors.green : Colors.red,
                     ),
                     title: Text(_when(h['started_at']?.toString())),
-                    subtitle: Text(h['status'] == 'completed'
-                        ? '${h['file_path'] ?? ''}'
-                        : 'Failed: ${h['error_message'] ?? ''}'),
+                    subtitle: Text(
+                      h['status'] == 'completed' ? '${h['file_path'] ?? ''}' : 'Failed: ${h['error_message'] ?? ''}',
+                    ),
                   ),
               ],
             ],

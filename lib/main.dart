@@ -55,6 +55,10 @@ void main() async {
       final connectivityService = ConnectivityService();
       await connectivityService.init();
 
+      // the server the admin chose for this device (Server settings)
+      await SupabaseConfig.loadOverride();
+      if (SupabaseConfig.usingOtherServer) Logger.info('Using server ${SupabaseConfig.url}');
+
       if (!SupabaseConfig.isConfigured) {
         runApp(
           const ProviderScope(
@@ -76,8 +80,8 @@ void main() async {
       // Initialize Supabase - continue even if offline, with timeout
       try {
         await Supabase.initialize(
-          url: SupabaseConfig.supabaseUrl,
-          publishableKey: SupabaseConfig.supabaseAnonKey,
+          url: SupabaseConfig.url,
+          publishableKey: SupabaseConfig.anonKey,
         ).timeout(const Duration(seconds: 15), onTimeout: () {
           Logger.warning('Supabase init timed out after 15s');
           return Supabase.instance;

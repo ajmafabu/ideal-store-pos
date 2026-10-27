@@ -10,11 +10,13 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../utils/app_timezone.dart';
 import '../../utils/logger.dart';
 import '../../config/app_colors.dart';
+import '../../services/backup_service.dart';
 import '../../config/desktop_billing_provider.dart';
 import '../../services/update_service.dart';
 import '../../config/providers.dart';
 import '../../config/theme_provider.dart';
 import '../shared/dashboard_screen.dart';
+import '../shared/server_settings_screen.dart';
 import '../shared/inventory_screen.dart';
 import '../shared/sales_screen.dart';
 import '../desktop/desktop_billing_screen.dart';
@@ -82,6 +84,21 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
     );
     _fabAnimController.forward();
     unawaited(_hideIdleProductsOncePerDay());
+    // the shop PC keeps a daily backup outside Supabase (25 Oct 2026)
+    if (Platform.isWindows) {
+      _backupTimer = Timer(const Duration(minutes: 2), _autoBackup);
+    }
+  }
+
+  Timer? _backupTimer;
+
+  Future<void> _autoBackup() async {
+    try {
+      await BackupService().autoBackupIfDue();
+    } catch (e) {
+      Logger.warning('Automatic backup skipped: $e');
+    }
+    if (mounted) _backupTimer = Timer(const Duration(hours: 1), _autoBackup);
   }
 
   /// Products at 0 stock with no sale or purchase for 30 days drop off the
@@ -106,6 +123,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
 
   @override
   void dispose() {
+    _backupTimer?.cancel();
     _fabAnimController.dispose();
     super.dispose();
   }
@@ -206,6 +224,7 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         _SidebarItem(icon: Icons.trending_down_rounded, label: 'Slow Moving', index: -14, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const SlowMovingScreen()))),
                         _SidebarItem(icon: Icons.print_rounded, label: 'Printer Setup', index: -9, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const PrinterSetupScreen()))),
                         _SidebarItem(icon: Icons.backup_rounded, label: 'Backup & Restore', index: -12, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()))),
+                        _SidebarItem(icon: Icons.dns_outlined, label: 'Server Settings', index: -25, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServerSettingsScreen()))),
                         _SidebarItem(icon: Icons.receipt_long_rounded, label: 'GST Filing Export', index: -13, currentIndex: currentIndex, onTap: (_) => Navigator.push(context, MaterialPageRoute(builder: (_) => const GstFilingScreen()))),
 
                         const _SidebarSection('ACCOUNT'),
@@ -477,7 +496,9 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              status.lastSyncError != null
+                              status.serverTrouble
+                                  ? 'Server problem — ${status.totalPending} saved on this device, sending automatically'
+                                  : status.lastSyncError != null
                                   ? 'Sync failed — tap to retry'
                                   : status.isConnected
                                       ? (status.hasPending ? 'Syncing ${status.totalPending} items...' : 'Online')
@@ -869,6 +890,15 @@ class _AdminShellState extends ConsumerState<AdminShell> with SingleTickerProvid
                         onTap: () {
                           Navigator.pop(ctx);
                           Navigator.push(context, MaterialPageRoute(builder: (_) => const BackupScreen()));
+                        },
+                      ),
+                      _MoreMenuItem(
+                        icon: Icons.dns_outlined,
+                        title: 'Server Settings',
+                        color: const Color(0xFF455A64),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const ServerSettingsScreen()));
                         },
                       ),
                       _MoreMenuItem(

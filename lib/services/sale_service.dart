@@ -43,6 +43,12 @@ class SaleService {
   /// Server rejections (e.g. inactive account) are rethrown, never queued.
   Future<Sale> createSale(Sale sale) async {
     final payload = sale.toInsertJson();
+    // the server just failed: save at once instead of waiting up to 15 s per
+    // bill at a busy counter; the server is tried again after a minute
+    if (ServerHealth.likelyDown) {
+      await _offlineService.saveSaleOffline(sale.toJson());
+      throw SaleSavedOffline(sale);
+    }
     try {
       final response = await _client
           .from('sales')
@@ -71,6 +77,7 @@ class SaleService {
       }
       if (!isNetworkError(e)) rethrow;
       Logger.warning('Sale insert could not reach the server, saving offline: $e');
+      ServerHealth.markDown();
       await _offlineService.saveSaleOffline(sale.toJson());
       throw SaleSavedOffline(sale);
     }

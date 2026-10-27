@@ -158,8 +158,8 @@ class AuthService {
     final pass = usePin ? PinAuth.derivePassword(email, pin) : (password ?? '');
     if (pass.length < 6) throw Exception('Password must be at least 6 characters');
     final temp = SupabaseClient(
-      SupabaseConfig.supabaseUrl,
-      SupabaseConfig.supabaseAnonKey,
+      SupabaseConfig.url,
+      SupabaseConfig.anonKey,
       authOptions: const AuthClientOptions(autoRefreshToken: false),
     );
     try {

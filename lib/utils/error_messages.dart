@@ -5,6 +5,11 @@ import 'network_errors.dart';
 class ErrorMessages {
   /// Parse a raw exception into a user-friendly message
   static String parse(Object error) {
+    // Supabase down or unreachable: never "invalid credentials" (25 Oct 2026)
+    if (isServerTrouble(error)) return serverMessage(error);
+    if (error is AuthRetryableFetchException) {
+      return 'No connection to the server. Please check the internet and try again.';
+    }
     // Business-rule errors raised by the database are already worded for
     // the user ("Payment is more than the amount due", ...).
     if (error is PostgrestException) {

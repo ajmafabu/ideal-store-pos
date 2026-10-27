@@ -89,6 +89,14 @@ unit uses. Example: a box of 12 of a piece-counted product = 12. Keep it through
 **Offline.** Queue only when `isNetworkError(e)` is true. A server rejection goes to the
 dead-letter box, shown on the **Sync Issues** screen (`needsReview` provider), and must not
 be retried forever.
+- Supabase trouble (HTTP 5xx/408/429 gateway pages, `PGRST000-003`, Postgres connection
+  codes, `AuthRetryableFetchException`) counts as network: bills are kept, never refused
+  (`isServerUnavailable`). Database refusals (`P0001`, `42501`, `23514`…) stay refusals.
+- `ServerHealth`: after a failure, bills save offline at once for a minute.
+- The server address can be changed per device (Server Settings, `SupabaseConfig.url`);
+  never use `supabaseUrl` directly. The service-role key is refused there.
+- The shop PC backs up daily (`BackupService.autoBackupIfDue`) and copies to a chosen
+  folder (Google Drive). Outage and move-to-new-server steps: `docs/IF_SERVER_IS_DOWN.md`.
 
 **Payment methods.**
 - Always go through `PaymentMethods.normalize`. The values are `cash | upi | bank | credit | split`.

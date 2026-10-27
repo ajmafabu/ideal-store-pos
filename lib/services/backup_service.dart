@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/logger.dart';
 
@@ -26,13 +27,131 @@ class BackupService {
   static const version = 2;
   static const _bucket = 'backups';
 
+  // ---- automatic daily backup + a copy outside Supabase (25 Oct 2026) ----
+  // The copy in the "backups" bucket lives in Supabase: if Supabase is gone,
+  // so is that copy. Each backup is therefore also kept on this PC (last 30)
+  // and copied to a folder the owner chooses, e.g. Google Drive.
+  static const _copyFolderKey = 'backup_copy_folder';
+  static const _lastAutoKey = 'backup_last_auto';
+  static const keepLocal = 30;
+  static const keepCopies = 60;
+  static const autoEvery = Duration(hours: 20);
+
+  /// The folder every backup is also copied to (null = none).
+  static Future<String?> copyFolder() async {
+    final v = (await SharedPreferences.getInstance()).getString(_copyFolderKey);
+    return (v ?? '').trim().isEmpty ? null : v!.trim();
+  }
+
+  static Future<void> setCopyFolder(String? path) async {
+    final prefs = await SharedPreferences.getInstance();
+    if ((path ?? '').trim().isEmpty) {
+      await prefs.remove(_copyFolderKey);
+    } else {
+      await prefs.setString(_copyFolderKey, path!.trim());
+    }
+  }
+
+  /// Google Drive for Windows shows up as a drive with a "My Drive" folder
+  /// (G:\My Drive by default). Returns a backup folder inside it, if found.
+  static String? findGoogleDrive() {
+    if (!Platform.isWindows) return null;
+    for (final letter in 'GHIJKLMNOPQRSTUVWXYZDEF'.split('')) {
+      for (final name in const ['My Drive', 'எனது இயக்ககம்']) {
+        final dir = Directory('$letter:\\$name');
+        try {
+          if (dir.existsSync()) return '${dir.path}\\IdealStore Backups';
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  /// When the last automatic backup succeeded on this device.
+  static Future<DateTime?> lastAutoBackup() async {
+    final v = (await SharedPreferences.getInstance()).getString(_lastAutoKey);
+    return v == null ? null : DateTime.tryParse(v);
+  }
+
+  static bool _autoRunning = false;
+
+  /// Makes the day's backup if the last one is older than [autoEvery].
+  /// Called on start and every hour by the admin app on Windows.
+  Future<BackupResult?> autoBackupIfDue() async {
+    if (_autoRunning) return null;
+    final last = await lastAutoBackup();
+    if (last != null && DateTime.now().difference(last) < autoEvery) return null;
+    _autoRunning = true;
+    try {
+      final r = await performBackup(type: 'auto');
+      if (r.success) {
+        await (await SharedPreferences.getInstance()).setString(_lastAutoKey, DateTime.now().toIso8601String());
+        Logger.info('Automatic backup done: ${r.filePath}${r.copiedTo != null ? ' + ${r.copiedTo}' : ''}');
+      } else {
+        Logger.warning('Automatic backup failed: ${r.error}');
+      }
+      return r;
+    } finally {
+      _autoRunning = false;
+    }
+  }
+
+  /// Keeps the newest [keep] backup files in [dir].
+  static void _prune(Directory dir, int keep) {
+    try {
+      final files =
+          dir.listSync().whereType<File>().where((f) => f.path.contains('backup_') && f.path.endsWith('.json')).toList()
+            ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      for (final f in files.skip(keep)) {
+        f.deleteSync();
+      }
+    } catch (e) {
+      Logger.warning('Old backups not cleaned in ${dir.path}: $e');
+    }
+  }
+
+  /// Copies [file] to the chosen folder; returns where, or null.
+  static Future<String?> _copyOut(File file) async {
+    final folder = await copyFolder();
+    if (folder == null) return null;
+    try {
+      final dir = Directory(folder);
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final target = '${dir.path}${Platform.pathSeparator}${file.uri.pathSegments.last}';
+      await file.copy(target);
+      _prune(dir, keepCopies);
+      return target;
+    } catch (e) {
+      Logger.warning('Backup not copied to $folder: $e');
+      return null;
+    }
+  }
+
   /// Same order as `backup_table_list()` in the database (parents first).
   static const tables = [
-    'shop_settings', 'app_config', 'customers', 'suppliers', 'products', 'product_variants',
-    'accounts', 'sales', 'purchase_orders', 'purchases', 'inventory_batches', 'payments',
-    'supplier_payments', 'expenses', 'account_transactions', 'legacy_postings', 'product_returns',
-    'damaged_products', 'stock_reconciliation', 'payment_reminders', 'transaction_edits',
-    'stock_adjustments', 'supplier_returns',
+    'shop_settings',
+    'app_config',
+    'customers',
+    'suppliers',
+    'products',
+    'product_variants',
+    'accounts',
+    'sales',
+    'purchase_orders',
+    'purchases',
+    'inventory_batches',
+    'payments',
+    'supplier_payments',
+    'expenses',
+    'account_transactions',
+    'legacy_postings',
+    'product_returns',
+    'damaged_products',
+    'stock_reconciliation',
+    'payment_reminders',
+    'transaction_edits',
+    'stock_adjustments',
+    'supplier_returns',
   ];
 
   /// Added by sql/2026_10_inventory_tools.sql (23 Oct 2026). Until that file
@@ -45,10 +164,10 @@ class BackupService {
   /// Primary key of each table: pages are read in key order, so a backup
   /// taken while the shop is billing cannot skip or repeat rows.
   static List<String> orderColumns(String table) => switch (table) {
-        'app_config' => ['key'],
-        'legacy_postings' => ['ref_type', 'ref_id', 'account_id'],
-        _ => ['id'],
-      };
+    'app_config' => ['key'],
+    'legacy_postings' => ['ref_type', 'ref_id', 'account_id'],
+    _ => ['id'],
+  };
 
   Future<List<Map<String, dynamic>>> _readAll(String table) async {
     final rows = <Map<String, dynamic>>[];
@@ -123,26 +242,29 @@ class BackupService {
 
       final file = File('${(await _localDir()).path}/$name');
       await file.writeAsBytes(bytes);
+      _prune(await _localDir(), keepLocal);
+      final copiedTo = await _copyOut(file);
 
       String? cloudPath;
       try {
-        await _client.storage.from(_bucket).uploadBinary(
-              name,
-              bytes,
-              fileOptions: const FileOptions(contentType: 'application/json', upsert: true),
-            );
+        await _client.storage
+            .from(_bucket)
+            .uploadBinary(name, bytes, fileOptions: const FileOptions(contentType: 'application/json', upsert: true));
         cloudPath = '$_bucket/$name';
       } catch (e) {
         Logger.warning('Cloud upload failed, backup kept on this device only: $e');
       }
 
       if (backupId != null) {
-        await _client.rpc('complete_backup', params: {
-          'p_backup_id': backupId,
-          'p_file_path': cloudPath ?? file.path,
-          'p_file_size_bytes': bytes.length,
-          'p_checksum': checksum,
-        });
+        await _client.rpc(
+          'complete_backup',
+          params: {
+            'p_backup_id': backupId,
+            'p_file_path': cloudPath ?? file.path,
+            'p_file_size_bytes': bytes.length,
+            'p_checksum': checksum,
+          },
+        );
       }
       watch.stop();
       return BackupResult(
@@ -150,6 +272,7 @@ class BackupService {
         backupId: backupId,
         filePath: file.path,
         cloudPath: cloudPath,
+        copiedTo: copiedTo,
         fileSizeBytes: bytes.length,
         checksum: checksum,
         duration: watch.elapsed,
@@ -178,8 +301,7 @@ class BackupService {
   /// Backups in the cloud bucket, newest first (file names).
   Future<List<String>> cloudBackups() async {
     final items = await _client.storage.from(_bucket).list();
-    final names = items.map((o) => o.name).where((n) => n.endsWith('.json')).toList()
-      ..sort((a, b) => b.compareTo(a));
+    final names = items.map((o) => o.name).where((n) => n.endsWith('.json')).toList()..sort((a, b) => b.compareTo(a));
     return names;
   }
 
@@ -221,21 +343,20 @@ class BackupService {
     sales.sort((a, b) => '${b['created_at']}'.compareTo('${a['created_at']}'));
     final csv = StringBuffer('Invoice No,Date,Items,Total,Final Amount,Payment,Customer ID,Credit,Due\n');
     for (final s in sales) {
-      final items = (s['items'] as List?)
-              ?.map((i) => '${(i as Map)['name'] ?? ''}(${i['qty'] ?? 0})')
-              .join('; ') ??
-          '';
-      csv.writeln([
-        s['invoice_no'] ?? '',
-        s['created_at'] ?? '',
-        '"${items.replaceAll('"', '""')}"',
-        s['total_amount'] ?? 0,
-        s['final_amount'] ?? 0,
-        s['payment_method'] ?? '',
-        s['customer_id'] ?? '',
-        s['is_credit'] ?? false,
-        s['due_amount'] ?? 0,
-      ].join(','));
+      final items = (s['items'] as List?)?.map((i) => '${(i as Map)['name'] ?? ''}(${i['qty'] ?? 0})').join('; ') ?? '';
+      csv.writeln(
+        [
+          s['invoice_no'] ?? '',
+          s['created_at'] ?? '',
+          '"${items.replaceAll('"', '""')}"',
+          s['total_amount'] ?? 0,
+          s['final_amount'] ?? 0,
+          s['payment_method'] ?? '',
+          s['customer_id'] ?? '',
+          s['is_credit'] ?? false,
+          s['due_amount'] ?? 0,
+        ].join(','),
+      );
     }
     final file = File('${(await _localDir()).path}/sales_export_${_stamp()}.csv');
     await file.writeAsString(csv.toString());
@@ -253,6 +374,9 @@ class BackupResult {
   final String? backupId;
   final String? filePath;
   final String? cloudPath;
+
+  /// The copy outside Supabase (the chosen folder), if any.
+  final String? copiedTo;
   final int? fileSizeBytes;
   final String? checksum;
   final Duration? duration;
@@ -264,6 +388,7 @@ class BackupResult {
     this.backupId,
     this.filePath,
     this.cloudPath,
+    this.copiedTo,
     this.fileSizeBytes,
     this.checksum,
     this.duration,

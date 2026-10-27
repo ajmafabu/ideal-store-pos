@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../utils/network_errors.dart';
 import 'services.dart';
 
 // ============================================
@@ -54,5 +55,8 @@ class SyncStatus {
   });
 
   int get totalPending => pendingSales + pendingOps + pendingWrites;
+
+  /// Supabase itself is failing (not a refusal): bills wait on the device.
+  bool get serverTrouble => lastSyncError == serverTroubleMessage;
   bool get hasPending => totalPending > 0;
 }

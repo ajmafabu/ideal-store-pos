@@ -335,7 +335,10 @@ class OfflineService {
   /// Returns false when the round should stop.
   Future<bool> _onFailure(Box<Map> box, String kind, Map<String, dynamic> item, Object e) async {
     lastSyncError = serverMessage(e);
-    if (isNetworkError(e)) return false;
+    if (isNetworkError(e)) {
+      ServerHealth.markDown();
+      return false;
+    }
     final retries = ((item['retry_count'] as num?)?.toInt() ?? 0) + 1;
     item['retry_count'] = retries;
     item['last_error'] = lastSyncError;
@@ -386,6 +389,7 @@ class OfflineService {
       try {
         await _syncSale(supabase, sale);
         await removePendingSale(sale['id'].toString());
+        ServerHealth.markUp(); // the server answers again
       } catch (e) {
         allSynced = false;
         if (!await _onFailure(_pendingBox, 'sale', sale, e)) return false;

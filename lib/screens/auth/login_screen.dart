@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../config/providers.dart';
+import '../../config/supabase_config.dart';
+import '../shared/server_settings_screen.dart';
 import '../../utils/logger.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -205,6 +207,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: _loading
                                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : Text(_usePin ? 'Login with PIN' : 'Sign In', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // moving to a new server when signed out (27 Oct 2026)
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(
+                              context, MaterialPageRoute(builder: (_) => const ServerSettingsScreen())),
+                          icon: const Icon(Icons.dns_outlined, size: 18),
+                          label: Text(
+                            SupabaseConfig.usingOtherServer ? 'Server: ${Uri.parse(SupabaseConfig.url).host}' : 'Server settings',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                           ),
                         ),
                       ],

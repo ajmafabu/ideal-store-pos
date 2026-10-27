@@ -17,8 +17,8 @@ class FactoryResetService {
       return false;
     }
     final temp = SupabaseClient(
-      SupabaseConfig.supabaseUrl,
-      SupabaseConfig.supabaseAnonKey,
+      SupabaseConfig.url,
+      SupabaseConfig.anonKey,
       authOptions: const AuthClientOptions(autoRefreshToken: false),
     );
     try {
