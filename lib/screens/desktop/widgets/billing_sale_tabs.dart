@@ -67,6 +67,8 @@ class BillingSaleTabs extends StatelessWidget {
               children: List.generate(sessions.length, (index) {
                 final session = sessions[index];
                 final isActive = index == notifier.activeSessionIndex;
+                // the tab that changes a saved bill says so (1 Nov 2026)
+                final edits = notifier.editingSaleIn(session.id);
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   child: GestureDetector(
@@ -79,16 +81,24 @@ class BillingSaleTabs extends StatelessWidget {
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
-                        color: isActive ? Colors.white : Colors.transparent,
+                        color: edits != null
+                            ? const Color(0xFFF59E0B)
+                            : (isActive ? Colors.white : Colors.transparent),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (edits != null) ...[
+                            const Icon(Icons.edit, size: 14, color: Color(0xFF0F172A)),
+                            const SizedBox(width: 4),
+                          ],
                           Text(
-                            'SALE ${index + 1}',
+                            edits != null ? 'EDIT #${edits.invoiceLabel}' : 'SALE ${index + 1}',
                             style: TextStyle(
-                              color: isActive ? const Color(0xFF0F172A) : Colors.white.withValues(alpha: 0.7),
+                              color: isActive || edits != null
+                                  ? const Color(0xFF0F172A)
+                                  : Colors.white.withValues(alpha: 0.7),
                               fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
                               fontSize: 12,
                             ),

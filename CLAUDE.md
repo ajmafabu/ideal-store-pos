@@ -98,6 +98,13 @@ be retried forever.
 - The shop PC backs up daily (`BackupService.autoBackupIfDue`) and copies to a chosen
   folder (Google Drive). Outage and move-to-new-server steps: `docs/IF_SERVER_IS_DOWN.md`.
 
+**Editing a saved bill (Windows till).** An edit belongs to the bill tab it was opened in
+(`DesktopBillingNotifier.editingSale` checks the tab id). Clear Cart, a new tab, another tab
+or closing the tab never carry the edit. Saving an edit that drops most of a bill asks
+"Save as new bill" first (`looksLikeReplacingBill`). Before 1 Nov 2026 the edit followed the
+cashier and next customers' sales were saved over bills #3603 and #3610 (repaired from
+`audit_log`). Keep `edit_bill_safety_test.dart` passing.
+
 **Payment methods.**
 - Always go through `PaymentMethods.normalize`. The values are `cash | upi | bank | credit | split`.
 - `PaymentMethods.accountType` maps `upi`/`bank` to the bank account and the rest to cash.

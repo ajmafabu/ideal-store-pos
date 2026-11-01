@@ -110,6 +110,29 @@ class BackupService {
     }
   }
 
+  /// Backups kept in Supabase storage (owner, 27 Oct 2026). One backup is
+  /// about 40 MB and the free plan has 1 GB: daily copies filled it in
+  /// about 25 days. The full history stays on the PC and in Google Drive.
+  static const keepCloud = 14;
+
+  /// Names of the cloud backups to remove: all but the newest [keep].
+  static List<String> cloudToRemove(List<String> names, {int keep = keepCloud}) {
+    final backups = names.where((n) => n.startsWith('backup_') && n.endsWith('.json')).toList()
+      ..sort((a, b) => b.compareTo(a)); // backup_2026-10-27T12-52-36.json: newest first
+    return backups.skip(keep).toList();
+  }
+
+  Future<void> _pruneCloud() async {
+    try {
+      final old = cloudToRemove(await cloudBackups());
+      if (old.isEmpty) return;
+      await _client.storage.from(_bucket).remove(old);
+      Logger.info('Removed ${old.length} old cloud backup(s); kept the newest $keepCloud');
+    } catch (e) {
+      Logger.warning('Old cloud backups not removed: $e');
+    }
+  }
+
   /// Copies [file] to the chosen folder; returns where, or null.
   static Future<String?> _copyOut(File file) async {
     final folder = await copyFolder();
@@ -251,6 +274,7 @@ class BackupService {
             .from(_bucket)
             .uploadBinary(name, bytes, fileOptions: const FileOptions(contentType: 'application/json', upsert: true));
         cloudPath = '$_bucket/$name';
+        await _pruneCloud();
       } catch (e) {
         Logger.warning('Cloud upload failed, backup kept on this device only: $e');
       }

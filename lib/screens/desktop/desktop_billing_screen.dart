@@ -1138,13 +1138,16 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
         );
     final itemCount = session.items.length;
     final total = session.total;
+    final editing = ref.read(desktopBillingProvider.notifier).editingSale;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear Cart?'),
+        title: Text(editing != null ? 'Stop editing bill #${editing.invoiceLabel}?' : 'Clear Cart?'),
         content: Text(
-          'Remove all $itemCount item(s) worth ₹${total.toStringAsFixed(2)}?',
+          editing != null
+              ? 'Bill #${editing.invoiceLabel} stays as it was saved. This tab becomes a new, empty bill.'
+              : 'Remove all $itemCount item(s) worth ₹${total.toStringAsFixed(2)}?',
         ),
         actions: [
           TextButton(
@@ -1155,7 +1158,8 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
             onPressed: () {
               Navigator.pop(ctx);
               final notifier = ref.read(desktopBillingProvider.notifier);
-              notifier.clearSession(notifier.activeSessionIndex);
+              // also ends an edit: the next customer must never land on the old bill
+              notifier.clearCart(notifier.activeSessionIndex);
               setState(() {
                 _selectedCartIndex = -1;
                 _editingCartIndex = -1;
@@ -1470,7 +1474,24 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
 
     final user = ref.read(authServiceProvider).currentUser;
     final totalItemDiscount = session.items.fold<double>(0, (sum, i) => sum + i.discountAmount);
-    final editing = notifier.editingSale;
+    var editing = notifier.editingSale;
+
+    // an edit that removes most of a saved bill is usually a new customer's
+    // sale typed into the old bill (#3603, 1 Nov 2026): ask first
+    if (editing != null &&
+        looksLikeReplacingBill(
+          oldTotal: editing.finalAmount,
+          oldLines: editing.items.length,
+          newTotal: finalAmount,
+          newLines: session.items.length,
+        )) {
+      final choice = await _askReplaceOrNew(editing, finalAmount, session.items.length);
+      if (choice == null) return;
+      if (choice == _EditChoice.newBill) {
+        notifier.clearEditingSale();
+        editing = null;
+      }
+    }
 
     final sale = Sale(
       // one id for online, offline and retries: a timed-out save that did
@@ -1533,6 +1554,35 @@ class _DesktopBillingScreenState extends ConsumerState<DesktopBillingScreen> wit
       Logger.error('Sale save failed', e);
       _warn('Sale NOT saved: ${ErrorMessages.parse(e)}', color: Colors.red);
     }
+  }
+
+  /// Replace the saved bill, or save what is on screen as a new bill?
+  Future<_EditChoice?> _askReplaceOrNew(Sale old, double newTotal, int newLines) {
+    return showDialog<_EditChoice>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Color(0xFFC2410C), size: 40),
+        title: Text('Replace bill #${old.invoiceLabel}?'),
+        content: Text(
+          'Bill #${old.invoiceLabel} was saved as ₹${old.finalAmount.toStringAsFixed(0)} with '
+          '${old.items.length} item(s).\n\n'
+          'Saving now replaces it with ₹${newTotal.toStringAsFixed(0)} and $newLines item(s).\n\n'
+          'Is this a new customer? Then save it as a NEW bill.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          OutlinedButton(
+            onPressed: () => Navigator.pop(ctx, _EditChoice.replace),
+            child: Text('Replace #${old.invoiceLabel}'),
+          ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(ctx, _EditChoice.newBill),
+            child: const Text('Save as new bill'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveEdit(Sale sale, int sessionIndex) async {
@@ -3785,4 +3835,18 @@ class _EmptyHint extends StatelessWidget {
       ],
     );
   }
+}
+
+enum _EditChoice { replace, newBill }
+
+/// An edit that keeps less than half of a saved bill's lines or amount
+/// (bills of 3+ lines) is more likely a new sale typed over the old bill.
+bool looksLikeReplacingBill({
+  required double oldTotal,
+  required int oldLines,
+  required double newTotal,
+  required int newLines,
+}) {
+  if (oldLines < 3) return false;
+  return newLines * 2 < oldLines || newTotal * 2 < oldTotal;
 }

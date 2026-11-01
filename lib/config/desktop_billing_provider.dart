@@ -248,6 +248,12 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   int _sessionCounter = 0;
   Sale? _editingSale;
 
+  /// The bill tab the edit was opened in. An edit belongs to that tab only:
+  /// before 1 Nov 2026 it followed the cashier to a new tab, so after Clear
+  /// Cart + New Bill the next customer's sale was saved over the old bill
+  /// (#3603: ₹13,874 replaced by ₹390).
+  String? _editingSessionId;
+
   @override
   List<SaleSession> build() {
     _sessionCounter++;
@@ -256,15 +262,24 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   int get activeSessionIndex => _activeSessionIndex;
   SaleSession get activeSession => state[_activeSessionIndex];
-  Sale? get editingSale => _editingSale;
+  /// The saved bill being edited in the bill tab on screen, if any.
+  Sale? get editingSale =>
+      _editingSale != null && _editingSessionId == state[_activeSessionIndex].id ? _editingSale : null;
 
+  /// The saved bill being edited in the bill tab with [sessionId] (shown
+  /// on that tab, so the cashier sees which tab changes an old bill).
+  Sale? editingSaleIn(String sessionId) => _editingSessionId == sessionId ? _editingSale : null;
+
+  /// Edits the saved [sale] in the bill tab on screen.
   void setEditingSale(Sale? sale) {
     _editingSale = sale;
+    _editingSessionId = sale == null ? null : state[_activeSessionIndex].id;
     state = List.from(state);
   }
 
   void clearEditingSale() {
     _editingSale = null;
+    _editingSessionId = null;
     state = List.from(state);
   }
 
@@ -283,6 +298,11 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
 
   void closeSession(int index) {
     if (state.length <= 1) return;
+    // closing the tab of an edit ends the edit
+    if (_editingSessionId == state[index].id) {
+      _editingSale = null;
+      _editingSessionId = null;
+    }
     state = List.from(state)..removeAt(index);
     if (_activeSessionIndex >= state.length) {
       _activeSessionIndex = state.length - 1;
@@ -408,6 +428,16 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
   /// bills are saved on disk and survive a restart.
   bool get hasOpenBills => _editingSale != null || state.any((s) => s.items.isNotEmpty);
 
+  /// Clear Cart: the tab becomes an empty new bill, never an edit of an old
+  /// one (an emptied edit used to keep "editing #N" for the next customer).
+  void clearCart(int index) {
+    if (_editingSessionId == state[index].id) {
+      _editingSale = null;
+      _editingSessionId = null;
+    }
+    clearSession(index);
+  }
+
   static const openBillsUpdateMessage =
       'A bill is open on the Billing screen. Save it, hold it (F6) or clear it first: '
       'installing the update restarts the app and would lose it.';
@@ -430,11 +460,14 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
         amountPaid: session.amountPaid,
       ),
       time: DateTime.now(),
-      editingSale: _editingSale,
+      editingSale: editingSale,
     ));
     _heldBillVersion++;
+    if (editingSale != null) {
+      _editingSale = null;
+      _editingSessionId = null;
+    }
     clearSession(_activeSessionIndex);
-    _editingSale = null;
     state = List.from(state);
     return true;
   }
@@ -454,6 +487,7 @@ class DesktopBillingNotifier extends Notifier<List<SaleSession>> {
     state[_activeSessionIndex].isCredit = bill.session.isCredit;
     state[_activeSessionIndex].amountPaid = bill.session.amountPaid;
     _editingSale = bill.editingSale;
+    _editingSessionId = bill.editingSale == null ? null : state[_activeSessionIndex].id;
     state = List.from(state);
     return true;
   }

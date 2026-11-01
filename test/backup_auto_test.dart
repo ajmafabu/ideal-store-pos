@@ -23,6 +23,18 @@ void main() {
     expect(await service.autoBackupIfDue(), isNull);
   });
 
+  test('Supabase storage keeps only the newest 14 backups; other files are left alone', () {
+    final names = [
+      for (var d = 1; d <= 20; d++) 'backup_2026-10-${d.toString().padLeft(2, '0')}T21-00-00.json',
+      'notes.txt',
+    ]..shuffle();
+    final remove = BackupService.cloudToRemove(names);
+    expect(remove, hasLength(6));
+    expect(remove, everyElement(matches(r'backup_2026-10-0[1-6]T')));
+    expect(remove, isNot(contains('notes.txt')));
+    expect(BackupService.cloudToRemove(names.take(5).toList()), isEmpty);
+  });
+
   test('every table the database restores is in the backup', () {
     expect(
       BackupService.tables,
